@@ -1,8 +1,8 @@
 # ChillFN — Fortnite esports puzzles
 
-Ten browser puzzle games built around Fortnite competitive players. V1 prototype:
-no accounts, no backend, no monetisation — everything runs in the browser on a
-generated sample dataset.
+Ten browser puzzle games built around Fortnite competitive players. No accounts,
+no backend, no monetisation — everything runs in the browser, on a dataset
+imported from Wikipedia and Liquipedia.
 
 ```bash
 npm install
@@ -14,11 +14,13 @@ npm run dev          # http://localhost:5173
 | `npm run dev` | Vite dev server |
 | `npm run build` | Typecheck + production build to `dist/` |
 | `npm run typecheck` | TypeScript only |
-| `npm run audit` | Sanity-checks the hand-authored roster (run after editing data) |
+| `npm run etl:fetch` | Downloads the upstream sources into `scripts/etl/.cache/` |
+| `npm run etl:build` | Regenerates `src/data/fortnite/` from the cache |
+| `npm run audit` | Checks the imported data for implausible values |
 | `npm run check:data` | Asserts the dataset's invariants (see below) |
 | `npm run check:games` | Drives all ten games through a full round headlessly |
 
-**Editing the player data: see [DATA.md](DATA.md).**
+**Where the data comes from and how to extend it: see [DATA.md](DATA.md).**
 
 ## The games
 
@@ -27,8 +29,8 @@ npm run dev          # http://localhost:5173
 | Higher or Lower | Age / Career earnings × Easy / Hard | Endless, one mistake ends the run, best score in `localStorage` |
 | Wordle | — | 6 guesses, digits are playable characters, any string of the right length is allowed |
 | Career Path | Order / Random | Major results only, starts at the first major reached |
-| Who Are Ya? | Easy / Hard / Random | Ten most-played tournament teammates |
-| Tenaball | 5 categories × Easy / Hard | Each category states its own tie rule |
+| Who Are Ya? | Easy / Hard / Random | Teammates, fewest shared tournaments first |
+| Tenaball | Up to 5 categories × Easy / Hard | Each category states its own tie rule; categories the data cannot rank are hidden |
 | List | Easy / Hard | 90s, +5s per correct answer, −3s per miss on Hard |
 | Impostor | All at once / One by one | 6–8 players, 1–3 impostors |
 | Tic Tac Toe | — | Generated boards, 3 mistakes |
@@ -48,18 +50,21 @@ src/
     repository.ts     ← the one seam between games and the data source
     dataset.ts        Read-only query layer every game uses
     DataProvider.tsx  Loads the dataset once, provides it to the app
-    sample/
-      roster.ts       ~110 hand-authored player seeds
-      tournaments.ts  Curated major-event catalogue
-      build.ts        Expands seeds into a fully consistent dataset
+    fortnite/
+      events.ts       GENERATED — 220 tournaments
+      entries.ts      GENERATED — 220 rosters and where they placed
+      players.ts      GENERATED — 316 players, verified facts only
+      countries.ts    Country names and the fallback country -> region map
+      build.ts        Derives results, teammates, titles and org history
+  scripts/etl/        Fetches the sources and regenerates the three tables
   games/<game>/engine.ts + <Game>.tsx
   games/shared/criteria.ts   Player predicates shared by Impostor / Tic Tac Toe / Connections
   components/, lib/, styles/
 ```
 
-### Replacing the sample data
+### Replacing the data source
 
-Games never import the sample dataset. They receive a `Dataset` built from
+Games never import a data module. They receive a `Dataset` built from
 whatever `PlayerRepository` returns:
 
 ```ts
@@ -71,28 +76,23 @@ setRepository(new ApiPlayerRepository());
 ```
 
 That is the whole migration path — no game code changes. Player headshots are
-already modelled (`Player.photoUrl`); the sample data has none, so the UI falls
-back to a deterministic initials avatar.
+already modelled (`Player.photoUrl`); neither source publishes them, so the UI
+falls back to a deterministic initials avatar.
 
-## About the sample data
+## About the data
 
-`src/data/sample/roster.ts` holds ~110 prominent Fortnite competitive players,
-inspired by Liquipedia's highest-earning list. **Figures are approximate
-prototype data**, not a historical record — handles, nationalities, orgs and
-rough earnings are realistic, but individual placements and dates are generated.
+316 players, 220 tournaments and every FNCS winner in every region from Season X
+(2019) to Major 2 of 2026, imported from Wikipedia and Liquipedia. Nothing is
+estimated: where a source is silent the field stays empty, and `npm run
+check:data` prints the coverage so the gaps are visible rather than papered over.
 
-Only the compact seed is hand-written. `build.ts` derives everything else
-deterministically, and `npm run check:data` asserts the invariants the games
-rely on:
+The model is relational — an `EventEntry` records a whole roster's finish at one
+event, so teammates, title counts, org history and career results are all derived
+from the same rows and cannot contradict each other.
 
-- every 1st place is authored, never generated, so a player's title count always
-  matches what the roster says;
-- placements are unique per player within an event, so "Top 10 at X" has one
-  unambiguous answer;
-- `earningsByYear` sums exactly to career `earnings`;
-- teammate match counts are symmetric between both players.
-
-Because generation is seeded, the dataset is identical on every load and device.
+The two real gaps are **placements other than 1st** and **prize money per
+event**; neither source publishes them. Details, and how to load them, are in
+[DATA.md](DATA.md).
 
 ## Edge cases
 

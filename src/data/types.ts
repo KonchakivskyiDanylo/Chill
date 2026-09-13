@@ -2,16 +2,29 @@
  * Domain model for the whole site.
  *
  * Every game reads players through `PlayerRepository` (see `repository.ts`) and
- * never imports the sample dataset directly. To move to real data (Liquipedia,
- * Fortnite Tracker, an internal API, ...) implement `PlayerRepository` against
- * the new source and swap it in `repository.ts` — no game code changes.
+ * never imports a data module directly. To move to another source (an internal
+ * API, Fortnite Tracker, ...) implement `PlayerRepository` against it and swap
+ * it in `repository.ts` — no game code changes.
+ *
+ * The shape is deliberately relational rather than one-row-per-player:
+ *
+ *   TournamentEvent   one tournament (a regional grand final, a global, a LAN)
+ *   EventEntry        one *roster* finishing at one event — the join row that
+ *                     carries the placement, the prize and who played together
+ *   OrgStint          one spell at one organisation, with the dates
+ *   Player            the person, plus views derived from the rows above
+ *
+ * Teammates, career results, FNCS title counts and current org are all derived
+ * from `EventEntry` / `OrgStint` in `fortnite/build.ts`; they are never authored
+ * by hand, so they cannot drift out of sync with the underlying rows.
  */
 
-export type Region = 'NAE' | 'NAW' | 'EU' | 'BR' | 'OCE' | 'ASIA' | 'ME';
+export type Region = 'NAE' | 'NAW' | 'NAC' | 'EU' | 'BR' | 'OCE' | 'ASIA' | 'ME';
 
 export const REGION_LABEL: Record<Region, string> = {
   NAE: 'NA East',
   NAW: 'NA West',
+  NAC: 'NA Central',
   EU: 'Europe',
   BR: 'Brazil',
   OCE: 'Oceania',
@@ -21,10 +34,13 @@ export const REGION_LABEL: Record<Region, string> = {
 
 /** Kind of event. Only these are considered "major" for Career Path etc. */
 export type EventTier =
-  | 'global' // World Cup / Global Championship
-  | 'fncs' // FNCS Finals / Grand Finals / Global
-  | 'lan' // Major offline event
-  | 'major'; // Major online/international event (Cash Cup Extra, DreamHack, ...)
+  | 'global' // World Cup / Global Championship / Invitational
+  | 'fncs' // FNCS regional grand finals
+  | 'lan' // Major offline event (DreamHack, Gamers8, EWC)
+  | 'major'; // Major online/international event (Skirmishes, Winter Royale, ...)
+
+/** Where a row came from. Anything but `estimated` is sourced from a citation. */
+export type DataSource = 'wikipedia' | 'liquipedia' | 'estimated';
 
 export interface TournamentEvent {
   id: string;
@@ -34,19 +50,56 @@ export interface TournamentEvent {
   shortName: string;
   tier: EventTier;
   year: number;
-  /** ISO date used purely for chronological ordering. */
+  /** ISO date used for chronological ordering (end of the event window). */
   date: string;
+  /** Human date range as published, e.g. "October–November 2020". */
+  dateLabel: string;
   /** Region the finals were played in; `null` for global/cross-region events. */
   region: Region | null;
   /** Team size of the event format. */
   format: 'solo' | 'duo' | 'trio' | 'squad';
   /** Season key such as "C4S4"; `null` for non-FNCS events. */
   season: string | null;
+  /** Platform split for the 2020 events that ran PC and console separately. */
+  platform: string | null;
+}
+
+/**
+ * One roster's finish at one event.
+ *
+ * `playerIds` is the whole team, so a trio win is a single row referencing three
+ * players rather than three disconnected rows. This is what makes "who did X
+ * play with" answerable.
+ */
+export interface EventEntry {
+  id: string;
+  eventId: string;
+  /** 1-based finishing position. */
+  placement: number;
+  /** Prize money per player, in USD. */
+  prize: number;
+  /** Everyone who competed in this entry, in roster order. */
+  playerIds: string[];
+  /** Organisation the roster represented, when known. */
+  org: string | null;
+  source: DataSource;
+}
+
+/** A spell at one organisation. */
+export interface OrgStint {
+  org: string;
+  /** ISO date the player joined, or null when only the spell itself is recorded. */
+  from: string | null;
+  /** ISO date they left, or `null` while they are still on the roster. */
+  to: string | null;
+  source: DataSource;
 }
 
 export interface PlayerResult {
   eventId: string;
-  /** 1-based finishing position. Unique per event within the dataset. */
+  /** The entry this result belongs to — use it to reach the teammates. */
+  entryId: string;
+  /** 1-based finishing position. */
   placement: number;
   /** Prize money earned from this event, in USD. */
   prize: number;
@@ -54,8 +107,10 @@ export interface PlayerResult {
 
 export interface TeammateLink {
   playerId: string;
-  /** Number of tournament matches played together. */
-  matches: number;
+  /** Number of tournament entries the two players shared. */
+  events: number;
+  /** Event ids they played together, oldest first. */
+  eventIds: string[];
 }
 
 export interface Player {
@@ -66,30 +121,37 @@ export interface Player {
   /** ISO 3166-1 alpha-2 country code. */
   country: string;
   countryName: string;
+  /** Region the player is most associated with (most recent competed region). */
   region: Region;
+  /** Every region the player has produced a recorded result in. */
+  regions: Region[];
   /** ISO date of birth, or `null` when unknown. */
   birthDate: string | null;
   /** Age in years at `DATA_UPDATED_AT`. */
   age: number | null;
-  /** Career prize money in USD. */
+  /** Career prize money in USD. 0 when no verified figure exists upstream. */
   earnings: number;
-  /** Prize money per calendar year; keys are years as strings. Sums to `earnings`. */
+  /** False when the player sits outside Liquipedia's published earnings tables. */
+  earningsKnown: boolean;
+  /** Prize money per calendar year; keys are years as strings. */
   earningsByYear: Record<string, number>;
-  /** Current organisation, or `null` for free agents. */
+  /** Current organisation, or `null` for free agents. Derived from `orgHistory`. */
   team: string | null;
-  /** Number of FNCS titles (1st place in an FNCS-tier event). */
+  /** Every organisation the player has represented, oldest first. */
+  orgHistory: OrgStint[];
+  /** Number of FNCS titles (1st place in an FNCS-tier event). Derived. */
   fncsWins: number;
-  /** Power Ranking points. */
-  pr: number;
-  /** Major results only, sorted oldest to newest. */
+  /** Number of 1st places at global/LAN/major events. Derived. */
+  majorWins: number;
+  /** Major results only, sorted oldest to newest. Derived from entries. */
   results: PlayerResult[];
-  /** Most-played tournament teammates, sorted by matches descending. */
+  /** Tournament teammates, most shared events first. Derived from entries. */
   teammates: TeammateLink[];
-  /** Optional headshot URL. Sample data has none; the UI falls back to an avatar. */
+  /** Optional headshot URL. */
   photoUrl: string | null;
   status: 'active' | 'inactive';
 }
 
 /** Date the underlying data snapshot was taken. Shown in the rules panels. */
-export const DATA_UPDATED_AT = '2026-09-08';
-export const DATA_SOURCE_LABEL = 'sample dataset (Liquipedia-inspired)';
+export const DATA_UPDATED_AT = '2026-09-13';
+export const DATA_SOURCE_LABEL = 'Wikipedia + Liquipedia (Sept 2026)';

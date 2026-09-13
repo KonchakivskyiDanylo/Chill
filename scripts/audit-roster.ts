@@ -1,198 +1,160 @@
 /**
- * Roster audit — sanity-checks the hand-authored data in
- * `src/data/sample/roster.ts`.
+ * Plausibility audit for the imported dataset.
  *
  * Run with: npm run audit
  *
- * `check:data` proves the dataset is internally consistent; this script asks a
- * different question: does what a human typed look *plausible*? It cannot know
- * whether Bugha's birthday is right, but it will catch a typo'd country code, a
- * partner id that does not exist, a player who supposedly debuted at nine, or
- * two players credited with winning the same event.
+ * `check:data` proves the dataset is internally consistent — the derived views
+ * agree with the rows, every key resolves. This asks a different question: does
+ * the imported data look *believable*? It cannot know whether Bugha's birthday
+ * is right, but it will catch a player who supposedly won a title at eleven, a
+ * handle matched to the wrong person's earnings, a country with no region, or a
+ * name so close to another that the two are probably one person split in half.
+ *
+ * These are the failure modes of importing by name from two sources that do not
+ * share an id, so re-run it whenever a new source is merged in.
  *
  * ERROR = certainly wrong, fix it.  WARN = probably wrong, worth a look.
  */
-import { EVENT_BY_ID } from '@/data/sample/tournaments';
-import { FNCS_SEASONS } from '@/data/sample/tournaments';
-import { COUNTRY_NAMES, ROSTER } from '@/data/sample/roster';
 import { loadDataset } from '@/data/repository';
+import { COUNTRY_NAMES, REGION_BY_COUNTRY } from '@/data/fortnite/countries';
 import { DATA_UPDATED_AT } from '@/data/types';
 
 const errors: string[] = [];
 const warnings: string[] = [];
 
-const seasonIndex = new Map(FNCS_SEASONS.map((season, index) => [season.key, index]));
-const ids = new Set(ROSTER.map((seed) => seed.id));
-const today = new Date(DATA_UPDATED_AT);
+const dataset = await loadDataset();
+const { roster, events, entries } = dataset;
 
 function ageOn(born: string, iso: string): number {
   const birth = new Date(born);
   const on = new Date(iso);
   let age = on.getFullYear() - birth.getFullYear();
-  const months = on.getMonth() - birth.getMonth();
-  if (months < 0 || (months === 0 && on.getDate() < birth.getDate())) age--;
+  const monthDiff = on.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && on.getDate() < birth.getDate())) age--;
   return age;
 }
 
-// ------------------------------------------------------------- uniqueness --
-const seenIds = new Set<string>();
-const seenNames = new Map<string, string>();
-const seenRealNames = new Map<string, string>();
-for (const seed of ROSTER) {
-  if (seenIds.has(seed.id)) errors.push(`duplicate id "${seed.id}"`);
-  seenIds.add(seed.id);
-
-  const nameKey = seed.name.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const priorName = seenNames.get(nameKey);
-  if (priorName) errors.push(`"${seed.name}" and "${priorName}" collide once spaces are stripped`);
-  seenNames.set(nameKey, seed.name);
-
-  if (seed.realName) {
-    const prior = seenRealNames.get(seed.realName.toLowerCase());
-    if (prior) warnings.push(`real name "${seed.realName}" is used by both ${prior} and ${seed.name}`);
-    seenRealNames.set(seed.realName.toLowerCase(), seed.name);
+// --- per player -----------------------------------------------------------
+for (const player of roster) {
+  if (!COUNTRY_NAMES[player.country]) {
+    errors.push(`${player.name}: country code "${player.country}" has no display name`);
   }
-}
-
-// ------------------------------------------------------------------ fields --
-for (const seed of ROSTER) {
-  const who = seed.name;
-
-  if (!COUNTRY_NAMES[seed.country]) {
-    errors.push(`${who}: country "${seed.country}" has no entry in COUNTRY_NAMES`);
+  if (!REGION_BY_COUNTRY[player.country]) {
+    warnings.push(`${player.name}: country "${player.country}" has no default region mapping`);
   }
 
-  const from = seasonIndex.get(seed.first);
-  const to = seasonIndex.get(seed.last);
-  if (from === undefined) errors.push(`${who}: first season "${seed.first}" is not a known season`);
-  if (to === undefined) errors.push(`${who}: last season "${seed.last}" is not a known season`);
-  if (from !== undefined && to !== undefined && from > to) {
-    errors.push(`${who}: first season ${seed.first} comes after last season ${seed.last}`);
-  }
-
-  if (seed.born) {
-    const age = ageOn(seed.born, DATA_UPDATED_AT);
-    if (Number.isNaN(age)) errors.push(`${who}: birth date "${seed.born}" is not a valid date`);
-    else if (age < 13) errors.push(`${who}: would be ${age} years old today`);
-    else if (age > 40) warnings.push(`${who}: would be ${age} years old today`);
-
-    if (from !== undefined) {
-      const debutAge = ageOn(seed.born, FNCS_SEASONS[from].date);
-      // Epic's competitive minimum is 13.
-      if (debutAge < 13) errors.push(`${who}: debuts at ${seed.first} aged ${debutAge}`);
-      else if (debutAge > 30) warnings.push(`${who}: debuts at ${seed.first} aged ${debutAge}`);
+  if (player.birthDate) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(player.birthDate)) {
+      errors.push(`${player.name}: malformed birth date "${player.birthDate}"`);
     }
-    if (new Date(seed.born) > today) errors.push(`${who}: birth date is in the future`);
-  } else {
-    warnings.push(`${who}: no birth date, so they are skipped by Higher or Lower (Age)`);
-  }
+    const age = ageOn(player.birthDate, DATA_UPDATED_AT);
+    if (age < 13) errors.push(`${player.name}: would be ${age} today`);
+    else if (age > 35) warnings.push(`${player.name}: ${age} is old for this roster — check the birthday matched the right person`);
 
-  if (seed.earnings <= 0) errors.push(`${who}: earnings must be positive`);
-  if (seed.pr <= 0) errors.push(`${who}: PR must be positive`);
-
-  for (const partnerId of seed.partners ?? []) {
-    if (!ids.has(partnerId)) errors.push(`${who}: partner "${partnerId}" is not a player id`);
-    if (partnerId === seed.id) errors.push(`${who}: listed as their own partner`);
-  }
-
-  for (const [eventId, placement] of seed.signature ?? []) {
-    const event = EVENT_BY_ID.get(eventId);
-    if (!event) {
-      errors.push(`${who}: signature event "${eventId}" does not exist`);
-      continue;
-    }
-    if (placement < 1) errors.push(`${who}: signature placement ${placement} at ${eventId} is not valid`);
-    if (from !== undefined && to !== undefined) {
-      const span = { start: FNCS_SEASONS[from].date, end: FNCS_SEASONS[to].date };
-      // World Cup 2019 predates FNCS, so only flag results well outside the career.
-      const early = event.date < span.start && event.year < Number(span.start.slice(0, 4));
-      const late = event.date > span.end && event.year > Number(span.end.slice(0, 4));
-      if (early || late) {
-        warnings.push(
-          `${who}: ${event.shortName} (${event.year}) sits outside their ${seed.first}–${seed.last} career`,
+    // Epic's events are 13+; a title before that means the handle matched someone else.
+    const first = dataset.careerOf(player)[0];
+    if (first) {
+      const ageAtFirst = ageOn(player.birthDate, first.event.date);
+      if (ageAtFirst < 12) {
+        errors.push(
+          `${player.name}: would have been ${ageAtFirst} at ${first.event.shortName} — birthday probably matched the wrong player`,
         );
       }
     }
   }
 
-  // A player still listed as active who stopped competing long ago.
-  if ((seed.status ?? 'active') === 'active' && to !== undefined && to < FNCS_SEASONS.length - 4) {
-    warnings.push(`${who}: marked active but last competed at ${seed.last}`);
+  if (player.earningsKnown && player.earnings <= 0) {
+    errors.push(`${player.name}: marked as having verified earnings but the total is ${player.earnings}`);
   }
-  if (seed.status === 'inactive' && to !== undefined && to >= FNCS_SEASONS.length - 1) {
-    warnings.push(`${who}: marked inactive but competed in the latest season ${seed.last}`);
-  }
-}
-
-// -------------------------------------------------------- authored titles --
-const winnersByEvent = new Map<string, string[]>();
-for (const seed of ROSTER) {
-  for (const [eventId, placement] of seed.signature ?? []) {
-    if (placement !== 1) continue;
-    const list = winnersByEvent.get(eventId) ?? [];
-    list.push(seed.name);
-    winnersByEvent.set(eventId, list);
-  }
-}
-for (const [eventId, winners] of winnersByEvent) {
-  const event = EVENT_BY_ID.get(eventId);
-  if (!event) continue;
-  const teamSize = event.format === 'solo' ? 1 : event.format === 'duo' ? 2 : event.format === 'trio' ? 3 : 4;
-  if (winners.length > teamSize) {
-    errors.push(
-      `${event.shortName}: ${winners.length} winners (${winners.join(', ')}) but it is a ${event.format} event`,
+  // A decorated player with no earnings figure means the handle did not match
+  // Liquipedia's spelling, not that they played for free.
+  if (!player.earningsKnown && player.fncsWins + player.majorWins >= 3) {
+    warnings.push(
+      `${player.name}: ${player.fncsWins + player.majorWins} titles but no earnings figure — check the Liquipedia handle`,
     );
   }
-}
 
-// ------------------------------- did the builder honour the authored data? --
-const dataset = await loadDataset();
-for (const seed of ROSTER) {
-  const player = dataset.getPlayer(seed.id);
-  if (!player) {
-    errors.push(`${seed.name}: missing from the built dataset`);
-    continue;
+  const titles = player.fncsWins + player.majorWins;
+  if (titles > 0 && player.results.length < titles) {
+    errors.push(`${player.name}: ${titles} titles but only ${player.results.length} results`);
   }
-  const target = seed.fncsWins ?? 0;
-  if (player.fncsWins !== target) {
-    errors.push(
-      `${seed.name}: asked for ${target} FNCS titles but the dataset gave ${player.fncsWins} — ` +
-        `widen their first/last season range so there are enough finals to win`,
-    );
-  }
-  for (const [eventId, placement] of seed.signature ?? []) {
-    const actual = player.results.find((result) => result.eventId === eventId);
-    if (!actual) errors.push(`${seed.name}: signature result at ${eventId} did not make it into the dataset`);
-    else if (actual.placement !== placement) {
-      errors.push(`${seed.name}: ${eventId} should be ${placement} but the dataset shows ${actual.placement}`);
+
+  for (const stint of player.orgHistory) {
+    if (stint.from && stint.from < '2017-01-01') {
+      warnings.push(`${player.name}: org stint at ${stint.org} starts ${stint.from}, before competitive Fortnite`);
     }
   }
 }
 
-// ------------------------------------------------------------- group sizes --
-const countByTeam = new Map<string, number>();
-const countByCountry = new Map<string, number>();
-for (const seed of ROSTER) {
-  if (seed.team) countByTeam.set(seed.team, (countByTeam.get(seed.team) ?? 0) + 1);
-  countByCountry.set(seed.country, (countByCountry.get(seed.country) ?? 0) + 1);
-}
-for (const [team, count] of countByTeam) {
-  if (count < 4) {
-    warnings.push(`org "${team}" has only ${count} players — too few for Connections/Tic Tac Toe groups`);
+// --- likely duplicate people ---------------------------------------------
+// Two sources spelling one handle differently is the main way a player gets
+// split in two, so flag near-identical names that never share a tournament.
+const normalise = (name: string): string => name.toLowerCase().replace(/[^a-z0-9]/g, '');
+for (let i = 0; i < roster.length; i++) {
+  for (let j = i + 1; j < roster.length; j++) {
+    const a = roster[i];
+    const b = roster[j];
+    const na = normalise(a.name);
+    const nb = normalise(b.name);
+    if (na === nb) {
+      // Deliberate: a shared handle is tagged with a country, so only complain
+      // when neither carries a tag.
+      if (!a.name.includes('(') && !b.name.includes('(')) {
+        errors.push(`${a.name} and ${b.name} normalise identically — name lookup will be ambiguous`);
+      }
+      continue;
+    }
+    if (na.length >= 5 && (na.startsWith(nb) || nb.startsWith(na)) && Math.abs(na.length - nb.length) <= 2) {
+      if (a.country === b.country && dataset.eventsTogether(a, b) === 0) {
+        warnings.push(`${a.name} / ${b.name}: near-identical names from ${a.country}, never teamed up — possibly one player`);
+      }
+    }
   }
 }
 
-// ----------------------------------------------------------------- report --
-console.log(`Audited ${ROSTER.length} players in src/data/sample/roster.ts\n`);
+// --- events ---------------------------------------------------------------
+for (const event of events) {
+  if (event.year < 2018 || event.year > new Date(DATA_UPDATED_AT).getFullYear()) {
+    errors.push(`${event.name}: year ${event.year} is outside the competitive era`);
+  }
+  if (!event.date.startsWith(String(event.year))) {
+    errors.push(`${event.name}: date ${event.date} does not match year ${event.year}`);
+  }
+  const expected = { solo: 1, duo: 2, trio: 3, squad: 4 }[event.format];
+  for (const entry of dataset.entriesOf(event.id)) {
+    if (entry.playerIds.length !== expected) {
+      warnings.push(
+        `${event.name}: a ${event.format} entry has ${entry.playerIds.length} player(s) — check the source row`,
+      );
+    }
+    if (new Set(entry.playerIds).size !== entry.playerIds.length) {
+      errors.push(`${event.name}: an entry lists the same player twice`);
+    }
+  }
+}
+
+// --- coverage worth knowing about -----------------------------------------
+const orgCounts = new Map<string, number>();
+for (const player of roster) {
+  for (const stint of player.orgHistory) orgCounts.set(stint.org, (orgCounts.get(stint.org) ?? 0) + 1);
+}
+const singletons = [...orgCounts.entries()].filter(([, n]) => n === 1).map(([org]) => org);
+
+console.log('--- audit ---');
+console.log(`  players ${roster.length} · events ${events.length} · entries ${entries.length}`);
+console.log(`  orgs on record: ${orgCounts.size}${singletons.length ? ` (${singletons.length} with a single player)` : ''}`);
+console.log(`  players with no recorded result: ${roster.filter((p) => p.results.length === 0).length}`);
+console.log(`  players with no birthday: ${roster.filter((p) => !p.birthDate).length}`);
+
 if (errors.length) {
-  console.log(`ERRORS (${errors.length}) — these must be fixed:`);
-  for (const message of errors) console.log('  ✗ ' + message);
-  console.log('');
+  console.log(`\n--- ${errors.length} ERROR(S) ---`);
+  for (const error of errors.slice(0, 40)) console.log('  x ' + error);
+  if (errors.length > 40) console.log(`  ... and ${errors.length - 40} more`);
 }
 if (warnings.length) {
-  console.log(`WARNINGS (${warnings.length}) — worth checking:`);
-  for (const message of warnings) console.log('  · ' + message);
-  console.log('');
+  console.log(`\n--- ${warnings.length} WARNING(S) ---`);
+  for (const warning of warnings.slice(0, 40)) console.log('  ? ' + warning);
+  if (warnings.length > 40) console.log(`  ... and ${warnings.length - 40} more`);
 }
-if (!errors.length && !warnings.length) console.log('Nothing to flag.');
-if (errors.length) process.exitCode = 1;
+if (!errors.length && !warnings.length) console.log('\nNothing looks wrong.');
+process.exitCode = errors.length ? 1 : 0;

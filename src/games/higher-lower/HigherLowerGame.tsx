@@ -4,7 +4,7 @@ import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
 import { useDataset } from '@/data/DataProvider';
 import type { Player } from '@/data/types';
-import { money, plural } from '@/lib/format';
+import { playerMoney, plural } from '@/lib/format';
 import { CountryBadge } from '@/components/CountryBadge';
 import { useBestScore } from '@/lib/storage';
 import { getGame } from '@/games/registry';
@@ -25,7 +25,7 @@ import './higher-lower.css';
 const meta = getGame('higher-lower')!;
 
 function displayValue(player: Player, category: Category): string {
-  return category === 'age' ? `${player.age} years old` : money(player.earnings);
+  return category === 'age' ? `${player.age} years old` : playerMoney(player);
 }
 
 export default function HigherLowerGame() {

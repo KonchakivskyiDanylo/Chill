@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { GameShell } from '@/components/GameShell';
 import { GuessInput } from '@/components/GuessInput';
 import { Banner, OptionCard, OptionGrid, PlayerLine, Stat } from '@/components/ui';
@@ -8,7 +8,7 @@ import { getGame } from '@/games/registry';
 import {
   applyGuess,
   buildPuzzle,
-  CATEGORIES,
+  availableCategories,
   createGame,
   HARD_LIVES,
   type CategoryId,
@@ -37,6 +37,7 @@ function outcomeMessage(outcome: GuessOutcome, text: string): { tone: string; me
 
 export default function TenaballGame() {
   const dataset = useDataset();
+  const categories = useMemo(() => availableCategories(dataset), [dataset]);
   const [category, setCategory] = useState<CategoryId | null>(null);
   const [difficulty, setDifficulty] = useState<Difficulty | null>(null);
   const [game, setGame] = useState<GameState | null>(null);
@@ -59,7 +60,7 @@ export default function TenaballGame() {
 
   const guess = (text: string) => {
     if (!game) return;
-    const player = matchPlayer(text, dataset.players);
+    const player = matchPlayer(text, dataset.roster);
     const { state, outcome } = applyGuess(game, player);
     setGame(state);
     setFeedback(outcomeMessage(outcome, player?.name ?? text));
@@ -72,7 +73,7 @@ export default function TenaballGame() {
           <section className="card stack">
             <div className="card__title">1 · Pick a category</div>
             <OptionGrid>
-              {CATEGORIES.map((item) => (
+              {categories.map((item) => (
                 <OptionCard
                   key={item.id}
                   label={item.label}

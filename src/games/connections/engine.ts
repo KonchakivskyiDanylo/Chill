@@ -40,17 +40,17 @@ function groupCandidates(dataset: Dataset, rng: Rng): PlayerCriterion[] {
     ),
   );
 
-  // Teammate groups: "played 200+ tournament matches with X".
+  // Teammate groups: "played 2+ tournaments alongside X".
   const teammateGroups: PlayerCriterion[] = [];
   for (const anchor of sample(rng, dataset.players, 40)) {
-    const links = dataset.teammatesOf(anchor).filter((entry) => entry.matches >= 200);
+    const links = dataset.teammatesOf(anchor).filter((entry) => entry.events >= 2);
     if (links.length < GROUP_SIZE) continue;
     const ids = new Set(links.map((entry) => entry.player.id));
     teammateGroups.push({
       id: `teammates:${anchor.id}`,
       kind: 'teammates',
-      label: `played 200+ tournament matches with ${anchor.name}`,
-      short: `200+ matches with ${anchor.name}`,
+      label: `played 2+ tournaments alongside ${anchor.name}`,
+      short: `2+ events with ${anchor.name}`,
       test: (player) => ids.has(player.id),
       matches: links.map((entry) => entry.player),
     });

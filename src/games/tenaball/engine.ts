@@ -5,7 +5,7 @@ import { money, ordinal, plural } from '@/lib/format';
 
 /** Pure logic for Tenaball. */
 
-export type CategoryId = 'career-earnings' | 'year-earnings' | 'tournament' | 'fncs-wins' | 'pr';
+export type CategoryId = 'career-earnings' | 'year-earnings' | 'tournament' | 'fncs-wins' | 'titles';
 export type Difficulty = 'easy' | 'hard';
 
 export const HARD_LIVES = 3;
@@ -22,7 +22,7 @@ export const CATEGORIES: CategoryMeta[] = [
   { id: 'year-earnings', label: 'Earnings in a Year', hint: 'The ten biggest earners in one calendar year.' },
   { id: 'tournament', label: 'A Specific Tournament', hint: 'The ten best finishers at one major event.' },
   { id: 'fncs-wins', label: 'FNCS Wins', hint: 'The ten players with the most FNCS titles.' },
-  { id: 'pr', label: 'Power Ranking', hint: 'The ten highest Power Ranking point totals.' },
+  { id: 'titles', label: 'Total Titles', hint: 'The ten players with the most tournament wins of any kind.' },
 ];
 
 export interface Slot {
@@ -46,6 +46,17 @@ export interface Puzzle {
   higherIsBetter: boolean;
 }
 
+/**
+ * Categories this dataset can actually build a board for.
+ *
+ * "A Specific Tournament" needs ten recorded finishers at one event; while the
+ * data only records winners, it has nothing to rank and is left out of the
+ * picker rather than failing after the player chooses it.
+ */
+export function availableCategories(dataset: Dataset): CategoryMeta[] {
+  return CATEGORIES.filter((meta) => buildPuzzle(dataset, meta.id, `probe-${meta.id}`) !== null);
+}
+
 /** Builds a puzzle, or null when the dataset cannot support the category. */
 export function buildPuzzle(dataset: Dataset, category: CategoryId, seed: string): Puzzle | null {
   const rng = makeRng(seed);
@@ -59,14 +70,14 @@ export function buildPuzzle(dataset: Dataset, category: CategoryId, seed: string
         (player) => player.earnings,
         (value) => money(value),
       );
-    case 'pr':
+    case 'titles':
       return rankPuzzle(
         dataset,
-        'pr',
-        'Top 10 by Power Ranking points',
-        'Straight PR order. Exact ties are split by name.',
-        (player) => player.pr,
-        (value) => `${value.toLocaleString('en-US')} PR`,
+        'titles',
+        'Top 10 by total titles',
+        'FNCS titles plus global, LAN and major wins. Exact ties are split by name.',
+        (player) => player.fncsWins + player.majorWins,
+        (value) => plural(value, 'title'),
       );
     case 'fncs-wins':
       return rankPuzzle(

@@ -129,13 +129,16 @@ for (const mode of ['easy', 'hard', 'random'] as const) {
     const game = whoAreYa.createGame(dataset, mode, `wy-${mode}-${i}`);
     check(game !== null, `who-are-ya: could not create a ${mode} game`);
     if (!game) continue;
-    check(game.clues.length >= 6, `who-are-ya: only ${game.clues.length} teammates for ${game.secret.name}`);
+    check(
+      game.clues.length >= whoAreYa.MIN_CLUES,
+      `who-are-ya: only ${game.clues.length} teammates for ${game.secret.name}`,
+    );
     check(
       !game.clues.some((clue) => clue.player.id === game.secret.id),
       'who-are-ya: the secret player appears in their own teammate list',
     );
     if (mode !== 'random') {
-      const counts = game.clues.map((clue) => clue.matches);
+      const counts = game.clues.map((clue) => clue.events);
       check(
         counts.every((value, index) => index === 0 || counts[index - 1] <= value),
         `who-are-ya (${mode}): teammates are not ordered fewest → most`,
@@ -155,7 +158,7 @@ for (const mode of ['easy', 'hard', 'random'] as const) {
 }
 
 // ---------------------------------------------------------------- 5. Tenaball
-for (const category of tenaball.CATEGORIES) {
+for (const category of tenaball.availableCategories(dataset)) {
   let built = 0;
   const titles = new Set<string>();
   for (let i = 0; i < 60; i++) {
@@ -170,7 +173,7 @@ for (const category of tenaball.CATEGORIES) {
     // Every answer must be reachable by typing the player's name.
     for (const slot of puzzle.slots) {
       check(
-        matchPlayer(slot.player.name, dataset.players)?.id === slot.player.id,
+        matchPlayer(slot.player.name, dataset.roster)?.id === slot.player.id,
         `tenaball ${category.id}: "${slot.player.name}" does not resolve by name`,
       );
     }
@@ -211,7 +214,7 @@ for (const category of tenaball.CATEGORIES) {
     check(new Set(ids).size === ids.length, `list: "${criterion.title}" contains a duplicate player`);
     for (const player of criterion.answers) {
       check(
-        matchPlayer(player.name, dataset.players)?.id === player.id,
+        matchPlayer(player.name, dataset.roster)?.id === player.id,
         `list: "${player.name}" does not resolve by name`,
       );
     }

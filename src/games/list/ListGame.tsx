@@ -84,7 +84,7 @@ export default function ListGame() {
 
   const guess = (text: string) => {
     if (!running || !criterion) return;
-    const player = matchPlayer(text, dataset.players);
+    const player = matchPlayer(text, dataset.roster);
 
     if (!player) {
       if (difficulty === 'hard') adjustTime(-PENALTY_SECONDS);

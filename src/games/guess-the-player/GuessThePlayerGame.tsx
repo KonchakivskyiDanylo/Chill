@@ -7,7 +7,7 @@ import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
 import { useDataset } from '@/data/DataProvider';
 import type { Player } from '@/data/types';
 import { REGION_LABEL } from '@/data/types';
-import { money } from '@/lib/format';
+import { playerMoney } from '@/lib/format';
 import { getGame } from '@/games/registry';
 import {
   createGame,
@@ -98,7 +98,7 @@ export default function GuessThePlayerGame() {
         </div>
 
         {!finished ? (
-          <PlayerSearch players={dataset.players} onPick={(player) => setGame(submitGuess(game, player))} exclude={guessedIds} />
+          <PlayerSearch players={dataset.roster} onPick={(player) => setGame(submitGuess(game, player))} exclude={guessedIds} />
         ) : null}
 
         {game.rows.length > 0 ? (
@@ -135,7 +135,7 @@ export default function GuessThePlayerGame() {
                 <div className="small muted">
                   <CountryBadge code={game.secret.country} name={game.secret.countryName} />{' '}
                   {game.secret.countryName} · {REGION_LABEL[game.secret.region]} · {game.secret.age} yrs ·{' '}
-                  {money(game.secret.earnings)} · {game.secret.fncsWins} FNCS
+                  {playerMoney(game.secret)} · {game.secret.fncsWins} FNCS
                 </div>
               </div>
             </div>

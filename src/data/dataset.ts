@@ -1,26 +1,48 @@
-import type { Player, PlayerResult, Region, TournamentEvent } from './types';
+import type { EventEntry, OrgStint, Player, PlayerResult, Region, TournamentEvent } from './types';
 
 /**
  * Read-only query layer shared by every game.
  *
- * Games never touch the raw arrays or the sample module — they take a
- * `Dataset` and ask it questions. Swapping in a real API therefore only means
- * feeding this class a different `Player[]`.
+ * Games never touch the raw arrays or a data module — they take a `Dataset` and
+ * ask it questions, so swapping in a real API only means feeding this class a
+ * different set of rows.
+ *
+ * Two player collections exist on purpose:
+ *
+ *   `roster`   everyone in the dataset, including the one-off regional winners
+ *              we know little else about. Use it for name lookup and search, so
+ *              a player typing any real winner gets a match.
+ *   `players`  the subset with enough recorded history to be a fair puzzle
+ *              answer. Games pick their secrets from here.
  */
 export class Dataset {
+  /** Puzzle-eligible players (see `isPuzzleWorthy`). */
   readonly players: Player[];
+  /** Every player in the dataset, puzzle-eligible or not. */
+  readonly roster: Player[];
   readonly events: TournamentEvent[];
+  readonly entries: EventEntry[];
 
   private readonly playerById = new Map<string, Player>();
   private readonly eventById = new Map<string, TournamentEvent>();
+  private readonly entryById = new Map<string, EventEntry>();
   /** eventId -> results, sorted by placement. */
   private readonly resultsByEvent = new Map<string, { player: Player; result: PlayerResult }[]>();
+  private readonly entriesByEvent = new Map<string, EventEntry[]>();
 
-  constructor(players: Player[], events: TournamentEvent[]) {
-    this.players = players;
+  constructor(players: Player[], events: TournamentEvent[], entries: EventEntry[] = []) {
+    this.roster = players;
     this.events = events;
+    this.entries = entries;
     for (const player of players) this.playerById.set(player.id, player);
     for (const event of events) this.eventById.set(event.id, event);
+    for (const entry of entries) {
+      this.entryById.set(entry.id, entry);
+      const list = this.entriesByEvent.get(entry.eventId);
+      if (list) list.push(entry);
+      else this.entriesByEvent.set(entry.eventId, [entry]);
+    }
+    for (const list of this.entriesByEvent.values()) list.sort((a, b) => a.placement - b.placement);
 
     for (const player of players) {
       for (const result of player.results) {
@@ -33,6 +55,21 @@ export class Dataset {
     for (const list of this.resultsByEvent.values()) {
       list.sort((a, b) => a.result.placement - b.result.placement || (a.player.name < b.player.name ? -1 : 1));
     }
+
+    this.players = players.filter((player) => this.isPuzzleWorthy(player));
+  }
+
+  /**
+   * Whether a player has enough recorded history to be guessable.
+   *
+   * A player who shows up once as part of a regional trio, with no earnings
+   * figure and no birthday, gives a guesser nothing to work with — they stay in
+   * `roster` (so searching for them works) but never become the answer.
+   */
+  private isPuzzleWorthy(player: Player): boolean {
+    const facts =
+      (player.earningsKnown ? 1 : 0) + (player.birthDate ? 1 : 0) + (player.team ? 1 : 0);
+    return player.results.length >= 2 || (player.earnings >= 100_000 && facts >= 2);
   }
 
   // ---------------------------------------------------------------- lookups
@@ -45,12 +82,28 @@ export class Dataset {
     return this.eventById.get(id);
   }
 
-  /** A player's major results with their event objects attached, oldest first. */
+  getEntry(id: string): EventEntry | undefined {
+    return this.entryById.get(id);
+  }
+
+  /** A player's results with their event objects attached, oldest first. */
   careerOf(player: Player): { event: TournamentEvent; result: PlayerResult }[] {
     return player.results
       .map((result) => ({ event: this.eventById.get(result.eventId), result }))
       .filter((entry): entry is { event: TournamentEvent; result: PlayerResult } => Boolean(entry.event))
       .sort((a, b) => (a.event.date < b.event.date ? -1 : a.event.date > b.event.date ? 1 : 0));
+  }
+
+  /** Every roster that placed at an event, best placement first. */
+  entriesOf(eventId: string): EventEntry[] {
+    return this.entriesByEvent.get(eventId) ?? [];
+  }
+
+  /** The players making up an entry, in roster order. */
+  rosterOf(entry: EventEntry): Player[] {
+    return entry.playerIds
+      .map((id) => this.playerById.get(id))
+      .filter((player): player is Player => Boolean(player));
   }
 
   /** Everyone who played a given event, best placement first. */
@@ -68,16 +121,27 @@ export class Dataset {
     return this.standings(eventId).map((entry) => entry.player);
   }
 
-  teammatesOf(player: Player): { player: Player; matches: number }[] {
+  teammatesOf(player: Player): { player: Player; events: number; eventIds: string[] }[] {
     return player.teammates
-      .map((link) => ({ player: this.playerById.get(link.playerId), matches: link.matches }))
-      .filter((entry): entry is { player: Player; matches: number } => Boolean(entry.player))
-      .sort((a, b) => b.matches - a.matches || (a.player.name < b.player.name ? -1 : 1));
+      .map((link) => ({
+        player: this.playerById.get(link.playerId),
+        events: link.events,
+        eventIds: link.eventIds,
+      }))
+      .filter((entry): entry is { player: Player; events: number; eventIds: string[] } =>
+        Boolean(entry.player),
+      )
+      .sort((a, b) => b.events - a.events || (a.player.name < b.player.name ? -1 : 1));
   }
 
-  /** Matches two players played together, or 0 if they never teamed up. */
-  matchesTogether(a: Player, b: Player): number {
-    return a.teammates.find((link) => link.playerId === b.id)?.matches ?? 0;
+  /** Events two players played together, or 0 if they never teamed up. */
+  eventsTogether(a: Player, b: Player): number {
+    return a.teammates.find((link) => link.playerId === b.id)?.events ?? 0;
+  }
+
+  /** The organisations a player has represented, oldest first. */
+  orgsOf(player: Player): OrgStint[] {
+    return player.orgHistory;
   }
 
   earningsIn(player: Player, year: number): number {
@@ -89,6 +153,13 @@ export class Dataset {
   get teams(): string[] {
     const set = new Set<string>();
     for (const player of this.players) if (player.team) set.add(player.team);
+    return [...set].sort();
+  }
+
+  /** Every organisation that appears anywhere in the dataset, current or past. */
+  get allOrgs(): string[] {
+    const set = new Set<string>();
+    for (const player of this.roster) for (const stint of player.orgHistory) set.add(stint.org);
     return [...set].sort();
   }
 
@@ -117,6 +188,11 @@ export class Dataset {
     return this.players.filter((p) => p.team === team);
   }
 
+  /** Everyone who has ever represented an org, including former players. */
+  everPlayedFor(org: string): Player[] {
+    return this.roster.filter((p) => p.orgHistory.some((stint) => stint.org === org));
+  }
+
   byCountry(country: string): Player[] {
     return this.players.filter((p) => p.country === country);
   }
@@ -126,7 +202,7 @@ export class Dataset {
   }
 
   countryName(code: string): string {
-    return this.players.find((p) => p.country === code)?.countryName ?? code;
+    return this.roster.find((p) => p.country === code)?.countryName ?? code;
   }
 
   fncsWinners(): Player[] {

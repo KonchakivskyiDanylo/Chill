@@ -10,7 +10,7 @@ export function Home() {
     <div className="page stack-lg">
       <section className="stack" style={{ paddingTop: 12 }}>
         <span className="chip chip--primary" style={{ width: 'fit-content' }}>
-          {dataset ? `${dataset.players.length} players · ${dataset.events.length} majors` : 'Loading dataset…'}
+          {dataset ? `${dataset.roster.length} players · ${dataset.events.length} tournaments` : 'Loading dataset…'}
         </span>
         <h1>Ten puzzles about Fortnite competitive players.</h1>
         <p className="muted" style={{ maxWidth: '58ch' }}>
@@ -37,12 +37,12 @@ export function Home() {
       </section>
 
       <section className="card card--muted">
-        <div className="card__title">About this prototype</div>
+        <div className="card__title">About the data</div>
         <p className="small muted">
-          Every game runs on a shared sample dataset of well-known Fortnite competitive players — earnings, ages,
-          orgs, nationalities, major results and tournament teammates. The data layer sits behind a single
-          repository interface, so the sample records can be swapped for live Liquipedia / API data without
-          touching the games.
+          Every game runs on the same imported dataset: every FNCS winner in every region since 2019, plus the
+          World Cup, the LANs and the game's biggest earners — with their birthdays, orgs, career results and the
+          teammates they won alongside. It sits behind a single repository interface, so a live API can replace it
+          without touching the games.
         </p>
         <DataNote />
       </section>

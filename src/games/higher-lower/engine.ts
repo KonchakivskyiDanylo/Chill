@@ -32,7 +32,11 @@ export function valueOf(player: Player, category: Category): number {
 
 /** Players usable for a category — guards against missing data (e.g. no birth date). */
 export function eligible(players: readonly Player[], category: Category): Player[] {
-  return players.filter((player) => (category === 'age' ? player.age !== null : player.earnings > 0));
+  // An unverified total is a lower bound built from the per-year tables, and
+  // comparing one against a published total can make a right answer look wrong.
+  return players.filter((player) =>
+    category === 'age' ? player.age !== null : player.earningsKnown && player.earnings > 0,
+  );
 }
 
 export interface GameState {

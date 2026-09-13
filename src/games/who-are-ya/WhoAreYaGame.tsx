@@ -6,7 +6,7 @@ import { PlayerSearch } from '@/components/PlayerSearch';
 import { Banner, OptionCard, OptionGrid, PlayerLine, Stat } from '@/components/ui';
 import { useDataset } from '@/data/DataProvider';
 import type { Player } from '@/data/types';
-import { money } from '@/lib/format';
+import { playerMoney, plural } from '@/lib/format';
 import { getGame } from '@/games/registry';
 import {
   cluesLeft,
@@ -21,8 +21,8 @@ import {
 const meta = getGame('who-are-ya')!;
 
 const MODES: { id: Mode; label: string; hint: string }[] = [
-  { id: 'easy', label: 'Easy', hint: 'Fewest → most matches, with the match count shown.' },
-  { id: 'hard', label: 'Hard', hint: 'Fewest → most matches, but the counts stay hidden.' },
+  { id: 'easy', label: 'Easy', hint: 'Fewest → most shared events, with the count shown.' },
+  { id: 'hard', label: 'Hard', hint: 'Fewest → most shared events, but the counts stay hidden.' },
   { id: 'random', label: 'Random', hint: 'Random order, counts hidden. No ramp-up.' },
 ];
 
@@ -104,7 +104,7 @@ export default function WhoAreYaGame() {
                   meta={clue.player.team ?? clue.player.countryName}
                 />
                 {withMatches || finished ? (
-                  <span className="chip nums">{clue.matches.toLocaleString('en-US')} matches</span>
+                  <span className="chip nums">{plural(clue.events, 'event')}</span>
                 ) : (
                   <span className="chip faint">?</span>
                 )}
@@ -112,7 +112,7 @@ export default function WhoAreYaGame() {
             ))}
           </ul>
           <p className="tiny faint">
-            Ranked by tournament matches played together
+            Ranked by tournaments played together
             {game.mode === 'random' ? ', shown in random order.' : ', fewest first.'}
           </p>
         </section>
@@ -136,7 +136,7 @@ export default function WhoAreYaGame() {
                 <div className="small muted">
                   <CountryBadge code={game.secret.country} name={game.secret.countryName} />{' '}
                   {game.secret.countryName}
-                  {game.secret.team ? ` · ${game.secret.team}` : ''} · {money(game.secret.earnings)}
+                  {game.secret.team ? ` · ${game.secret.team}` : ''} · {playerMoney(game.secret)}
                 </div>
               </div>
             </div>
@@ -146,7 +146,7 @@ export default function WhoAreYaGame() {
           </div>
         ) : (
           <div className="stack">
-            <PlayerSearch players={dataset.players} onPick={guess} exclude={guessedIds} />
+            <PlayerSearch players={dataset.roster} onPick={guess} exclude={guessedIds} />
             <button
               type="button"
               className="btn btn--block"

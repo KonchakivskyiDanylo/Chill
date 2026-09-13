@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "check:data": "tsx scripts/check-data.ts",
     "check:games": "tsx scripts/check-games.ts",
-    "audit": "tsx scripts/audit-roster.ts"
+    "audit": "tsx scripts/audit-roster.ts",
+    "etl:fetch": "tsx scripts/etl/fetch-sources.ts",
+    "etl:build": "tsx scripts/etl/build-dataset.ts"
   },
   "dependencies": {
     "react": "^18.3.1",

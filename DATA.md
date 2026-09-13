@@ -1,195 +1,186 @@
-# Editing the player data
+# The data
 
-Everything you can change by hand lives in **two files**:
+The dataset is **imported, not authored**. Two sources are fetched, parsed and
+written out as TypeScript; nothing is typed in by hand and nothing is invented
+to fill a gap.
 
-| File | What it holds |
+| Source | What it gives |
 | --- | --- |
-| [`src/data/sample/roster.ts`](src/data/sample/roster.ts) | The ~110 players — one line each. **This is the file you want 99% of the time.** |
-| [`src/data/sample/tournaments.ts`](src/data/sample/tournaments.ts) | The list of major events (FNCS seasons, World Cups, LANs) |
+| [Wikipedia — *Competitive Fortnite records and statistics*](https://en.wikipedia.org/wiki/Competitive_Fortnite_records_and_statistics) | Every FNCS winner by season and region (2019 → 2026), the major non-FNCS winners, the FNCS title records, and the $500k+ earners table with real names, ages and orgs |
+| [Liquipedia (Fortnite)](https://liquipedia.net/fortnite/) | The birthday list (~3,000 people) and the player earnings portal — career totals plus a table per year |
 
-After any edit:
+```bash
+npm run etl:fetch     # download the sources into scripts/etl/.cache/
+npm run etl:build     # parse the cache -> src/data/fortnite/*.ts
+npm run audit         # does the imported data look believable?
+npm run check:data    # is it internally consistent, and can the games use it?
+npm run check:games   # play all ten games headlessly
+```
+
+The generated files are committed, so the site builds with no network access.
+`etl:fetch` skips anything already cached — see *Rate limits* below.
+
+---
+
+## Shape
+
+The model is relational. A player is not one row with a `fncsWins` number on it;
+a player is a person, and the titles are counted from the results.
+
+```
+TournamentEvent    one tournament — a regional grand final, a global, a LAN
+EventEntry         one roster's finish at one event: placement, prize, playerIds[], org
+OrgStint           one spell at one organisation, with dates
+Player             the person — plus views derived from the rows above
+```
+
+`EventEntry.playerIds` holds the **whole roster**, so a trio win is one row
+referencing three players rather than three disconnected rows. That single
+decision is what makes "who did Peterbot play with", "which orgs has Muz worn"
+and "how many titles does EpikWhale have" answerable from the same table.
+
+### Generated files — do not edit
+
+| File | Rows | Holds |
+| --- | --- | --- |
+| `src/data/fortnite/events.ts` | 220 | Every tournament with a recorded result |
+| `src/data/fortnite/entries.ts` | 220 | Every roster that placed, with its players and org |
+| `src/data/fortnite/players.ts` | 316 | Verified facts: name, country, birthday, earnings |
+
+`npm run etl:build` overwrites all three. Edits there are lost.
+
+### Hand-maintained files — edit these
+
+| File | Purpose |
+| --- | --- |
+| `scripts/etl/aliases.ts` | Links handles the two sources spell differently, e.g. Wikipedia's `Kalgamer` ↔ Liquipedia's `Kalgamer710` |
+| `src/data/fortnite/countries.ts` | Country display names and the fallback country → region map |
+
+### Derived in `src/data/fortnite/build.ts`
+
+Never stored, always computed, so they cannot contradict the rows they come from:
+
+`results` · `teammates` · `fncsWins` · `majorWins` · `team` · `orgHistory` ·
+`age` · `region`
+
+Add one result row and every one of those updates at once.
+
+---
+
+## What is complete and what is not
+
+This matters more than the totals, because it tells you where the next import
+should point.
+
+| Field | Coverage | Why |
+| --- | --- | --- |
+| Tournament winners | **complete** | Wikipedia lists every FNCS winner in every region since 2019 |
+| Birthdays | 249 / 316 | Liquipedia's birthday list is opt-in; the rest genuinely are not published |
+| Real names | 184 / 316 | same |
+| Career earnings | 200 / 316 | Liquipedia publishes the top 500; below that (~$83k) there is no figure |
+| Per-year earnings | 2018–2021 | 2022–2026 are rate-limited — re-run `npm run etl:fetch` to fill them in |
+| Org history | 31 / 316 | Neither source publishes transfer history; only current orgs and the orgs named on LAN winner rows |
+| **Placements other than 1st** | **none** | Neither source publishes full standings |
+| **Prize money per event** | **none** | Both publish career totals, not payouts per placement |
+
+The last two are the significant gaps. Everything in the dataset is a *winner*,
+which is why:
+
+- Tenaball's "A Specific Tournament" category hides itself — it needs ten
+  ranked finishers at one event and there is one;
+- Who Are Ya asks for three teammate clues rather than six — even a six-time
+  champion only has eight distinct title-winning teammates.
+
+Both fix themselves the moment standings are loaded. Nothing needs rewriting:
+add rows to `entries.ts` with `placement: 2`, `3`, … and the pools grow.
+
+---
+
+## Adding data
+
+Everything goes through `EventEntry`. To record that a roster finished 4th:
+
+```ts
+{ id: 'fncs-c6s3-eu-p4', eventId: 'fncs-c6s3-eu', placement: 4,
+  playerIds: ['tjino', 'pablowingu', 'fredoxie'], org: 'Karmine Corp' },
+```
+
+Players referenced must exist in `players.ts`; events in `events.ts`. Since both
+are generated, a new source belongs in the ETL — write a reader in
+`scripts/etl/lib/`, merge it in `build-dataset.ts`, and the tables regenerate.
+
+Event ids read as `fncs-<season>-<region>`, lowercase:
+
+```
+fncs-c6s3-eu              FNCS Major 3 2025, Europe
+fncs-c2s2-nae-pc          FNCS Chapter 2 Season 2, NA East, PC bracket
+fncs-global-2024          2024 FNCS Global Championship
+fortnite-world-cup-solos  Fortnite World Cup 2019, solos
+fncs-grand-royale-2021-br 2021 FNCS Grand Royale, Brazil
+```
+
+Events whose official name is not a standard seasonal final (the All-Star
+Showdown, the Grand Royale) key off their name instead of their season, because
+several events share one season key. The builder throws on an id collision
+rather than silently merging two tournaments.
+
+---
+
+## Two failure modes worth knowing
+
+The sources share no player id, so the import matches on handle. That fails in
+two ways, and both are checked automatically:
+
+**The same player, spelled differently.** Caught by `npm run audit` as
+"*N titles but no earnings figure*". Fix it by adding a line to
+`scripts/etl/aliases.ts`.
+
+**Two different players, same handle.** There is an Australian *Speedy* and a
+Bahraini *Speedy*; they are kept apart by country and rendered as `Speedy (AU)`
+and `Speedy (BH)`. Where a wrong match slips through, the age guard in
+`build-dataset.ts` catches it — a birthday that would make someone eleven at
+their first title is dropped rather than published. It rejected two on the last
+run.
+
+---
+
+## Rate limits
+
+Liquipedia allows roughly one `action=parse` call per 30 seconds and applies a
+long cooldown once you trip it. `etl:fetch` requests one page at a time, sends a
+descriptive User-Agent as [their terms](https://liquipedia.net/api-terms-of-use)
+require, and skips anything already cached — so a run that stops on a 429 can be
+resumed by running it again later. Wikipedia has no such limit.
+
+For bulk work (full standings for 220 tournaments, transfer histories) the
+polite route is Liquipedia's [LPDB API](https://api.liquipedia.net/), which
+needs a free API key. That is the natural home for the two missing fields above.
+
+---
+
+## Verifying a change
 
 ```bash
 npm run audit
 ```
 
-That catches typos, impossible dates, unknown ids and contradictions. The dev
-server hot-reloads, so just refresh the page to see your change.
-
----
-
-## Authored vs. derived — read this first
-
-Only the fields in `roster.ts` are written by hand. Everything else is
-**generated** from them by [`build.ts`](src/data/sample/build.ts):
-
-| Authored (edit freely) | Derived (do not look for it in a file) |
-| --- | --- |
-| name, real name, country, region | Individual event placements |
-| birth date, career earnings, org, PR | Prize money per result |
-| tier, first/last season | Earnings split per year |
-| FNCS title count | Teammate match counts |
-| Signature results, partners, status | |
-
-Generation is seeded, so it is stable: the same roster always produces the same
-placements, on every machine and every reload. If you want a *specific* result
-to be true, pin it with `signature` (see below) — that always wins.
-
-**Every 1st place in the app is authored.** The generator never invents a title,
-so if a player shows 3 FNCS wins, it is because `fncsWins: 3` says so. `npm run
-audit` fails if the dataset ever disagrees with what you wrote.
-
----
-
-## A roster line, field by field
-
-```ts
-{ id: 'bugha', name: 'Bugha', realName: 'Kyle Giersdorf', country: 'US', region: 'NAE',
-  born: '2002-12-01', earnings: 3750000, team: 'Sentinels', pr: 2180, tier: 1,
-  first: 'C2S1', last: 'C7S2', fncsWins: 1,
-  signature: [['wc-2019-solo', 1]], partners: ['jamper', 'arkhram'] },
-```
-
-| Field | Required | Meaning |
-| --- | --- | --- |
-| `id` | yes | Internal key, lowercase. Must be unique. Changing it resets that player's generated results. |
-| `name` | yes | The handle shown everywhere, and the Wordle answer. |
-| `realName` | no | Shown on reveal screens. **Omit it if you are not sure** — better blank than wrong. |
-| `country` | yes | ISO two-letter code. Must exist in `COUNTRY_NAMES` at the top of the file. |
-| `region` | yes | Competitive region, not nationality: `NAE` `NAW` `EU` `BR` `OCE` `ASIA` `ME`. A Canadian playing NA East is `country: 'CA', region: 'NAE'`. |
-| `born` | no | `YYYY-MM-DD`. Drives age. Without it the player is skipped by Higher or Lower (Age). |
-| `earnings` | yes | Career prize money in USD, no separators (`3750000`). |
-| `team` | no | Current org. Omit for a free agent. |
-| `pr` | yes | Power Ranking points. |
-| `tier` | yes | `1` elite → `4` fringe. Only affects how well generated placements go. |
-| `first` / `last` | yes | First and last FNCS season they competed in, e.g. `C2S1`, `C7S2`. Defines their whole career span. |
-| `fncsWins` | no | Number of FNCS titles. **Authoritative** — the dataset will show exactly this. |
-| `signature` | no | Results that must be exactly true: `[['event-id', placement]]`. |
-| `partners` | no | Known duo/trio partners by `id`. Gives them a high teammate-match count with each other. |
-| `status` | no | `'active'` (default) or `'inactive'` for retired players. |
-
-### Which games use which field
-
-- **name** → Wordle, and every answer you type
-- **born / age** → Higher or Lower, Guess the Player
-- **earnings** → Higher or Lower, Tenaball, List, Impostor, Tic Tac Toe, Guess the Player
-- **country / region** → Impostor, Tic Tac Toe, Connections, Guess the Player, List
-- **team** → Impostor, Tic Tac Toe, Connections, List
-- **fncsWins** → Tenaball, Guess the Player, Impostor, Tic Tac Toe, List
-- **pr** → Tenaball
-- **first / last / tier / signature** → Career Path, Tenaball (tournaments), List
-- **partners** → Who Are Ya?, Connections
-
----
-
-## Common tasks
-
-### Fix a wrong fact
-
-Find the line (Ctrl+F the handle) and edit the value. That is it:
-
-```ts
-// before
-{ id: 'clix', name: 'Clix', born: '2005-01-18', earnings: 640000, ... },
-// after
-{ id: 'clix', name: 'Clix', born: '2005-04-06', earnings: 712000, ... },
-```
-
-### Make a specific result true
-
-Use `signature`. It overrides anything the generator would have done, and it is
-the **only** way to award a win:
-
-```ts
-signature: [['wc-2019-solo', 1], ['fncs-gc-2024', 12]],
-```
-
-Event ids come from `tournaments.ts`. FNCS finals follow the pattern
-`fncs-<season>-<region>`, all lowercase:
-
-```
-fncs-c4s4-eu      FNCS Chapter 4 Season 4, Europe
-fncs-c2s2-nae     FNCS Chapter 2 Season 2, NA East
-wc-2019-solo      Fortnite World Cup 2019 Solo
-wc-2019-duo       Fortnite World Cup 2019 Duo
-dh-anaheim-2020   DreamHack Anaheim 2020
-fncs-invitational-2021
-fncs-gc-2022 / fncs-gc-2023 / fncs-gc-2024 / fncs-gc-2025
-gamers8-2023
-ewc-2024 / ewc-2025 / ewc-2026
-```
-
-### Change who won an event
-
-Move the `['<event-id>', 1]` entry from one player's `signature` to another's.
-Only one player (or one duo/trio) may hold 1st at a given event — the audit
-fails otherwise.
-
-### Change how many FNCS titles a player has
-
-Edit `fncsWins`. If you raise it past the number of finals their `first`–`last`
-range covers, the audit tells you to widen that range.
-
-### Add a player
-
-Copy any line, change the values, give it a unique `id`. Put it in the right
-region block so the file stays readable. Minimum viable line:
-
-```ts
-{ id: 'newguy', name: 'NewGuy', country: 'FR', region: 'EU',
-  earnings: 250000, pr: 900, tier: 3, first: 'C5S1', last: 'C7S2' },
-```
-
-### Remove a player
-
-Delete the line. Then run `npm run audit` — it will tell you if anyone still
-lists them in `partners`.
-
-### Add or change an event
-
-Edit `tournaments.ts`. FNCS season finals are generated from the `FNCS_SEASONS`
-array (one entry per season × seven regions), so adding a season adds seven
-events. One-off majors are hand-listed in `SPECIAL_EVENTS`.
-
----
-
-## Known-weak data — worth your attention
-
-These were authored from memory for the prototype and are the most likely to be
-wrong. They are the highest-value things to correct:
-
-1. **Major-event winners.** Every 1st place outside the World Cup is a plausible
-   placeholder, not a checked fact. Search `', 1]` in `roster.ts` to see all of
-   them in one pass — there are twelve.
-2. **Birth dates.** Roughly right for well-known players, invented for the rest.
-3. **Real names.** Only filled in where I was reasonably confident; most players
-   have none on purpose.
-4. **Career earnings and PR.** Right order of magnitude, not exact.
-5. **`first` / `last` seasons.** These define career length, so they change
-   Career Path a lot. Worth a pass for the older players.
-6. **The lower half of the roster.** The top ~40 names are real and well known;
-   further down, some handles are plausible sample names rather than real
-   competitors.
-
-Everything derived from these — placements, prize money, teammate counts — is
-generated and will update automatically when you fix the source values.
-
----
-
-## Verify your edits
+Plausibility of the import: impossible ages, handles matched to the wrong
+person, near-identical names that are probably one player split in two,
+entries whose roster size disagrees with the event format.
 
 ```bash
-npm run audit          # plausibility of what you typed (run this first)
+npm run check:data
 ```
+
+Integrity and feasibility: every derived view is recomputed from the entries and
+compared, every foreign key resolved, and each game asked for its own pool size.
+It prints coverage, and reports disagreements *between* sources separately —
+those are not ours to fix.
 
 ```bash
-npm run check:data     # internal consistency of the generated dataset
+npm run check:games
 ```
 
-```bash
-npm run check:games    # plays all ten games to completion headlessly
-```
-
-`check:games` is the important one after a big edit: it proves the generators
-can still build solvable Tic Tac Toe boards, four clean Connections groups,
-ten-slot Tenaball boards and so on from your data.
+Plays all ten games to completion headlessly. Run it after any data change: it
+proves the generators can still build solvable Tic Tac Toe boards, clean
+Connections groups and ten-slot Tenaball boards from whatever the data now says.

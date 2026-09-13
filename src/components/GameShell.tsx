@@ -98,8 +98,8 @@ export function RulesCard({ game }: { game: GameMeta }) {
 export function DataNote() {
   return (
     <p className="tiny faint">
-      Player values are based on the {DATA_SOURCE_LABEL} (last update: {formatDate(DATA_UPDATED_AT)}). Figures in
-      this prototype are approximate and will be replaced by live data.
+      Player values come from {DATA_SOURCE_LABEL}, last updated {formatDate(DATA_UPDATED_AT)}. Where a source
+      publishes no figure the field is left blank rather than estimated.
     </p>
   );
 }

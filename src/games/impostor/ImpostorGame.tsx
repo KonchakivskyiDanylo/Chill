@@ -5,7 +5,7 @@ import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
 import { useDataset } from '@/data/DataProvider';
 import type { Player } from '@/data/types';
-import { moneyShort } from '@/lib/format';
+import { playerMoneyShort } from '@/lib/format';
 import { getGame } from '@/games/registry';
 import { check, createGame, createRound, impostorsLeft, pick, toggle, type GameState, type Mode } from './engine';
 import './impostor.css';
@@ -125,7 +125,7 @@ export default function ImpostorGame() {
                   {player.team ?? 'Free agent'}
                 </span>
                 <span className="imp-card__meta tiny faint">
-                  {moneyShort(player.earnings)} · {player.fncsWins} FNCS
+                  {playerMoneyShort(player)} · {player.fncsWins} FNCS
                 </span>
                 {reveal ? (
                   <span className={`imp-card__tag ${isImpostor ? 'imp-card__tag--impostor' : ''}`}>

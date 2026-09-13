@@ -176,7 +176,7 @@ export default function TicTacToeGame() {
                 </div>
               ) : (
                 <>
-                  <PlayerSearch players={dataset.players} onPick={submit} exclude={usedIds} buttonLabel="Place" />
+                  <PlayerSearch players={dataset.roster} onPick={submit} exclude={usedIds} buttonLabel="Place" />
                   {feedback ? (
                     <p className="small" style={{ color: feedback.tone }}>
                       {feedback.message}

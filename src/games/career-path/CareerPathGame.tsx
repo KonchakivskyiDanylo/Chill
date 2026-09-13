@@ -6,7 +6,7 @@ import { PlayerSearch } from '@/components/PlayerSearch';
 import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
 import { useDataset } from '@/data/DataProvider';
 import type { Player } from '@/data/types';
-import { money, ordinal } from '@/lib/format';
+import { money, ordinal, playerMoney } from '@/lib/format';
 import { getGame } from '@/games/registry';
 import { cluesLeft, createGame, revealNext, submitGuess, type GameState, type Mode } from './engine';
 import './career-path.css';
@@ -100,7 +100,9 @@ export default function CareerPathGame() {
                   <div className="cp-clue__meta">
                     {clue.event.region ? `${clue.event.region} · ` : ''}
                     {clue.event.year}
-                    {finished ? ` · ${money(clue.result.prize)}` : ''}
+                    {/* Payouts per placement are not published, so show the
+                        prize only where a real figure exists. */}
+                    {finished && clue.result.prize > 0 ? ` · ${money(clue.result.prize)}` : ''}
                   </div>
                 </div>
                 <div
@@ -130,7 +132,7 @@ export default function CareerPathGame() {
           </div>
         ) : (
           <div className="stack">
-            <PlayerSearch players={dataset.players} onPick={guess} exclude={guessedIds} />
+            <PlayerSearch players={dataset.roster} onPick={guess} exclude={guessedIds} />
             <button type="button" className="btn btn--block" onClick={reveal} disabled={cluesLeft(game) === 0}>
               {cluesLeft(game) === 0 ? 'All clues revealed — last guess!' : `Reveal next clue (${cluesLeft(game)} left)`}
             </button>
@@ -165,7 +167,7 @@ function SecretCard({ player }: { player: Player }) {
         <div className="bold">{player.name}</div>
         <div className="small muted">
           <CountryBadge code={player.country} name={player.countryName} /> {player.countryName}
-          {player.team ? ` · ${player.team}` : ''} · {money(player.earnings)} · {player.fncsWins} FNCS
+          {player.team ? ` · ${player.team}` : ''} · {playerMoney(player)} · {player.fncsWins} FNCS
         </div>
       </div>
     </div>

@@ -4,7 +4,7 @@ import { CountryBadge } from '@/components/CountryBadge';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { Banner, Stat } from '@/components/ui';
 import { useDataset } from '@/data/DataProvider';
-import { money } from '@/lib/format';
+import { playerMoney } from '@/lib/format';
 import { useLocalState } from '@/lib/storage';
 import { getGame } from '@/games/registry';
 import { createGame, keyboardState, MAX_GUESSES, scoreGuess, submitGuess, type GameState } from './engine';
@@ -156,7 +156,7 @@ export default function WordleGame() {
                 <div className="small muted">
                   <CountryBadge code={game.secret.country} name={game.secret.countryName} />{' '}
                   {game.secret.countryName}
-                  {game.secret.team ? ` · ${game.secret.team}` : ''} · {money(game.secret.earnings)} ·{' '}
+                  {game.secret.team ? ` · ${game.secret.team}` : ''} · {playerMoney(game.secret)} ·{' '}
                   {game.secret.fncsWins} FNCS
                 </div>
               </div>
