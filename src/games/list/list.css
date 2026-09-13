@@ -1,0 +1,21 @@
+.list-grid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+
+.list-chip {
+  padding: 6px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  min-width: 0;
+}
+.list-chip--found {
+  border-color: rgba(34, 197, 94, 0.4);
+  background: var(--success-soft);
+}
+
+.list-clock--low {
+  color: var(--danger);
+}

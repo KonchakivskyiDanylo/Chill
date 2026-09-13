@@ -1,0 +1,101 @@
+.wordle-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  gap: 5px;
+  /* Must be `width`, not `max-width`: the auto margins that centre this inside
+     the flex column stop it from stretching, so it would collapse to 0. */
+  width: min(100%, calc(var(--cols) * 62px));
+  margin: 0 auto;
+}
+
+.wordle-tile {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  font-weight: 800;
+  font-size: clamp(0.8rem, 4.2vw, 1.5rem);
+  text-transform: uppercase;
+  color: var(--text);
+  min-width: 0;
+}
+.wordle-tile--filled {
+  border-color: var(--border-strong);
+}
+.wordle-tile--correct {
+  background: #2f9e5c;
+  border-color: #2f9e5c;
+  color: #fff;
+}
+.wordle-tile--present {
+  background: #c9a227;
+  border-color: #c9a227;
+  color: #1a1400;
+}
+.wordle-tile--absent {
+  background: var(--surface-3);
+  border-color: var(--surface-3);
+  color: var(--text-faint);
+}
+
+.wordle-keyboard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 620px;
+  width: 100%;
+  margin: 0 auto;
+}
+.wordle-keyboard__row {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+}
+
+.wordle-key {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 52px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 0.92rem;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.wordle-key:hover {
+  background: var(--surface-3);
+}
+.wordle-key--wide {
+  flex: 1.6 1 auto;
+  font-size: 0.74rem;
+}
+.wordle-key--correct {
+  background: #2f9e5c;
+  border-color: #2f9e5c;
+  color: #fff;
+}
+.wordle-key--present {
+  background: #c9a227;
+  border-color: #c9a227;
+  color: #1a1400;
+}
+.wordle-key--absent {
+  background: var(--surface-3);
+  border-color: transparent;
+  color: var(--text-faint);
+}
+
+@media (max-width: 520px) {
+  .wordle-key {
+    height: 46px;
+    font-size: 0.82rem;
+  }
+  .wordle-grid {
+    gap: 4px;
+  }
+}

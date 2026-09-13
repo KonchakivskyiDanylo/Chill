@@ -1,0 +1,71 @@
+.imp-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+
+.imp-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  text-align: center;
+  padding: 16px 10px;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  min-height: 150px;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.imp-card:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+.imp-card:disabled {
+  cursor: default;
+}
+
+.imp-card--selected {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.imp-card--caught {
+  border-color: var(--success);
+  background: var(--success-soft);
+  opacity: 0.85;
+}
+.imp-card--impostor {
+  border-color: var(--success);
+  background: var(--success-soft);
+}
+.imp-card--wrong {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.imp-card__name {
+  font-weight: 800;
+  margin-top: 3px;
+}
+.imp-card__meta {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.imp-card__tag {
+  margin-top: 6px;
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-muted);
+}
+.imp-card__tag--impostor {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
