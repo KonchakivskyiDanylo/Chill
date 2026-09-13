@@ -14,8 +14,11 @@ npm run dev          # http://localhost:5173
 | `npm run dev` | Vite dev server |
 | `npm run build` | Typecheck + production build to `dist/` |
 | `npm run typecheck` | TypeScript only |
+| `npm run audit` | Sanity-checks the hand-authored roster (run after editing data) |
 | `npm run check:data` | Asserts the dataset's invariants (see below) |
 | `npm run check:games` | Drives all ten games through a full round headlessly |
+
+**Editing the player data: see [DATA.md](DATA.md).**
 
 ## The games
 
@@ -82,8 +85,8 @@ Only the compact seed is hand-written. `build.ts` derives everything else
 deterministically, and `npm run check:data` asserts the invariants the games
 rely on:
 
-- `fncsWins` is *derived from results*, never authored separately, so "Top 10
-  FNCS wins" and "FNCS winners" can never disagree;
+- every 1st place is authored, never generated, so a player's title count always
+  matches what the roster says;
 - placements are unique per player within an event, so "Top 10 at X" has one
   unambiguous answer;
 - `earningsByYear` sums exactly to career `earnings`;

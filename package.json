@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "check:data": "tsx scripts/check-data.ts",
-    "check:games": "tsx scripts/check-games.ts"
+    "check:games": "tsx scripts/check-games.ts",
+    "audit": "tsx scripts/audit-roster.ts"
   },
   "dependencies": {
     "react": "^18.3.1",

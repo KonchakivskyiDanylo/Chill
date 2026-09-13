@@ -205,8 +205,12 @@ function assignPlacements(participation: Map<string, Participation>): Map<string
       })
       .sort((a, b) => b.score - a.score || (a.id < b.id ? -1 : 1));
 
+    // Titles are never generated. A 1st place exists only where the roster
+    // authored one (via `fncsWins` or a `signature` entry), so the number of
+    // wins a player shows always matches what you wrote in roster.ts. Events
+    // nobody claimed simply have no winner in our player pool.
     const pool: number[] = [];
-    for (let position = 1; position <= size; position++) {
+    for (let position = 2; position <= size; position++) {
       if (!taken.has(position)) pool.push(position);
     }
     const chosen = shuffle(rng, pool)
