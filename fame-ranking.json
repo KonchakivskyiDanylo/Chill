@@ -1,0 +1,2530 @@
+[
+  {
+    "playerId": "bugha",
+    "name": "Bugha",
+    "fameScore": 0.9033,
+    "famePercentile": 0.0032,
+    "tier": "easy",
+    "prestigePoints": 166.0
+  },
+  {
+    "playerId": "malibuca",
+    "name": "Malibuca",
+    "fameScore": 0.8349,
+    "famePercentile": 0.0063,
+    "tier": "easy",
+    "prestigePoints": 245.0
+  },
+  {
+    "playerId": "aqua",
+    "name": "Aqua",
+    "fameScore": 0.7937,
+    "famePercentile": 0.0095,
+    "tier": "easy",
+    "prestigePoints": 160.0
+  },
+  {
+    "playerId": "vic0",
+    "name": "vic0",
+    "fameScore": 0.7318,
+    "famePercentile": 0.0127,
+    "tier": "easy",
+    "prestigePoints": 230.0
+  },
+  {
+    "playerId": "queasy",
+    "name": "Queasy",
+    "fameScore": 0.7307,
+    "famePercentile": 0.0158,
+    "tier": "easy",
+    "prestigePoints": 160.0
+  },
+  {
+    "playerId": "epikwhale",
+    "name": "EpikWhale",
+    "fameScore": 0.7274,
+    "famePercentile": 0.019,
+    "tier": "easy",
+    "prestigePoints": 120.0
+  },
+  {
+    "playerId": "peterbot",
+    "name": "Peterbot",
+    "fameScore": 0.7173,
+    "famePercentile": 0.0222,
+    "tier": "easy",
+    "prestigePoints": 180.0
+  },
+  {
+    "playerId": "tayson",
+    "name": "TaySon",
+    "fameScore": 0.7085,
+    "famePercentile": 0.0253,
+    "tier": "easy",
+    "prestigePoints": 165.0
+  },
+  {
+    "playerId": "kami",
+    "name": "Kami",
+    "fameScore": 0.7074,
+    "famePercentile": 0.0285,
+    "tier": "easy",
+    "prestigePoints": 115.0
+  },
+  {
+    "playerId": "mero",
+    "name": "Mero",
+    "fameScore": 0.6929,
+    "famePercentile": 0.0316,
+    "tier": "easy",
+    "prestigePoints": 180.0
+  },
+  {
+    "playerId": "cold",
+    "name": "Cold",
+    "fameScore": 0.6738,
+    "famePercentile": 0.0348,
+    "tier": "easy",
+    "prestigePoints": 188.0
+  },
+  {
+    "playerId": "nyhrox",
+    "name": "Nyhrox",
+    "fameScore": 0.6553,
+    "famePercentile": 0.038,
+    "tier": "easy",
+    "prestigePoints": 100.0
+  },
+  {
+    "playerId": "setty",
+    "name": "Setty",
+    "fameScore": 0.6347,
+    "famePercentile": 0.0411,
+    "tier": "easy",
+    "prestigePoints": 100.0
+  },
+  {
+    "playerId": "veno",
+    "name": "Veno",
+    "fameScore": 0.62,
+    "famePercentile": 0.0443,
+    "tier": "easy",
+    "prestigePoints": 112.0
+  },
+  {
+    "playerId": "k1ng",
+    "name": "K1nG",
+    "fameScore": 0.6161,
+    "famePercentile": 0.0475,
+    "tier": "easy",
+    "prestigePoints": 90.0
+  },
+  {
+    "playerId": "acorn",
+    "name": "Acorn",
+    "fameScore": 0.6085,
+    "famePercentile": 0.0506,
+    "tier": "easy",
+    "prestigePoints": 110.0
+  },
+  {
+    "playerId": "merstach",
+    "name": "Merstach",
+    "fameScore": 0.5988,
+    "famePercentile": 0.0538,
+    "tier": "easy",
+    "prestigePoints": 130.0
+  },
+  {
+    "playerId": "pollo",
+    "name": "Pollo",
+    "fameScore": 0.5842,
+    "famePercentile": 0.057,
+    "tier": "easy",
+    "prestigePoints": 136.0
+  },
+  {
+    "playerId": "swizzy",
+    "name": "SwizzY",
+    "fameScore": 0.5727,
+    "famePercentile": 0.0601,
+    "tier": "easy",
+    "prestigePoints": 138.0
+  },
+  {
+    "playerId": "psalm",
+    "name": "Psalm",
+    "fameScore": 0.5688,
+    "famePercentile": 0.0633,
+    "tier": "easy",
+    "prestigePoints": 0.0
+  },
+  {
+    "playerId": "th0mashd",
+    "name": "Th0masHD",
+    "fameScore": 0.568,
+    "famePercentile": 0.0665,
+    "tier": "easy",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "anas",
+    "name": "Anas",
+    "fameScore": 0.5643,
+    "famePercentile": 0.0696,
+    "tier": "easy",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "ritual",
+    "name": "Ritual",
+    "fameScore": 0.5512,
+    "famePercentile": 0.0728,
+    "tier": "easy",
+    "prestigePoints": 144.0
+  },
+  {
+    "playerId": "jannisz",
+    "name": "JannisZ",
+    "fameScore": 0.5508,
+    "famePercentile": 0.0759,
+    "tier": "easy",
+    "prestigePoints": 90.0
+  },
+  {
+    "playerId": "saf",
+    "name": "Saf",
+    "fameScore": 0.5345,
+    "famePercentile": 0.0791,
+    "tier": "easy",
+    "prestigePoints": 34.0
+  },
+  {
+    "playerId": "edgey",
+    "name": "Edgey",
+    "fameScore": 0.5344,
+    "famePercentile": 0.0823,
+    "tier": "easy",
+    "prestigePoints": 122.0
+  },
+  {
+    "playerId": "arkhram",
+    "name": "Arkhram",
+    "fameScore": 0.5342,
+    "famePercentile": 0.0854,
+    "tier": "easy",
+    "prestigePoints": 90.0
+  },
+  {
+    "playerId": "hen",
+    "name": "Hen",
+    "fameScore": 0.5229,
+    "famePercentile": 0.0886,
+    "tier": "easy",
+    "prestigePoints": 90.0
+  },
+  {
+    "playerId": "zayt",
+    "name": "Zayt",
+    "fameScore": 0.5156,
+    "famePercentile": 0.0918,
+    "tier": "easy",
+    "prestigePoints": 22.0
+  },
+  {
+    "playerId": "wolfiez",
+    "name": "Wolfiez",
+    "fameScore": 0.5107,
+    "famePercentile": 0.0949,
+    "tier": "easy",
+    "prestigePoints": 0.0
+  },
+  {
+    "playerId": "cooper",
+    "name": "Cooper",
+    "fameScore": 0.4991,
+    "famePercentile": 0.0981,
+    "tier": "easy",
+    "prestigePoints": 70.0
+  },
+  {
+    "playerId": "kreo",
+    "name": "Kreo",
+    "fameScore": 0.498,
+    "famePercentile": 0.1013,
+    "tier": "medium",
+    "prestigePoints": 0.0
+  },
+  {
+    "playerId": "muz",
+    "name": "Muz",
+    "fameScore": 0.4963,
+    "famePercentile": 0.1044,
+    "tier": "medium",
+    "prestigePoints": 138.0
+  },
+  {
+    "playerId": "ceice",
+    "name": "Ceice",
+    "fameScore": 0.4928,
+    "famePercentile": 0.1076,
+    "tier": "medium",
+    "prestigePoints": 0.0
+  },
+  {
+    "playerId": "rojo",
+    "name": "Rojo",
+    "fameScore": 0.4904,
+    "famePercentile": 0.1108,
+    "tier": "medium",
+    "prestigePoints": 0.0
+  },
+  {
+    "playerId": "khanada",
+    "name": "Khanada",
+    "fameScore": 0.4897,
+    "famePercentile": 0.1139,
+    "tier": "medium",
+    "prestigePoints": 37.0
+  },
+  {
+    "playerId": "chapix",
+    "name": "Chapix",
+    "fameScore": 0.4831,
+    "famePercentile": 0.1171,
+    "tier": "medium",
+    "prestigePoints": 60.0
+  },
+  {
+    "playerId": "mitr0",
+    "name": "Mitr0",
+    "fameScore": 0.4544,
+    "famePercentile": 0.1203,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "elevate",
+    "name": "Elevate",
+    "fameScore": 0.4523,
+    "famePercentile": 0.1234,
+    "tier": "medium",
+    "prestigePoints": 0.0
+  },
+  {
+    "playerId": "skite",
+    "name": "Skite",
+    "fameScore": 0.4483,
+    "famePercentile": 0.1266,
+    "tier": "medium",
+    "prestigePoints": 12.0
+  },
+  {
+    "playerId": "mongraal",
+    "name": "Mongraal",
+    "fameScore": 0.4397,
+    "famePercentile": 0.1297,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "ajerss",
+    "name": "Ajerss",
+    "fameScore": 0.4381,
+    "famePercentile": 0.1329,
+    "tier": "medium",
+    "prestigePoints": 44.0
+  },
+  {
+    "playerId": "trulex",
+    "name": "TruleX",
+    "fameScore": 0.437,
+    "famePercentile": 0.1361,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "vadeal",
+    "name": "Vadeal",
+    "fameScore": 0.4303,
+    "famePercentile": 0.1392,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "flickzy",
+    "name": "Flickzy",
+    "fameScore": 0.4237,
+    "famePercentile": 0.1424,
+    "tier": "medium",
+    "prestigePoints": 60.0
+  },
+  {
+    "playerId": "pixie",
+    "name": "Pixie",
+    "fameScore": 0.4213,
+    "famePercentile": 0.1456,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "vanyak3kk",
+    "name": "Vanyak3kk",
+    "fameScore": 0.4202,
+    "famePercentile": 0.1487,
+    "tier": "medium",
+    "prestigePoints": 60.0
+  },
+  {
+    "playerId": "clix",
+    "name": "Clix",
+    "fameScore": 0.4176,
+    "famePercentile": 0.1519,
+    "tier": "medium",
+    "prestigePoints": 0.0
+  },
+  {
+    "playerId": "stompy",
+    "name": "Stompy",
+    "fameScore": 0.4107,
+    "famePercentile": 0.1551,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "bizzle",
+    "name": "Bizzle",
+    "fameScore": 0.4059,
+    "famePercentile": 0.1582,
+    "tier": "medium",
+    "prestigePoints": 12.0
+  },
+  {
+    "playerId": "tfue",
+    "name": "Tfue",
+    "fameScore": 0.3995,
+    "famePercentile": 0.1614,
+    "tier": "medium",
+    "prestigePoints": 12.0
+  },
+  {
+    "playerId": "nayte",
+    "name": "Nayte",
+    "fameScore": 0.391,
+    "famePercentile": 0.1646,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "crue",
+    "name": "Crue",
+    "fameScore": 0.3908,
+    "famePercentile": 0.1677,
+    "tier": "medium",
+    "prestigePoints": 0.0
+  },
+  {
+    "playerId": "andilex",
+    "name": "Andilex",
+    "fameScore": 0.3907,
+    "famePercentile": 0.1709,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "chico",
+    "name": "Chico",
+    "fameScore": 0.3892,
+    "famePercentile": 0.1741,
+    "tier": "medium",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "mrsavage",
+    "name": "MrSavage",
+    "fameScore": 0.3882,
+    "famePercentile": 0.1772,
+    "tier": "medium",
+    "prestigePoints": 0.0
+  },
+  {
+    "playerId": "t3eny",
+    "name": "T3eny",
+    "fameScore": 0.3873,
+    "famePercentile": 0.1804,
+    "tier": "medium",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "phzin",
+    "name": "Phzin",
+    "fameScore": 0.3855,
+    "famePercentile": 0.1835,
+    "tier": "medium",
+    "prestigePoints": 90.0
+  },
+  {
+    "playerId": "japko",
+    "name": "Japko",
+    "fameScore": 0.3816,
+    "famePercentile": 0.1867,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "dukez",
+    "name": "Dukez",
+    "fameScore": 0.3769,
+    "famePercentile": 0.1899,
+    "tier": "medium",
+    "prestigePoints": 66.0
+  },
+  {
+    "playerId": "reet",
+    "name": "Reet",
+    "fameScore": 0.3755,
+    "famePercentile": 0.193,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "teeq",
+    "name": "Teeq",
+    "fameScore": 0.3717,
+    "famePercentile": 0.1962,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "benjyfishy",
+    "name": "Benjyfishy",
+    "fameScore": 0.3694,
+    "famePercentile": 0.1994,
+    "tier": "medium",
+    "prestigePoints": 0.0
+  },
+  {
+    "playerId": "commandment",
+    "name": "Commandment",
+    "fameScore": 0.3677,
+    "famePercentile": 0.2025,
+    "tier": "medium",
+    "prestigePoints": 22.0
+  },
+  {
+    "playerId": "zexrow",
+    "name": "ZexRow",
+    "fameScore": 0.3619,
+    "famePercentile": 0.2057,
+    "tier": "medium",
+    "prestigePoints": 22.0
+  },
+  {
+    "playerId": "boltz",
+    "name": "Boltz",
+    "fameScore": 0.3576,
+    "famePercentile": 0.2089,
+    "tier": "medium",
+    "prestigePoints": 37.0
+  },
+  {
+    "playerId": "dubs",
+    "name": "Dubs",
+    "fameScore": 0.357,
+    "famePercentile": 0.212,
+    "tier": "medium",
+    "prestigePoints": 0.0
+  },
+  {
+    "playerId": "pinq",
+    "name": "Pinq",
+    "fameScore": 0.3486,
+    "famePercentile": 0.2152,
+    "tier": "medium",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "falconer",
+    "name": "Falconer",
+    "fameScore": 0.3347,
+    "famePercentile": 0.2184,
+    "tier": "medium",
+    "prestigePoints": 0.0
+  },
+  {
+    "playerId": "reverse2k",
+    "name": "Reverse2k",
+    "fameScore": 0.3337,
+    "famePercentile": 0.2215,
+    "tier": "medium",
+    "prestigePoints": 44.0
+  },
+  {
+    "playerId": "pablowingu",
+    "name": "PabloWingu",
+    "fameScore": 0.3315,
+    "famePercentile": 0.2247,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "scroll",
+    "name": "Scroll",
+    "fameScore": 0.3305,
+    "famePercentile": 0.2278,
+    "tier": "medium",
+    "prestigePoints": 60.0
+  },
+  {
+    "playerId": "kiryache",
+    "name": "Kiryache",
+    "fameScore": 0.3283,
+    "famePercentile": 0.231,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "mackwood",
+    "name": "MackWood",
+    "fameScore": 0.3278,
+    "famePercentile": 0.2342,
+    "tier": "medium",
+    "prestigePoints": 22.0
+  },
+  {
+    "playerId": "cloakzy",
+    "name": "Cloakzy",
+    "fameScore": 0.3179,
+    "famePercentile": 0.2373,
+    "tier": "medium",
+    "prestigePoints": 12.0
+  },
+  {
+    "playerId": "sky",
+    "name": "Sky",
+    "fameScore": 0.3174,
+    "famePercentile": 0.2405,
+    "tier": "medium",
+    "prestigePoints": 60.0
+  },
+  {
+    "playerId": "deyy",
+    "name": "Deyy",
+    "fameScore": 0.3169,
+    "famePercentile": 0.2437,
+    "tier": "medium",
+    "prestigePoints": 44.0
+  },
+  {
+    "playerId": "riversan",
+    "name": "Riversan",
+    "fameScore": 0.3162,
+    "famePercentile": 0.2468,
+    "tier": "medium",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "mariuscow",
+    "name": "MariusCOW",
+    "fameScore": 0.3104,
+    "famePercentile": 0.25,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "rehx",
+    "name": "Rehx",
+    "fameScore": 0.3021,
+    "famePercentile": 0.2532,
+    "tier": "medium",
+    "prestigePoints": 75.0
+  },
+  {
+    "playerId": "avery",
+    "name": "Avery",
+    "fameScore": 0.2961,
+    "famePercentile": 0.2563,
+    "tier": "medium",
+    "prestigePoints": 44.0
+  },
+  {
+    "playerId": "stormyrite",
+    "name": "Stormyrite",
+    "fameScore": 0.2933,
+    "famePercentile": 0.2595,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "rise",
+    "name": "Rise",
+    "fameScore": 0.2932,
+    "famePercentile": 0.2627,
+    "tier": "medium",
+    "prestigePoints": 16.0
+  },
+  {
+    "playerId": "tschinken",
+    "name": "Tschinken",
+    "fameScore": 0.2921,
+    "famePercentile": 0.2658,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "threats",
+    "name": "Threats",
+    "fameScore": 0.2891,
+    "famePercentile": 0.269,
+    "tier": "medium",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "seeyun",
+    "name": "Seeyun",
+    "fameScore": 0.2856,
+    "famePercentile": 0.2722,
+    "tier": "medium",
+    "prestigePoints": 45.0
+  },
+  {
+    "playerId": "slackes",
+    "name": "Slackes",
+    "fameScore": 0.2717,
+    "famePercentile": 0.2753,
+    "tier": "medium",
+    "prestigePoints": 22.0
+  },
+  {
+    "playerId": "cadu",
+    "name": "Cadu",
+    "fameScore": 0.2702,
+    "famePercentile": 0.2785,
+    "tier": "medium",
+    "prestigePoints": 60.0
+  },
+  {
+    "playerId": "hero",
+    "name": "Hero",
+    "fameScore": 0.2694,
+    "famePercentile": 0.2816,
+    "tier": "medium",
+    "prestigePoints": 24.0
+  },
+  {
+    "playerId": "toose",
+    "name": "Toose",
+    "fameScore": 0.268,
+    "famePercentile": 0.2848,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "alex",
+    "name": "Alex",
+    "fameScore": 0.2576,
+    "famePercentile": 0.288,
+    "tier": "medium",
+    "prestigePoints": 48.0
+  },
+  {
+    "playerId": "kurtz",
+    "name": "Kurtz",
+    "fameScore": 0.2504,
+    "famePercentile": 0.2911,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "tjino",
+    "name": "Tjino",
+    "fameScore": 0.2437,
+    "famePercentile": 0.2943,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "wakie",
+    "name": "Wakie",
+    "fameScore": 0.2425,
+    "famePercentile": 0.2975,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "fazer",
+    "name": "Fazer",
+    "fameScore": 0.2425,
+    "famePercentile": 0.3006,
+    "tier": "medium",
+    "prestigePoints": 60.0
+  },
+  {
+    "playerId": "pxmp",
+    "name": "PXMP",
+    "fameScore": 0.2422,
+    "famePercentile": 0.3038,
+    "tier": "medium",
+    "prestigePoints": 45.0
+  },
+  {
+    "playerId": "volx",
+    "name": "Volx",
+    "fameScore": 0.2422,
+    "famePercentile": 0.307,
+    "tier": "medium",
+    "prestigePoints": 24.0
+  },
+  {
+    "playerId": "jahq",
+    "name": "Jahq",
+    "fameScore": 0.2403,
+    "famePercentile": 0.3101,
+    "tier": "medium",
+    "prestigePoints": 22.0
+  },
+  {
+    "playerId": "king",
+    "name": "KING",
+    "fameScore": 0.2341,
+    "famePercentile": 0.3133,
+    "tier": "medium",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "aspect",
+    "name": "Aspect",
+    "fameScore": 0.2326,
+    "famePercentile": 0.3165,
+    "tier": "medium",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "parz",
+    "name": "Parz",
+    "fameScore": 0.2323,
+    "famePercentile": 0.3196,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "kitoz",
+    "name": "Kitoz",
+    "fameScore": 0.2311,
+    "famePercentile": 0.3228,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "bacca",
+    "name": "Bacca",
+    "fameScore": 0.2304,
+    "famePercentile": 0.3259,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "yungcalculator",
+    "name": "yung calculator",
+    "fameScore": 0.23,
+    "famePercentile": 0.3291,
+    "tier": "medium",
+    "prestigePoints": 22.0
+  },
+  {
+    "playerId": "morgausse",
+    "name": "Morgausse",
+    "fameScore": 0.2292,
+    "famePercentile": 0.3323,
+    "tier": "medium",
+    "prestigePoints": 12.0
+  },
+  {
+    "playerId": "putrick",
+    "name": "Putrick",
+    "fameScore": 0.2287,
+    "famePercentile": 0.3354,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "frosty",
+    "name": "Frosty",
+    "fameScore": 0.2239,
+    "famePercentile": 0.3386,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "fredoxie",
+    "name": "Fredoxie",
+    "fameScore": 0.2237,
+    "famePercentile": 0.3418,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "fhd",
+    "name": "FHD",
+    "fameScore": 0.2051,
+    "famePercentile": 0.3449,
+    "tier": "medium",
+    "prestigePoints": 16.0
+  },
+  {
+    "playerId": "koyota",
+    "name": "Koyota",
+    "fameScore": 0.1924,
+    "famePercentile": 0.3481,
+    "tier": "medium",
+    "prestigePoints": 40.0
+  },
+  {
+    "playerId": "edroadtoglory",
+    "name": "EdRoadToGlory",
+    "fameScore": 0.192,
+    "famePercentile": 0.3513,
+    "tier": "medium",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "unknown",
+    "name": "Unknown",
+    "fameScore": 0.1885,
+    "famePercentile": 0.3544,
+    "tier": "medium",
+    "prestigePoints": 22.0
+  },
+  {
+    "playerId": "favs",
+    "name": "Favs",
+    "fameScore": 0.1883,
+    "famePercentile": 0.3576,
+    "tier": "medium",
+    "prestigePoints": 45.0
+  },
+  {
+    "playerId": "znappy",
+    "name": "Znappy",
+    "fameScore": 0.1844,
+    "famePercentile": 0.3608,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "kwanti",
+    "name": "Kwanti",
+    "fameScore": 0.1836,
+    "famePercentile": 0.3639,
+    "tier": "medium",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "furious",
+    "name": "Furious",
+    "fameScore": 0.1832,
+    "famePercentile": 0.3671,
+    "tier": "medium",
+    "prestigePoints": 22.0
+  },
+  {
+    "playerId": "xeat",
+    "name": "Xeat",
+    "fameScore": 0.1823,
+    "famePercentile": 0.3703,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "persa",
+    "name": "Persa",
+    "fameScore": 0.1818,
+    "famePercentile": 0.3734,
+    "tier": "medium",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "snacky",
+    "name": "Snacky",
+    "fameScore": 0.1795,
+    "famePercentile": 0.3766,
+    "tier": "medium",
+    "prestigePoints": 45.0
+  },
+  {
+    "playerId": "peterpan",
+    "name": "Peterpan",
+    "fameScore": 0.1755,
+    "famePercentile": 0.3797,
+    "tier": "medium",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "opai",
+    "name": "Opai",
+    "fameScore": 0.1739,
+    "famePercentile": 0.3829,
+    "tier": "medium",
+    "prestigePoints": 45.0
+  },
+  {
+    "playerId": "kbr",
+    "name": "KBR",
+    "fameScore": 0.1736,
+    "famePercentile": 0.3861,
+    "tier": "medium",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "worthy",
+    "name": "Worthy",
+    "fameScore": 0.173,
+    "famePercentile": 0.3892,
+    "tier": "medium",
+    "prestigePoints": 16.0
+  },
+  {
+    "playerId": "pamstou",
+    "name": "PaMstou",
+    "fameScore": 0.1728,
+    "famePercentile": 0.3924,
+    "tier": "medium",
+    "prestigePoints": 22.0
+  },
+  {
+    "playerId": "yuma",
+    "name": "Yuma",
+    "fameScore": 0.1718,
+    "famePercentile": 0.3956,
+    "tier": "medium",
+    "prestigePoints": 40.0
+  },
+  {
+    "playerId": "jur3ky",
+    "name": "Jur3ky",
+    "fameScore": 0.1692,
+    "famePercentile": 0.3987,
+    "tier": "medium",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "diguera",
+    "name": "Diguera",
+    "fameScore": 0.1691,
+    "famePercentile": 0.4019,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "vert",
+    "name": "verT",
+    "fameScore": 0.1672,
+    "famePercentile": 0.4051,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "wey",
+    "name": "Wey",
+    "fameScore": 0.1664,
+    "famePercentile": 0.4082,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "7man",
+    "name": "7man",
+    "fameScore": 0.1638,
+    "famePercentile": 0.4114,
+    "tier": "hard",
+    "prestigePoints": 32.0
+  },
+  {
+    "playerId": "bylah",
+    "name": "Bylah",
+    "fameScore": 0.1634,
+    "famePercentile": 0.4146,
+    "tier": "hard",
+    "prestigePoints": 22.0
+  },
+  {
+    "playerId": "nut",
+    "name": "Nut",
+    "fameScore": 0.1617,
+    "famePercentile": 0.4177,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "jordan",
+    "name": "Jordan",
+    "fameScore": 0.1599,
+    "famePercentile": 0.4209,
+    "tier": "hard",
+    "prestigePoints": 16.0
+  },
+  {
+    "playerId": "redrush",
+    "name": "RedRush",
+    "fameScore": 0.1578,
+    "famePercentile": 0.4241,
+    "tier": "hard",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "leleo",
+    "name": "Leleo",
+    "fameScore": 0.1567,
+    "famePercentile": 0.4272,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "kalgamer",
+    "name": "Kalgamer",
+    "fameScore": 0.1561,
+    "famePercentile": 0.4304,
+    "tier": "hard",
+    "prestigePoints": 32.0
+  },
+  {
+    "playerId": "maufin",
+    "name": "Maufin",
+    "fameScore": 0.1553,
+    "famePercentile": 0.4335,
+    "tier": "hard",
+    "prestigePoints": 16.0
+  },
+  {
+    "playerId": "redlee",
+    "name": "Redlee",
+    "fameScore": 0.1538,
+    "famePercentile": 0.4367,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "gsx",
+    "name": "GSX",
+    "fameScore": 0.1517,
+    "famePercentile": 0.4399,
+    "tier": "hard",
+    "prestigePoints": 45.0
+  },
+  {
+    "playerId": "jynx",
+    "name": "Jynx",
+    "fameScore": 0.1473,
+    "famePercentile": 0.443,
+    "tier": "hard",
+    "prestigePoints": 24.0
+  },
+  {
+    "playerId": "fks",
+    "name": "FKS",
+    "fameScore": 0.1466,
+    "famePercentile": 0.4462,
+    "tier": "hard",
+    "prestigePoints": 40.0
+  },
+  {
+    "playerId": "curve",
+    "name": "Curve",
+    "fameScore": 0.1375,
+    "famePercentile": 0.4494,
+    "tier": "hard",
+    "prestigePoints": 22.0
+  },
+  {
+    "playerId": "jesse",
+    "name": "Jesse",
+    "fameScore": 0.136,
+    "famePercentile": 0.4525,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "drobban",
+    "name": "Drobban",
+    "fameScore": 0.1347,
+    "famePercentile": 0.4557,
+    "tier": "hard",
+    "prestigePoints": 30.0
+  },
+  {
+    "playerId": "laizen",
+    "name": "Laizen",
+    "fameScore": 0.1315,
+    "famePercentile": 0.4589,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "qjac",
+    "name": "Qjac",
+    "fameScore": 0.1298,
+    "famePercentile": 0.462,
+    "tier": "hard",
+    "prestigePoints": 16.0
+  },
+  {
+    "playerId": "ruri",
+    "name": "Ruri",
+    "fameScore": 0.1297,
+    "famePercentile": 0.4652,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "scarpa",
+    "name": "Scarpa",
+    "fameScore": 0.126,
+    "famePercentile": 0.4684,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "justice",
+    "name": "Justice",
+    "fameScore": 0.1249,
+    "famePercentile": 0.4715,
+    "tier": "hard",
+    "prestigePoints": 22.0
+  },
+  {
+    "playerId": "kez",
+    "name": "KEZ",
+    "fameScore": 0.1249,
+    "famePercentile": 0.4747,
+    "tier": "hard",
+    "prestigePoints": 22.0
+  },
+  {
+    "playerId": "stableronaldo",
+    "name": "Stable Ronaldo",
+    "fameScore": 0.1249,
+    "famePercentile": 0.4778,
+    "tier": "hard",
+    "prestigePoints": 22.0
+  },
+  {
+    "playerId": "userz",
+    "name": "Userz",
+    "fameScore": 0.1249,
+    "famePercentile": 0.481,
+    "tier": "hard",
+    "prestigePoints": 22.0
+  },
+  {
+    "playerId": "shelom",
+    "name": "Shelom",
+    "fameScore": 0.1224,
+    "famePercentile": 0.4842,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "nov1ce",
+    "name": "Nov1ce",
+    "fameScore": 0.1202,
+    "famePercentile": 0.4873,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "histtory",
+    "name": "Histtory",
+    "fameScore": 0.12,
+    "famePercentile": 0.4905,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "nm7",
+    "name": "NM7",
+    "fameScore": 0.1186,
+    "famePercentile": 0.4937,
+    "tier": "hard",
+    "prestigePoints": 16.0
+  },
+  {
+    "playerId": "5aald",
+    "name": "5aald",
+    "fameScore": 0.1176,
+    "famePercentile": 0.4968,
+    "tier": "hard",
+    "prestigePoints": 16.0
+  },
+  {
+    "playerId": "adapter",
+    "name": "Adapter",
+    "fameScore": 0.1176,
+    "famePercentile": 0.5,
+    "tier": "hard",
+    "prestigePoints": 16.0
+  },
+  {
+    "playerId": "dexefite",
+    "name": "Dexefite",
+    "fameScore": 0.1176,
+    "famePercentile": 0.5032,
+    "tier": "hard",
+    "prestigePoints": 16.0
+  },
+  {
+    "playerId": "hellon",
+    "name": "Hellon",
+    "fameScore": 0.1176,
+    "famePercentile": 0.5063,
+    "tier": "hard",
+    "prestigePoints": 16.0
+  },
+  {
+    "playerId": "i4xpro",
+    "name": "I4xPRO",
+    "fameScore": 0.1176,
+    "famePercentile": 0.5095,
+    "tier": "hard",
+    "prestigePoints": 16.0
+  },
+  {
+    "playerId": "speedy",
+    "name": "Speedy (AU)",
+    "fameScore": 0.1176,
+    "famePercentile": 0.5127,
+    "tier": "hard",
+    "prestigePoints": 16.0
+  },
+  {
+    "playerId": "tinka",
+    "name": "Tinka",
+    "fameScore": 0.1176,
+    "famePercentile": 0.5158,
+    "tier": "hard",
+    "prestigePoints": 16.0
+  },
+  {
+    "playerId": "vagnar",
+    "name": "VagnaR",
+    "fameScore": 0.1176,
+    "famePercentile": 0.519,
+    "tier": "hard",
+    "prestigePoints": 16.0
+  },
+  {
+    "playerId": "looter",
+    "name": "Looter",
+    "fameScore": 0.1168,
+    "famePercentile": 0.5222,
+    "tier": "hard",
+    "prestigePoints": 24.0
+  },
+  {
+    "playerId": "buubee",
+    "name": "Buubee",
+    "fameScore": 0.1164,
+    "famePercentile": 0.5253,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "domo",
+    "name": "Domo",
+    "fameScore": 0.1164,
+    "famePercentile": 0.5285,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "igo",
+    "name": "Igo",
+    "fameScore": 0.1164,
+    "famePercentile": 0.5316,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "jayrosez",
+    "name": "Jayrosez",
+    "fameScore": 0.1164,
+    "famePercentile": 0.5348,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "kewl",
+    "name": "Kewl",
+    "fameScore": 0.1164,
+    "famePercentile": 0.538,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "kyzui",
+    "name": "Kyzui",
+    "fameScore": 0.1164,
+    "famePercentile": 0.5411,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "mack",
+    "name": "Mack",
+    "fameScore": 0.1164,
+    "famePercentile": 0.5443,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "sheco",
+    "name": "Sheco",
+    "fameScore": 0.1164,
+    "famePercentile": 0.5475,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "sogys",
+    "name": "Sogys",
+    "fameScore": 0.1164,
+    "famePercentile": 0.5506,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "thorik",
+    "name": "Thorik",
+    "fameScore": 0.1164,
+    "famePercentile": 0.5538,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "vicaros",
+    "name": "Vicaros",
+    "fameScore": 0.1164,
+    "famePercentile": 0.557,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "yumi",
+    "name": "Yumi",
+    "fameScore": 0.1164,
+    "famePercentile": 0.5601,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "pepoclip",
+    "name": "Pepoclip",
+    "fameScore": 0.1159,
+    "famePercentile": 0.5633,
+    "tier": "hard",
+    "prestigePoints": 24.0
+  },
+  {
+    "playerId": "anon",
+    "name": "Anon",
+    "fameScore": 0.113,
+    "famePercentile": 0.5665,
+    "tier": "hard",
+    "prestigePoints": 32.0
+  },
+  {
+    "playerId": "abufal7",
+    "name": "AbuFal7",
+    "fameScore": 0.1078,
+    "famePercentile": 0.5696,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "albedo",
+    "name": "Albedo",
+    "fameScore": 0.1078,
+    "famePercentile": 0.5728,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "alecc",
+    "name": "Alecc",
+    "fameScore": 0.1078,
+    "famePercentile": 0.5759,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "allen",
+    "name": "Allen",
+    "fameScore": 0.1078,
+    "famePercentile": 0.5791,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "asta",
+    "name": "Asta",
+    "fameScore": 0.1078,
+    "famePercentile": 0.5823,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "baily",
+    "name": "Baily",
+    "fameScore": 0.1078,
+    "famePercentile": 0.5854,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "balor",
+    "name": "Balor",
+    "fameScore": 0.1078,
+    "famePercentile": 0.5886,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "basil",
+    "name": "Basil",
+    "fameScore": 0.1078,
+    "famePercentile": 0.5918,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "bleed",
+    "name": "Bleed",
+    "fameScore": 0.1078,
+    "famePercentile": 0.5949,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "bob",
+    "name": "Bob",
+    "fameScore": 0.1078,
+    "famePercentile": 0.5981,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "bobi",
+    "name": "Bobi",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6013,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "buyuriro",
+    "name": "Buyuriro",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6044,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "clxxer",
+    "name": "Clxxer",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6076,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "dokn",
+    "name": "Dokn",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6108,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "fab",
+    "name": "Fab",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6139,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "forbes",
+    "name": "Forbes",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6171,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "force",
+    "name": "Force",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6203,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "fram",
+    "name": "Fram",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6234,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "gancho",
+    "name": "Gancho",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6266,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "gheez",
+    "name": "Gheez",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6297,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "hillo",
+    "name": "Hillo",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6329,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "howly",
+    "name": "Howly",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6361,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "jaemon",
+    "name": "Jaemon",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6392,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "job",
+    "name": "Job",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6424,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "kai",
+    "name": "Kai",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6456,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "keemo",
+    "name": "Keemo",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6487,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "kimkana",
+    "name": "Kimkana",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6519,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "kiritokun",
+    "name": "KiritoKun",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6551,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "kquid",
+    "name": "Kquid",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6582,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "krool",
+    "name": "Krool",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6614,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "kuki",
+    "name": "KuKi",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6646,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "larkpex",
+    "name": "Larkpex",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6677,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "mace",
+    "name": "Mace",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6709,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "mansoor",
+    "name": "Mansoor",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6741,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "medusa",
+    "name": "Medusa",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6772,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "merem",
+    "name": "Merem",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6804,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "mev",
+    "name": "Mev",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6835,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "ming",
+    "name": "Ming",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6867,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "minkin",
+    "name": "Minkin",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6899,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "murlox",
+    "name": "Murlox",
+    "fameScore": 0.1078,
+    "famePercentile": 0.693,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "netlov",
+    "name": "NetloV",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6962,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "nomfu",
+    "name": "Nomfu",
+    "fameScore": 0.1078,
+    "famePercentile": 0.6994,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "nyle",
+    "name": "Nyle",
+    "fameScore": 0.1078,
+    "famePercentile": 0.7025,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "pacoteen",
+    "name": "Pacoteen",
+    "fameScore": 0.1078,
+    "famePercentile": 0.7057,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "pancake",
+    "name": "Pancake",
+    "fameScore": 0.1078,
+    "famePercentile": 0.7089,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "raito",
+    "name": "Raito",
+    "fameScore": 0.1078,
+    "famePercentile": 0.712,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "razl",
+    "name": "Razl",
+    "fameScore": 0.1078,
+    "famePercentile": 0.7152,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "rimuru",
+    "name": "Rimuru",
+    "fameScore": 0.1078,
+    "famePercentile": 0.7184,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "ryle",
+    "name": "Ryle",
+    "fameScore": 0.1078,
+    "famePercentile": 0.7215,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "sane",
+    "name": "Sane",
+    "fameScore": 0.1078,
+    "famePercentile": 0.7247,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "souriano",
+    "name": "Souriano",
+    "fameScore": 0.1078,
+    "famePercentile": 0.7278,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "speedy-bh",
+    "name": "Speedy (BH)",
+    "fameScore": 0.1078,
+    "famePercentile": 0.731,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "spiker",
+    "name": "Spiker",
+    "fameScore": 0.1078,
+    "famePercentile": 0.7342,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "sunz",
+    "name": "Sunz",
+    "fameScore": 0.1078,
+    "famePercentile": 0.7373,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "takachan",
+    "name": "Takachan",
+    "fameScore": 0.1078,
+    "famePercentile": 0.7405,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "takamura",
+    "name": "Takamura",
+    "fameScore": 0.1078,
+    "famePercentile": 0.7437,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "tuii",
+    "name": "Tuii",
+    "fameScore": 0.1078,
+    "famePercentile": 0.7468,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "unit",
+    "name": "Unit",
+    "fameScore": 0.1078,
+    "famePercentile": 0.75,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "wreckless",
+    "name": "Wreckless",
+    "fameScore": 0.1078,
+    "famePercentile": 0.7532,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "zotax",
+    "name": "Zotax",
+    "fameScore": 0.1078,
+    "famePercentile": 0.7563,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "zagou",
+    "name": "Zagou",
+    "fameScore": 0.1066,
+    "famePercentile": 0.7595,
+    "tier": "hard",
+    "prestigePoints": 24.0
+  },
+  {
+    "playerId": "1lusha",
+    "name": "1Lusha",
+    "fameScore": 0.1064,
+    "famePercentile": 0.7627,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "clover",
+    "name": "Clover",
+    "fameScore": 0.1029,
+    "famePercentile": 0.7658,
+    "tier": "hard",
+    "prestigePoints": 4.0
+  },
+  {
+    "playerId": "ixdire",
+    "name": "ixDire",
+    "fameScore": 0.1029,
+    "famePercentile": 0.769,
+    "tier": "hard",
+    "prestigePoints": 4.0
+  },
+  {
+    "playerId": "kucha",
+    "name": "Kucha",
+    "fameScore": 0.1029,
+    "famePercentile": 0.7722,
+    "tier": "hard",
+    "prestigePoints": 4.0
+  },
+  {
+    "playerId": "alicerrx",
+    "name": "Alicerrx",
+    "fameScore": 0.1005,
+    "famePercentile": 0.7753,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "andrezin",
+    "name": "Andrezin",
+    "fameScore": 0.1005,
+    "famePercentile": 0.7785,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "aquasii",
+    "name": "AquaSii",
+    "fameScore": 0.1005,
+    "famePercentile": 0.7816,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "austen",
+    "name": "Austen",
+    "fameScore": 0.1005,
+    "famePercentile": 0.7848,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "bajwa",
+    "name": "Bajwa",
+    "fameScore": 0.1005,
+    "famePercentile": 0.788,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "bmbtwins",
+    "name": "BMB Twins",
+    "fameScore": 0.1005,
+    "famePercentile": 0.7911,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "dynamic",
+    "name": "Dynamic",
+    "fameScore": 0.1005,
+    "famePercentile": 0.7943,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "goofy",
+    "name": "Goofy",
+    "fameScore": 0.1005,
+    "famePercentile": 0.7975,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "hanzo",
+    "name": "Hanzo",
+    "fameScore": 0.1005,
+    "famePercentile": 0.8006,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "ixdear",
+    "name": "ixDear",
+    "fameScore": 0.1005,
+    "famePercentile": 0.8038,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "jobvos",
+    "name": "Jobvos",
+    "fameScore": 0.1005,
+    "famePercentile": 0.807,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "john",
+    "name": "john",
+    "fameScore": 0.1005,
+    "famePercentile": 0.8101,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "juanzin",
+    "name": "Juanzin",
+    "fameScore": 0.1005,
+    "famePercentile": 0.8133,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "kalifa",
+    "name": "KALIFA",
+    "fameScore": 0.1005,
+    "famePercentile": 0.8165,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "killed",
+    "name": "Killed",
+    "fameScore": 0.1005,
+    "famePercentile": 0.8196,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "kulture",
+    "name": "Kulture",
+    "fameScore": 0.1005,
+    "famePercentile": 0.8228,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "kytrex",
+    "name": "Kytrex",
+    "fameScore": 0.1005,
+    "famePercentile": 0.8259,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "lucxss",
+    "name": "Lucxss",
+    "fameScore": 0.1005,
+    "famePercentile": 0.8291,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "maxwyd",
+    "name": "maxwyd",
+    "fameScore": 0.1005,
+    "famePercentile": 0.8323,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "paddy",
+    "name": "Paddy",
+    "fameScore": 0.1005,
+    "famePercentile": 0.8354,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "paul",
+    "name": "Paul",
+    "fameScore": 0.1005,
+    "famePercentile": 0.8386,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "scar",
+    "name": "Scar",
+    "fameScore": 0.1005,
+    "famePercentile": 0.8418,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "sloww",
+    "name": "Sloww",
+    "fameScore": 0.1005,
+    "famePercentile": 0.8449,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "spudlite",
+    "name": "Spud Lite",
+    "fameScore": 0.1005,
+    "famePercentile": 0.8481,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "superoce",
+    "name": "superoce",
+    "fameScore": 0.1005,
+    "famePercentile": 0.8513,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "tperry",
+    "name": "Tperry",
+    "fameScore": 0.1005,
+    "famePercentile": 0.8544,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "whiza",
+    "name": "WhIzA",
+    "fameScore": 0.1005,
+    "famePercentile": 0.8576,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "zscary",
+    "name": "zScary",
+    "fameScore": 0.1005,
+    "famePercentile": 0.8608,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "wisheydp",
+    "name": "Wisheydp",
+    "fameScore": 0.0995,
+    "famePercentile": 0.8639,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "rezon",
+    "name": "Rezon",
+    "fameScore": 0.098,
+    "famePercentile": 0.8671,
+    "tier": "hard",
+    "prestigePoints": 0.0
+  },
+  {
+    "playerId": "ronaldo",
+    "name": "Ronaldo",
+    "fameScore": 0.0939,
+    "famePercentile": 0.8703,
+    "tier": "hard",
+    "prestigePoints": 12.0
+  },
+  {
+    "playerId": "assault",
+    "name": "Assault",
+    "fameScore": 0.0893,
+    "famePercentile": 0.8734,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "916gon",
+    "name": "916Gon",
+    "fameScore": 0.0875,
+    "famePercentile": 0.8766,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "barroso",
+    "name": "Barroso",
+    "fameScore": 0.0749,
+    "famePercentile": 0.8797,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "yonx",
+    "name": "Yonx",
+    "fameScore": 0.0732,
+    "famePercentile": 0.8829,
+    "tier": "hard",
+    "prestigePoints": 16.0
+  },
+  {
+    "playerId": "spy",
+    "name": "Spy",
+    "fameScore": 0.0695,
+    "famePercentile": 0.8861,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "vortexm",
+    "name": "VortexM",
+    "fameScore": 0.0666,
+    "famePercentile": 0.8892,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "breso",
+    "name": "Breso",
+    "fameScore": 0.0637,
+    "famePercentile": 0.8924,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "resignz",
+    "name": "Resignz",
+    "fameScore": 0.0635,
+    "famePercentile": 0.8956,
+    "tier": "hard",
+    "prestigePoints": 24.0
+  },
+  {
+    "playerId": "runa",
+    "name": "Runa",
+    "fameScore": 0.0632,
+    "famePercentile": 0.8987,
+    "tier": "hard",
+    "prestigePoints": 24.0
+  },
+  {
+    "playerId": "tisco",
+    "name": "Tisco",
+    "fameScore": 0.0627,
+    "famePercentile": 0.9019,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "phantom",
+    "name": "Phantom",
+    "fameScore": 0.0624,
+    "famePercentile": 0.9051,
+    "tier": "hard",
+    "prestigePoints": 16.0
+  },
+  {
+    "playerId": "michael",
+    "name": "Michael",
+    "fameScore": 0.061,
+    "famePercentile": 0.9082,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "yasir",
+    "name": "Yasir",
+    "fameScore": 0.0599,
+    "famePercentile": 0.9114,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "alice",
+    "name": "Alice",
+    "fameScore": 0.0593,
+    "famePercentile": 0.9146,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "gabzera",
+    "name": "Gabzera",
+    "fameScore": 0.0574,
+    "famePercentile": 0.9177,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "pulga",
+    "name": "Pulga",
+    "fameScore": 0.0569,
+    "famePercentile": 0.9209,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "suns",
+    "name": "Suns",
+    "fameScore": 0.0549,
+    "famePercentile": 0.9241,
+    "tier": "hard",
+    "prestigePoints": 24.0
+  },
+  {
+    "playerId": "stryker",
+    "name": "Stryker",
+    "fameScore": 0.0547,
+    "famePercentile": 0.9272,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "xmipoli",
+    "name": "XMipoli",
+    "fameScore": 0.0495,
+    "famePercentile": 0.9304,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "danath",
+    "name": "Danath",
+    "fameScore": 0.0466,
+    "famePercentile": 0.9335,
+    "tier": "hard",
+    "prestigePoints": 16.0
+  },
+  {
+    "playerId": "coop",
+    "name": "Coop",
+    "fameScore": 0.0452,
+    "famePercentile": 0.9367,
+    "tier": "hard",
+    "prestigePoints": 22.0
+  },
+  {
+    "playerId": "retake",
+    "name": "Retake",
+    "fameScore": 0.0446,
+    "famePercentile": 0.9399,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "dog",
+    "name": "Dog",
+    "fameScore": 0.0423,
+    "famePercentile": 0.943,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "flame",
+    "name": "Flame",
+    "fameScore": 0.0412,
+    "famePercentile": 0.9462,
+    "tier": "hard",
+    "prestigePoints": 2.0
+  },
+  {
+    "playerId": "skits",
+    "name": "Skits",
+    "fameScore": 0.0388,
+    "famePercentile": 0.9494,
+    "tier": "hard",
+    "prestigePoints": 10.0
+  },
+  {
+    "playerId": "ark",
+    "name": "Ark",
+    "fameScore": 0.037,
+    "famePercentile": 0.9525,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "lasers",
+    "name": "Lasers",
+    "fameScore": 0.037,
+    "famePercentile": 0.9557,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "naetor",
+    "name": "Naetor",
+    "fameScore": 0.0362,
+    "famePercentile": 0.9589,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "cazi",
+    "name": "Cazi",
+    "fameScore": 0.0351,
+    "famePercentile": 0.962,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "jace",
+    "name": "Jace",
+    "fameScore": 0.0337,
+    "famePercentile": 0.9652,
+    "tier": "hard",
+    "prestigePoints": 24.0
+  },
+  {
+    "playerId": "victerv",
+    "name": "VicterV",
+    "fameScore": 0.0334,
+    "famePercentile": 0.9684,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "night",
+    "name": "Night",
+    "fameScore": 0.033,
+    "famePercentile": 0.9715,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "rapit",
+    "name": "Rapit",
+    "fameScore": 0.0315,
+    "famePercentile": 0.9747,
+    "tier": "hard",
+    "prestigePoints": 16.0
+  },
+  {
+    "playerId": "hoodj",
+    "name": "Hood.J",
+    "fameScore": 0.0283,
+    "famePercentile": 0.9778,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "nolan",
+    "name": "Nolan",
+    "fameScore": 0.0263,
+    "famePercentile": 0.981,
+    "tier": "hard",
+    "prestigePoints": 12.0
+  },
+  {
+    "playerId": "salko",
+    "name": "Salko",
+    "fameScore": 0.0256,
+    "famePercentile": 0.9842,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "mojak",
+    "name": "Mojak",
+    "fameScore": 0.0204,
+    "famePercentile": 0.9873,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "shamokiy",
+    "name": "Shamokiy",
+    "fameScore": 0.0197,
+    "famePercentile": 0.9905,
+    "tier": "hard",
+    "prestigePoints": 16.0
+  },
+  {
+    "playerId": "sxhool",
+    "name": "Sxhool",
+    "fameScore": 0.0192,
+    "famePercentile": 0.9937,
+    "tier": "hard",
+    "prestigePoints": 15.0
+  },
+  {
+    "playerId": "rizart",
+    "name": "RizArt",
+    "fameScore": 0.0099,
+    "famePercentile": 0.9968,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  },
+  {
+    "playerId": "qndx",
+    "name": "QnDx",
+    "fameScore": 0.0098,
+    "famePercentile": 1.0,
+    "tier": "hard",
+    "prestigePoints": 8.0
+  }
+]
