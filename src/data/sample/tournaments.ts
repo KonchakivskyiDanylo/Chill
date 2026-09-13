@@ -2,75 +2,78 @@ import type { Region, TournamentEvent } from '@/data/types';
 
 /**
  * Curated catalogue of *major* events only.
- *
- * Career Path, Tenaball and List deliberately never show minor events (Cash
- * Cups, qualifiers, Console Champions, ...) — only what a viewer would call a
- * headline result: FNCS season finals, global championships and major LANs.
  */
 
-/** FNCS season finals are generated per season x region to keep the file small. */
 interface SeasonSeed {
-  /** Season key such as "C4S4". */
   key: string;
-  /** Clue label, e.g. "FNCS Ch4S4". */
   label: string;
   year: number;
   date: string;
-  format: TournamentEvent['format'];
+  format: TournamentEvent['format'] | 'squad'; // Assuming you may need to add 'squad' to your types
 }
 
 const FNCS_SEASONS: SeasonSeed[] = [
-  { key: 'C2S1', label: 'FNCS Ch2S1', year: 2019, date: '2019-12-08', format: 'solo' },
-  { key: 'C2S2', label: 'FNCS Ch2S2', year: 2020, date: '2020-05-03', format: 'duo' },
-  { key: 'C2S3', label: 'FNCS Ch2S3', year: 2020, date: '2020-08-16', format: 'trio' },
-  { key: 'C2S4', label: 'FNCS Ch2S4', year: 2020, date: '2020-11-15', format: 'duo' },
-  { key: 'C2S5', label: 'FNCS Ch2S5', year: 2021, date: '2021-03-14', format: 'solo' },
+  { key: 'SX', label: 'FNCS Season X', year: 2019, date: '2019-09-22', format: 'trio' },
+  { key: 'C2S1', label: 'FNCS Ch2S1', year: 2019, date: '2019-12-08', format: 'squad' },
+  { key: 'C2S2', label: 'FNCS Ch2S2', year: 2020, date: '2020-04-19', format: 'duo' },
+  { key: 'C2S3', label: 'FNCS Ch2S3', year: 2020, date: '2020-08-16', format: 'solo' },
+  { key: 'C2S4', label: 'FNCS Ch2S4', year: 2020, date: '2020-11-01', format: 'trio' },
+  { key: 'C2S5', label: 'FNCS Ch2S5', year: 2021, date: '2021-03-14', format: 'trio' },
   { key: 'C2S6', label: 'FNCS Ch2S6', year: 2021, date: '2021-05-30', format: 'trio' },
-  { key: 'C2S7', label: 'FNCS Ch2S7', year: 2021, date: '2021-08-22', format: 'duo' },
-  { key: 'C2S8', label: 'FNCS Ch2S8', year: 2021, date: '2021-11-21', format: 'trio' },
-  { key: 'C3S1', label: 'FNCS Ch3S1', year: 2022, date: '2022-02-27', format: 'duo' },
-  { key: 'C3S2', label: 'FNCS Ch3S2', year: 2022, date: '2022-05-22', format: 'trio' },
-  { key: 'C3S3', label: 'FNCS Ch3S3', year: 2022, date: '2022-08-21', format: 'duo' },
-  { key: 'C3S4', label: 'FNCS Ch3S4', year: 2022, date: '2022-11-13', format: 'trio' },
-  { key: 'C4S1', label: 'FNCS Ch4S1', year: 2023, date: '2023-03-05', format: 'duo' },
-  { key: 'C4S2', label: 'FNCS Ch4S2', year: 2023, date: '2023-06-04', format: 'trio' },
-  { key: 'C4S3', label: 'FNCS Ch4S3', year: 2023, date: '2023-08-27', format: 'duo' },
-  { key: 'C4S4', label: 'FNCS Ch4S4', year: 2023, date: '2023-11-19', format: 'trio' },
-  { key: 'C5S1', label: 'FNCS Ch5S1', year: 2024, date: '2024-03-17', format: 'duo' },
-  { key: 'C5S2', label: 'FNCS Ch5S2', year: 2024, date: '2024-06-16', format: 'trio' },
-  { key: 'C5S3', label: 'FNCS Ch5S3', year: 2024, date: '2024-08-25', format: 'duo' },
-  { key: 'C5S4', label: 'FNCS Ch5S4', year: 2024, date: '2024-11-17', format: 'trio' },
-  { key: 'C6S1', label: 'FNCS Ch6S1', year: 2025, date: '2025-03-16', format: 'duo' },
-  { key: 'C6S2', label: 'FNCS Ch6S2', year: 2025, date: '2025-06-15', format: 'trio' },
-  { key: 'C6S3', label: 'FNCS Ch6S3', year: 2025, date: '2025-08-24', format: 'duo' },
-  { key: 'C6S4', label: 'FNCS Ch6S4', year: 2025, date: '2025-11-16', format: 'trio' },
-  { key: 'C7S1', label: 'FNCS Ch7S1', year: 2026, date: '2026-03-15', format: 'duo' },
-  { key: 'C7S2', label: 'FNCS Ch7S2', year: 2026, date: '2026-06-14', format: 'trio' },
+  { key: 'C2S7', label: 'FNCS Ch2S7', year: 2021, date: '2021-09-05', format: 'trio' },
+  { key: 'C2S8', label: 'FNCS Ch2S8', year: 2021, date: '2021-10-31', format: 'trio' },
+  { key: 'C3S1', label: 'FNCS Ch3S1', year: 2022, date: '2022-03-06', format: 'duo' },
+  { key: 'C3S2', label: 'FNCS Ch3S2', year: 2022, date: '2022-05-29', format: 'duo' },
+  { key: 'C3S3', label: 'FNCS Ch3S3', year: 2022, date: '2022-08-14', format: 'duo' },
+
+  // Epic transitioned to the "Majors" naming convention in 2023
+  { key: '2023-M1', label: 'FNCS 2023 Major 1', year: 2023, date: '2023-03-05', format: 'duo' },
+  { key: '2023-M2', label: 'FNCS 2023 Major 2', year: 2023, date: '2023-05-14', format: 'duo' },
+  { key: '2023-M3', label: 'FNCS 2023 Major 3', year: 2023, date: '2023-08-13', format: 'duo' },
+  { key: '2024-M1', label: 'FNCS 2024 Major 1', year: 2024, date: '2024-02-25', format: 'duo' },
+  { key: '2024-M2', label: 'FNCS 2024 Major 2', year: 2024, date: '2024-05-19', format: 'duo' },
+  { key: '2024-M3', label: 'FNCS 2024 Major 3', year: 2024, date: '2024-07-28', format: 'duo' },
+  { key: '2025-M1', label: 'FNCS 2025 Major 1', year: 2025, date: '2025-02-16', format: 'trio' },
+  { key: '2025-M2', label: 'FNCS 2025 Major 2', year: 2025, date: '2025-04-27', format: 'trio' },
+  { key: '2025-M3', label: 'FNCS 2025 Major 3', year: 2025, date: '2025-08-03', format: 'trio' },
+  { key: '2026-M1', label: 'FNCS 2026 Major 1', year: 2026, date: '2026-04-26', format: 'duo' },
+  { key: '2026-M2', label: 'FNCS 2026 Major 2', year: 2026, date: '2026-08-02', format: 'duo' },
 ];
 
-const FNCS_REGIONS: Region[] = ['EU', 'NAE', 'NAW', 'BR', 'OCE', 'ASIA', 'ME'];
+// Note: You must add 'NAC' to your Region type in '@/data/types'
+const FNCS_REGIONS: (Region | 'NAC')[] = ['EU', 'NAE', 'NAW', 'NAC', 'BR', 'OCE', 'ASIA', 'ME'];
 
-const REGION_EVENT_NAME: Record<Region, string> = {
+const REGION_EVENT_NAME: Record<string, string> = {
   EU: 'Europe',
   NAE: 'NA East',
   NAW: 'NA West',
+  NAC: 'NA Central',
   BR: 'Brazil',
   OCE: 'Oceania',
   ASIA: 'Asia',
   ME: 'Middle East',
 };
 
-/** "C4S4" -> "Chapter 4 Season 4" */
 function expandSeasonKey(key: string): string {
-  const match = /^C(\d+)S(\d+)$/.exec(key);
-  if (!match) return key;
-  return `Chapter ${match[1]} Season ${match[2]}`;
+  const chapterMatch = /^C(\d+)S(\d+)$/.exec(key);
+  if (chapterMatch) return `Chapter ${chapterMatch[1]} Season ${chapterMatch[2]}`;
+
+  const majorMatch = /^(\d{4})-M(\d)$/.exec(key);
+  if (majorMatch) return `${majorMatch[1]} Major ${majorMatch[2]}`;
+
+  if (key === 'SX') return 'Season X';
+  return key;
 }
 
 function buildFncsEvents(): TournamentEvent[] {
   const out: TournamentEvent[] = [];
   for (const season of FNCS_SEASONS) {
     for (const region of FNCS_REGIONS) {
+      // Historical filtering for the NAE/NAW -> NAC region merge
+      const isPostMerge = season.year > 2023 || (season.year === 2023 && season.key !== '2023-M1');
+      if (region === 'NAC' && !isPostMerge) continue; // NAC didn't exist yet
+      if ((region === 'NAE' || region === 'NAW') && isPostMerge) continue; // NAE/NAW no longer existed
+
       out.push({
         id: `fncs-${season.key.toLowerCase()}-${region.toLowerCase()}`,
         name: `FNCS ${expandSeasonKey(season.key)} — ${REGION_EVENT_NAME[region]} Grand Finals`,
@@ -78,8 +81,8 @@ function buildFncsEvents(): TournamentEvent[] {
         tier: 'fncs',
         year: season.year,
         date: season.date,
-        region,
-        format: season.format,
+        region: region as Region,
+        format: season.format as TournamentEvent['format'],
         season: season.key,
       });
     }
@@ -87,7 +90,6 @@ function buildFncsEvents(): TournamentEvent[] {
   return out;
 }
 
-/** Global championships and major LANs — hand-authored. */
 const SPECIAL_EVENTS: TournamentEvent[] = [
   {
     id: 'wc-2019-solo',
@@ -117,26 +119,15 @@ const SPECIAL_EVENTS: TournamentEvent[] = [
     shortName: 'DreamHack Anaheim 2020',
     tier: 'lan',
     year: 2020,
-    date: '2020-02-22',
+    date: '2020-02-23',
     region: null,
     format: 'solo',
     season: null,
   },
   {
-    id: 'fncs-invitational-2021',
-    name: 'FNCS Invitational 2021',
-    shortName: 'FNCS Invitational 2021',
-    tier: 'global',
-    year: 2021,
-    date: '2021-12-04',
-    region: null,
-    format: 'solo',
-    season: null,
-  },
-  {
-    id: 'fncs-gc-2022',
-    name: 'FNCS Global Championship 2022',
-    shortName: 'FNCS Global 2022',
+    id: 'fncs-invitational-2022',
+    name: 'FNCS Invitational 2022 (Raleigh)',
+    shortName: 'FNCS Invitational 2022',
     tier: 'global',
     year: 2022,
     date: '2022-11-13',
@@ -145,82 +136,49 @@ const SPECIAL_EVENTS: TournamentEvent[] = [
     season: null,
   },
   {
-    id: 'gamers8-2023',
-    name: 'Gamers8 2023 — Fortnite',
-    shortName: 'Gamers8 2023',
-    tier: 'lan',
-    year: 2023,
-    date: '2023-08-13',
-    region: null,
-    format: 'duo',
-    season: null,
-  },
-  {
     id: 'fncs-gc-2023',
-    name: 'FNCS Global Championship 2023',
+    name: 'FNCS Global Championship 2023 (Copenhagen)',
     shortName: 'FNCS Global 2023',
     tier: 'global',
     year: 2023,
     date: '2023-10-15',
-    region: null,
-    format: 'solo',
-    season: null,
-  },
-  {
-    id: 'ewc-2024',
-    name: 'Esports World Cup 2024 — Fortnite',
-    shortName: 'EWC 2024',
-    tier: 'lan',
-    year: 2024,
-    date: '2024-07-21',
     region: null,
     format: 'duo',
     season: null,
   },
   {
     id: 'fncs-gc-2024',
-    name: 'FNCS Global Championship 2024',
+    name: 'FNCS Global Championship 2024 (Fort Worth)',
     shortName: 'FNCS Global 2024',
     tier: 'global',
     year: 2024,
-    date: '2024-09-29',
+    date: '2024-09-08',
     region: null,
     format: 'duo',
-    season: null,
-  },
-  {
-    id: 'ewc-2025',
-    name: 'Esports World Cup 2025 — Fortnite',
-    shortName: 'EWC 2025',
-    tier: 'lan',
-    year: 2025,
-    date: '2025-07-20',
-    region: null,
-    format: 'trio',
     season: null,
   },
   {
     id: 'fncs-gc-2025',
-    name: 'FNCS Global Championship 2025',
+    name: 'FNCS Global Championship 2025 (Lyon)',
     shortName: 'FNCS Global 2025',
     tier: 'global',
     year: 2025,
-    date: '2025-10-05',
+    date: '2025-09-07',
     region: null,
     format: 'trio',
     season: null,
   },
   {
-    id: 'ewc-2026',
-    name: 'Esports World Cup 2026 — Fortnite',
-    shortName: 'EWC 2026',
-    tier: 'lan',
+    id: 'fncs-gc-2026',
+    name: 'FNCS Global Championship 2026 (Antwerp)',
+    shortName: 'FNCS Global 2026',
+    tier: 'global',
     year: 2026,
-    date: '2026-07-19',
+    date: '2026-09-27',
     region: null,
     format: 'duo',
     season: null,
-  },
+  }
 ];
 
 export const EVENTS: TournamentEvent[] = [...buildFncsEvents(), ...SPECIAL_EVENTS].sort((a, b) =>
