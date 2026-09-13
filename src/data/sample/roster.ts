@@ -55,7 +55,7 @@ export const COUNTRY_NAMES: Record<string, string> = {
 
 export const ROSTER: RosterSeed[] = [
   // ---------------------------------------------------------------- North America (NAC/NAE/NAW)
-  { id: 'bugha', name: 'Bugha', realName: 'Kyle Giersdorf', country: 'US', region: 'NAC', born: '2002-12-30', earnings: 3750000, team: 'Dignitas', pr: 2500, tier: 1, first: 'SX', last: '2026-M2', fncsWins: 3, signature: [['wc-2019-solo', 1]], partners: ['mero'] },
+  { id: 'bugha', name: 'Bugha', realName: 'Kyle Giersdorf', country: 'US', region: 'NAC', born: '2002-12-30', earnings: 3858272, team: 'Dignitas', pr: 2500, tier: 1, first: 'SX', last: '2026-M2', fncsWins: 3, signature: [['wc-2019-solo', 1]], partners: ['mero'] },
   { id: 'mero', name: 'Mero', realName: 'Matthew Faitel', country: 'CA', region: 'NAC', born: '2004-09-01', earnings: 1550000, team: 'Dignitas', pr: 2300, tier: 1, first: 'C2S2', last: '2026-M2', fncsWins: 5, signature: [['fncs-gc-2023', 1]], partners: ['bugha', 'cooper'] },
   { id: 'cooper', name: 'Cooper', country: 'US', region: 'NAC', born: '2007-02-01', earnings: 600000, team: 'Dignitas', pr: 1800, tier: 1, first: '2023-M1', last: '2026-M2', fncsWins: 1, signature: [['fncs-gc-2023', 1]], partners: ['mero'] },
   { id: 'peterbot', name: 'Peterbot', realName: 'Peter Kata', country: 'US', region: 'NAC', born: '2006-05-15', earnings: 1800000, team: 'Exceed', pr: 2450, tier: 1, first: 'C3S1', last: '2026-M2', fncsWins: 4, signature: [['fncs-gc-2024', 1]], partners: ['pollo'] },
