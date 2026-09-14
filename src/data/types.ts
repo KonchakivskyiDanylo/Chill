@@ -152,6 +152,41 @@ export interface Player {
   status: 'active' | 'inactive';
 }
 
+/**
+ * Difficulty tier a player belongs to.
+ *
+ * Not a property of the person — a property of *guessing* them. `easy` is the
+ * famous end of the roster, `hard` the players only a follower of the scene
+ * would name.
+ */
+export type FameTier = 'easy' | 'medium' | 'hard';
+
+/**
+ * One player's place in the fame ranking.
+ *
+ * Produced by `fame_calculation.ipynb` and stored in
+ * `fortnite/fame-ranking.json`: 70% normalised log career earnings, 30%
+ * tournament wins weighted by how big the tournament was — a World Cup title
+ * counts for far more than a console cup. Re-running the notebook after the
+ * dataset grows re-tiers everyone, which is the point: earnings alone would
+ * rank a grinder above a World Cup champion.
+ *
+ * Tiers are cut by rank, not by score: the top 10% are `easy`, the next 30%
+ * `medium`, the rest `hard`.
+ */
+export interface FameEntry {
+  playerId: string;
+  /** Handle as it was when the ranking was generated — for debugging only. */
+  name: string;
+  /** Composite fame, 0-1, where 1 is the most famous player in the dataset. */
+  fameScore: number;
+  /** Rank as a fraction: 0 is the most famous, 1 the least. */
+  famePercentile: number;
+  tier: FameTier;
+  /** Weighted tournament-win points that fed the score. */
+  prestigePoints: number;
+}
+
 /** Date the underlying data snapshot was taken. Shown in the rules panels. */
 export const DATA_UPDATED_AT = '2026-09-13';
 export const DATA_SOURCE_LABEL = 'Wikipedia + Liquipedia (Sept 2026)';

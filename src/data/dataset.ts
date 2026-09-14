@@ -1,4 +1,13 @@
-import type { EventEntry, OrgStint, Player, PlayerResult, Region, TournamentEvent } from './types';
+import type {
+  EventEntry,
+  FameEntry,
+  FameTier,
+  OrgStint,
+  Player,
+  PlayerResult,
+  Region,
+  TournamentEvent,
+} from './types';
 
 /**
  * Read-only query layer shared by every game.
@@ -14,6 +23,9 @@ import type { EventEntry, OrgStint, Player, PlayerResult, Region, TournamentEven
  *              a player typing any real winner gets a match.
  *   `players`  the subset with enough recorded history to be a fair puzzle
  *              answer. Games pick their secrets from here.
+ *
+ * Every player also carries a difficulty tier (see `FameEntry`); `playersFor()`
+ * turns the Easy / Medium / Hard choice into the pool a game may draw from.
  */
 export class Dataset {
   /** Puzzle-eligible players (see `isPuzzleWorthy`). */
@@ -22,6 +34,10 @@ export class Dataset {
   readonly roster: Player[];
   readonly events: TournamentEvent[];
   readonly entries: EventEntry[];
+  /** Fame ranking, most famous first — what the difficulty modes select on. */
+  readonly fame: FameEntry[];
+  /** False when the ranking was derived here because the source published none. */
+  readonly fameIsPublished: boolean;
 
   private readonly playerById = new Map<string, Player>();
   private readonly eventById = new Map<string, TournamentEvent>();
@@ -29,8 +45,16 @@ export class Dataset {
   /** eventId -> results, sorted by placement. */
   private readonly resultsByEvent = new Map<string, { player: Player; result: PlayerResult }[]>();
   private readonly entriesByEvent = new Map<string, EventEntry[]>();
+  private readonly fameById = new Map<string, FameEntry>();
+  /** Puzzle-eligible players per tier, built on first use. */
+  private tierPools: Map<FameTier, Player[]> | null = null;
 
-  constructor(players: Player[], events: TournamentEvent[], entries: EventEntry[] = []) {
+  constructor(
+    players: Player[],
+    events: TournamentEvent[],
+    entries: EventEntry[] = [],
+    fame: FameEntry[] = [],
+  ) {
     this.roster = players;
     this.events = events;
     this.entries = entries;
@@ -57,6 +81,10 @@ export class Dataset {
     }
 
     this.players = players.filter((player) => this.isPuzzleWorthy(player));
+
+    this.fameIsPublished = fame.length > 0;
+    this.fame = this.fameIsPublished ? fame : deriveFame(players);
+    for (const entry of this.fame) this.fameById.set(entry.playerId, entry);
   }
 
   /**
@@ -148,6 +176,58 @@ export class Dataset {
     return player.earningsByYear[String(year)] ?? 0;
   }
 
+  // ------------------------------------------------------------ difficulty
+
+  /**
+   * The difficulty tier a player belongs to.
+   *
+   * A player the ranking has never seen counts as `hard` — an unranked handle
+   * is, by definition, not one people know.
+   */
+  tierOf(player: Player): FameTier {
+    return this.fameById.get(player.id)?.tier ?? 'hard';
+  }
+
+  /** Puzzle-eligible players in one tier. */
+  playersByTier(tier: FameTier): Player[] {
+    if (!this.tierPools) {
+      const pools = new Map<FameTier, Player[]>([
+        ['easy', []],
+        ['medium', []],
+        ['hard', []],
+      ]);
+      for (const player of this.players) pools.get(this.tierOf(player))!.push(player);
+      this.tierPools = pools;
+    }
+    return this.tierPools.get(tier) ?? [];
+  }
+
+  /**
+   * The pool a game may draw answers from at one difficulty.
+   *
+   * Tiers are exact by default: Easy asks about the famous end of the roster,
+   * Hard about the obscure one. `eligible` is the game's own filter — Higher or
+   * Lower drops players with no birth date, Wordle players whose handle is the
+   * wrong length — and it has to run per tier, because whether a tier is big
+   * enough is a question about the players a game can actually use, not about
+   * how many the ranking put there. If that leaves fewer than `minimum`, the
+   * next-closest tier is folded in rather than failing: a board that cannot be
+   * built is worse than one a notch off its difficulty.
+   */
+  playersFor(
+    tier: FameTier,
+    options: { minimum?: number; eligible?: (players: Player[]) => Player[] } = {},
+  ): Player[] {
+    const { minimum = 1, eligible } = options;
+    const out: Player[] = [];
+    for (const step of TIER_FALLBACK[tier]) {
+      const pool = this.playersByTier(step);
+      out.push(...(eligible ? eligible(pool) : pool));
+      if (out.length >= minimum) break;
+    }
+    return out;
+  }
+
   // -------------------------------------------------------------- groupings
 
   get teams(): string[] {
@@ -232,4 +312,62 @@ export class Dataset {
       (event) => (!filter || filter(event)) && this.standings(event.id).length >= min,
     );
   }
+}
+
+/** Tier order to widen through when a pool is too small. Closest first. */
+const TIER_FALLBACK: Record<FameTier, FameTier[]> = {
+  easy: ['easy', 'medium', 'hard'],
+  medium: ['medium', 'easy', 'hard'],
+  hard: ['hard', 'medium', 'easy'],
+};
+
+/**
+ * Fallback ranking for a source that publishes none.
+ *
+ * Same shape as `fame_calculation.ipynb` — 70% normalised log earnings, 30%
+ * weighted titles — but it has to approximate the per-event weights, which only
+ * the notebook can see: an FNCS title scores 30 and any other win 70, roughly
+ * the notebook's regional-final and global-event values. The shipped
+ * `fame-ranking.json` is the better ranking; this only exists so that swapping
+ * in a repository without one leaves the difficulty modes working.
+ */
+function deriveFame(players: readonly Player[]): FameEntry[] {
+  const logs = players
+    .filter((player) => player.earningsKnown && player.earnings > 0)
+    .map((player) => Math.log10(player.earnings))
+    .sort((a, b) => a - b);
+
+  const minLog = logs[0] ?? 0;
+  const maxLog = logs[logs.length - 1] ?? 1;
+  // Players with no published figure sit at the 25th percentile of those who do,
+  // so a missing number reads as "not published", not as "earned nothing".
+  const baseline = logs[Math.floor(logs.length * 0.25)] ?? 0;
+
+  const prestigeOf = (player: Player) => player.fncsWins * 30 + player.majorWins * 70;
+  const maxPrestige = players.reduce((max, player) => Math.max(max, prestigeOf(player)), 1);
+
+  const ranked = players
+    .map((player) => {
+      const log = player.earningsKnown && player.earnings > 0 ? Math.log10(player.earnings) : baseline;
+      const earningsScore = maxLog > minLog ? (log - minLog) / (maxLog - minLog) : 0;
+      const prestigePoints = prestigeOf(player);
+      return {
+        player,
+        prestigePoints,
+        score: 0.7 * earningsScore + 0.3 * (prestigePoints / maxPrestige),
+      };
+    })
+    .sort((a, b) => b.score - a.score || (a.player.name < b.player.name ? -1 : 1));
+
+  return ranked.map((entry, index) => {
+    const rank = index + 1;
+    return {
+      playerId: entry.player.id,
+      name: entry.player.name,
+      fameScore: Number(entry.score.toFixed(4)),
+      famePercentile: Number((rank / ranked.length).toFixed(4)),
+      tier: rank <= ranked.length * 0.1 ? 'easy' : rank <= ranked.length * 0.4 ? 'medium' : 'hard',
+      prestigePoints: entry.prestigePoints,
+    };
+  });
 }

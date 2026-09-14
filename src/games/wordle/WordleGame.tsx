@@ -3,11 +3,21 @@ import { GameShell } from '@/components/GameShell';
 import { CountryBadge } from '@/components/CountryBadge';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { Banner, Stat } from '@/components/ui';
+import { DifficultyBar, useDifficulty } from '@/components/DifficultyPicker';
+import type { Difficulty } from '@/games/shared/difficulty';
 import { useDataset } from '@/data/DataProvider';
 import { playerMoney } from '@/lib/format';
 import { useLocalState } from '@/lib/storage';
 import { getGame } from '@/games/registry';
-import { createGame, keyboardState, MAX_GUESSES, scoreGuess, submitGuess, type GameState } from './engine';
+import {
+  createGame,
+  eligible,
+  keyboardState,
+  MAX_GUESSES,
+  scoreGuess,
+  submitGuess,
+  type GameState,
+} from './engine';
 import './wordle.css';
 
 const meta = getGame('wordle')!;
@@ -19,18 +29,46 @@ const KEY_ROWS = [
   ['ENTER', ...'ZXCVBNM'.split(''), 'DEL'],
 ];
 
+/** Played / won per difficulty, in one key so switching level keeps both. */
+type Tallies = Partial<Record<Difficulty, { played: number; won: number }>>;
+
+/**
+ * Its own key, not the old `wordle:record`.
+ *
+ * That one held a single `{ played, won }` from before difficulty existed.
+ * Reading it back as a per-level record would leave those two numbers stranded
+ * as junk keys in every returning player's storage forever.
+ */
+const RECORD_KEY = 'wordle:record-by-difficulty';
+
 export default function WordleGame() {
   const dataset = useDataset();
-  const [game, setGame] = useState<GameState | null>(() => createGame(dataset.players));
+  const [difficulty, setDifficulty] = useDifficulty();
+  // A handle only works as an answer at a playable length, so eligibility has to
+  // be part of choosing the tier, not a filter applied after it.
+  const poolFor = useCallback(
+    (level: Difficulty) => dataset.playersFor(level, { minimum: 1, eligible }),
+    [dataset],
+  );
+  const [game, setGame] = useState<GameState | null>(() => createGame(poolFor(difficulty)));
   const [draft, setDraft] = useState('');
   const [message, setMessage] = useState<string | null>(null);
-  const [record, setRecord] = useLocalState('wordle:record', { played: 0, won: 0 });
+  const [record, setRecord] = useLocalState<Tallies>(RECORD_KEY, {});
+  const tally = record[difficulty] ?? { played: 0, won: 0 };
 
-  const newGame = useCallback(() => {
-    setGame(createGame(dataset.players));
-    setDraft('');
-    setMessage(null);
-  }, [dataset]);
+  const newGame = useCallback(
+    (level: Difficulty) => {
+      setGame(createGame(poolFor(level)));
+      setDraft('');
+      setMessage(null);
+    },
+    [poolFor],
+  );
+
+  const changeDifficulty = (level: Difficulty) => {
+    setDifficulty(level);
+    newGame(level);
+  };
 
   const commit = useCallback(() => {
     if (!game || game.status !== 'playing') return;
@@ -44,11 +82,14 @@ export default function WordleGame() {
     setGame(result.state);
     if (result.state.status !== 'playing') {
       setRecord({
-        played: record.played + 1,
-        won: record.won + (result.state.status === 'won' ? 1 : 0),
+        ...record,
+        [difficulty]: {
+          played: tally.played + 1,
+          won: tally.won + (result.state.status === 'won' ? 1 : 0),
+        },
       });
     }
-  }, [game, draft, record, setRecord]);
+  }, [game, draft, record, setRecord, difficulty, tally]);
 
   const press = useCallback(
     (key: string) => {
@@ -84,9 +125,12 @@ export default function WordleGame() {
   if (!game) {
     return (
       <GameShell game={meta}>
-        <Banner tone="danger" title="No puzzle available">
-          No player in the dataset has a usable name for this game.
-        </Banner>
+        <div className="stack">
+          <DifficultyBar value={difficulty} onChange={changeDifficulty} />
+          <Banner tone="danger" title="No puzzle available">
+            No player at this difficulty has a usable name for this game.
+          </Banner>
+        </div>
       </GameShell>
     );
   }
@@ -105,7 +149,7 @@ export default function WordleGame() {
     <GameShell
       game={meta}
       toolbar={
-        <button type="button" className="icon-btn" onClick={newGame}>
+        <button type="button" className="icon-btn" onClick={() => newGame(difficulty)}>
           ↺ New game
         </button>
       }
@@ -114,8 +158,14 @@ export default function WordleGame() {
         <div className="stats">
           <Stat label="Length" value={game.answer.length} />
           <Stat label="Guess" value={`${Math.min(game.guesses.length + (finished ? 0 : 1), MAX_GUESSES)}/${MAX_GUESSES}`} />
-          <Stat label="Solved" value={`${record.won}/${record.played}`} />
+          <Stat label="Solved" value={`${tally.won}/${tally.played}`} />
         </div>
+
+        <DifficultyBar
+          value={difficulty}
+          onChange={changeDifficulty}
+          note="Changes who the secret player can be — and starts a new game."
+        />
 
         <p className="center muted small">
           The answer is <strong>{game.answer.length}</strong> characters — letters and digits, no spaces.
@@ -161,7 +211,11 @@ export default function WordleGame() {
                 </div>
               </div>
             </div>
-            <button type="button" className="btn btn--primary btn--lg btn--block" onClick={newGame}>
+            <button
+              type="button"
+              className="btn btn--primary btn--lg btn--block"
+              onClick={() => newGame(difficulty)}
+            >
               New game
             </button>
           </div>

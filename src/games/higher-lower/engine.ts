@@ -1,11 +1,22 @@
 import type { Player } from '@/data/types';
+import type { Difficulty } from '@/games/shared/difficulty';
 import { makeRng, shuffle } from '@/lib/rng';
 
 /** Pure game logic for Higher or Lower — no React, no DOM. */
 
 export type Category = 'age' | 'earnings';
-export type Difficulty = 'easy' | 'hard';
 export type Answer = 'higher' | 'lower' | 'equal';
+
+export type { Difficulty };
+
+/**
+ * Only Hard offers the Equal button — and once it is on the board, using it is
+ * compulsory. Easy and Medium accept either direction on a tie.
+ */
+export function hasEqualButton(difficulty: Difficulty): boolean {
+  return difficulty === 'hard';
+}
+
 export type Status = 'playing' | 'revealed' | 'gameover' | 'cleared';
 
 export interface CategoryMeta {
@@ -53,6 +64,11 @@ export interface GameState {
   poolSize: number;
 }
 
+/**
+ * Starts a run. `players` is the difficulty's pool: the caller narrows the
+ * roster to one fame tier first, so a run only compares players of comparable
+ * renown.
+ */
 export function createGame(
   players: readonly Player[],
   category: Category,
@@ -87,8 +103,10 @@ export function correctAnswer(state: GameState): Answer {
 
 export function isCorrect(state: GameState, answer: Answer): boolean {
   const truth = correctAnswer(state);
-  // Easy has no Equal button, so a tie accepts either direction.
-  if (state.difficulty === 'easy' && truth === 'equal') return answer === 'higher' || answer === 'lower';
+  // Without an Equal button a tie has to accept either direction.
+  if (!hasEqualButton(state.difficulty) && truth === 'equal') {
+    return answer === 'higher' || answer === 'lower';
+  }
   return answer === truth;
 }
 
@@ -121,9 +139,4 @@ export function nextRound(state: GameState): GameState {
     lastAnswer: null,
     status: 'playing',
   };
-}
-
-/** How many players are still unseen — shown as "players left". */
-export function remaining(state: GameState): number {
-  return state.queue.length;
 }

@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { GameShell } from '@/components/GameShell';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
+import { DifficultyCards, DifficultyChip, useDifficulty } from '@/components/DifficultyPicker';
+import { DIFFICULTIES } from '@/games/shared/difficulty';
 import { useDataset } from '@/data/DataProvider';
 import type { Player } from '@/data/types';
 import { playerMoney, plural } from '@/lib/format';
@@ -12,8 +14,9 @@ import {
   CATEGORIES,
   correctAnswer,
   createGame,
+  eligible,
+  hasEqualButton,
   nextRound,
-  remaining,
   submitAnswer,
   type Answer,
   type Category,
@@ -31,24 +34,45 @@ function displayValue(player: Player, category: Category): string {
 export default function HigherLowerGame() {
   const dataset = useDataset();
   const [category, setCategory] = useState<Category | null>(null);
-  const [difficulty, setDifficulty] = useState<Difficulty | null>(null);
+  const [difficulty, setDifficulty] = useDifficulty();
   const [game, setGame] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const scope = `higher-lower:${category ?? 'none'}:${difficulty ?? 'none'}`;
+  const scope = `higher-lower:${category ?? 'none'}:${difficulty}`;
   const { best, submit: submitBest } = useBestScore(scope);
+
+  /**
+   * The pool one level offers, which is the fame tier minus anyone missing the
+   * value this category compares — a player with no birth date cannot be part
+   * of an Age run. Undefined until a category is picked, because until then
+   * there is no eligibility rule to count against.
+   */
+  const poolFor = useCallback(
+    (tier: Difficulty, forCategory: Category) =>
+      dataset.playersFor(tier, {
+        minimum: 2, // a pair is the smallest run that can be dealt
+        eligible: (players) => eligible(players, forCategory),
+      }),
+    [dataset],
+  );
+
+  const counts = useMemo(() => {
+    if (!category) return undefined;
+    const entries = DIFFICULTIES.map((tier) => [tier, poolFor(tier, category).length] as const);
+    return Object.fromEntries(entries) as Record<Difficulty, number>;
+  }, [poolFor, category]);
 
   const start = useCallback(
     (nextCategory: Category, nextDifficulty: Difficulty) => {
-      const created = createGame(dataset.players, nextCategory, nextDifficulty);
+      const created = createGame(poolFor(nextDifficulty, nextCategory), nextCategory, nextDifficulty);
       if (!created) {
-        setError('Not enough players with this data to start a run.');
+        setError('Not enough players at this difficulty have that value on record.');
         return;
       }
       setError(null);
       setGame(created);
     },
-    [dataset],
+    [poolFor],
   );
 
   // Reveal the answer for a beat, then slide to the next pair.
@@ -67,7 +91,6 @@ export default function HigherLowerGame() {
   const reset = () => {
     setGame(null);
     setCategory(null);
-    setDifficulty(null);
   };
 
   const toolbar = game ? (
@@ -82,11 +105,11 @@ export default function HigherLowerGame() {
         <Setup
           category={category}
           difficulty={difficulty}
+          counts={counts}
           onCategory={setCategory}
           onDifficulty={setDifficulty}
           onStart={start}
           error={error}
-          playerCount={dataset.players.length}
         />
       ) : (
         <Board game={game} best={best} onAnswer={answer} onRestart={() => start(game.category, game.difficulty)} />
@@ -98,19 +121,19 @@ export default function HigherLowerGame() {
 function Setup({
   category,
   difficulty,
+  counts,
   onCategory,
   onDifficulty,
   onStart,
   error,
-  playerCount,
 }: {
   category: Category | null;
-  difficulty: Difficulty | null;
+  difficulty: Difficulty;
+  counts?: Record<Difficulty, number>;
   onCategory: (value: Category) => void;
   onDifficulty: (value: Difficulty) => void;
   onStart: (category: Category, difficulty: Difficulty) => void;
   error: string | null;
-  playerCount: number;
 }) {
   return (
     <div className="stack">
@@ -131,20 +154,10 @@ function Setup({
 
       <section className="card stack">
         <div className="card__title">2 · Pick a difficulty</div>
-        <OptionGrid>
-          <OptionCard
-            label="Easy"
-            hint="Higher or Lower. Equal values accept either answer."
-            selected={difficulty === 'easy'}
-            onClick={() => onDifficulty('easy')}
-          />
-          <OptionCard
-            label="Hard"
-            hint="Higher, Lower or Equal — and Equal has to be exact."
-            selected={difficulty === 'hard'}
-            onClick={() => onDifficulty('hard')}
-          />
-        </OptionGrid>
+        <DifficultyCards value={difficulty} onChange={onDifficulty} counts={counts} />
+        <p className="tiny faint">
+          Hard also adds the Equal button — and expects you to use it when two players match exactly.
+        </p>
       </section>
 
       {error ? <Banner tone="danger" title="Cannot start">{error}</Banner> : null}
@@ -152,13 +165,14 @@ function Setup({
       <button
         type="button"
         className="btn btn--primary btn--lg btn--block"
-        disabled={!category || !difficulty}
-        onClick={() => category && difficulty && onStart(category, difficulty)}
+        disabled={!category}
+        onClick={() => category && onStart(category, difficulty)}
       >
-        {category && difficulty ? 'Start endless run' : 'Choose a category and difficulty'}
+        {category ? 'Start endless run' : 'Choose a category'}
       </button>
       <p className="tiny faint center">
-        Endless mode · {playerCount} players in the pool · one mistake ends the run
+        Endless mode · one mistake ends the run
+        {counts ? ` · ${plural(counts[difficulty], 'player')} in the pool` : ''}
       </p>
     </div>
   );
@@ -185,12 +199,11 @@ function Board({
       <div className="stats">
         <Stat label="Score" value={game.score} />
         <Stat label="Best" value={Math.max(best, game.score)} />
-        <Stat label="Players left" value={remaining(game)} />
       </div>
 
       <div className="hl-prompt">
         <span className="chip chip--primary">{categoryMeta.title}</span>
-        <span className="chip">{game.difficulty === 'easy' ? 'Easy' : 'Hard'}</span>
+        <DifficultyChip difficulty={game.difficulty} />
       </div>
 
       <div className="hl-board">
@@ -237,7 +250,7 @@ function Board({
           >
             ▲ Higher
           </button>
-          {game.difficulty === 'hard' ? (
+          {hasEqualButton(game.difficulty) ? (
             <button
               type="button"
               className="btn btn--lg hl-answer"
@@ -260,7 +273,7 @@ function Board({
 
       <p className="tiny faint center">
         Is {game.challenger.name}’s {categoryMeta.title.toLowerCase()} higher or lower than {game.current.name}’s?
-        {game.difficulty === 'easy' ? ' Equal values accept either answer.' : ''}
+        {hasEqualButton(game.difficulty) ? '' : ' Equal values accept either answer.'}
       </p>
     </div>
   );
@@ -285,7 +298,7 @@ function PlayerPanel({
       </div>
       <div className={`hl-panel__value${value ? '' : ' hl-panel__value--hidden'}`}>{value ?? '???'}</div>
       {/* Only shown once the value is out — FNCS titles correlate with earnings. */}
-      <div className="tiny faint">{value ? plural(player.fncsWins, 'FNCS title') : ' '}</div>
+      <div className="tiny faint">{value ? plural(player.fncsWins, 'FNCS title') : ' '}</div>
     </div>
   );
 }

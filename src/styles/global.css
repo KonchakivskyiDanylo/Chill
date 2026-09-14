@@ -709,3 +709,69 @@ textarea {
   flex: 1;
   min-width: 0;
 }
+
+/* ------------------------------------------------------------ difficulty -- */
+
+.difficulty-switch {
+  display: inline-flex;
+  padding: 4px;
+  gap: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.difficulty-switch__btn {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.difficulty-switch__btn:hover {
+  color: var(--text);
+}
+.difficulty-switch__btn[aria-pressed='true'] {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Level colours, shared by the switch and the chip. */
+.difficulty-switch__btn[aria-pressed='true'][data-level='easy'],
+.chip[data-level='easy'] {
+  color: var(--success);
+  border-color: rgba(34, 197, 94, 0.4);
+  background: var(--success-soft);
+}
+.difficulty-switch__btn[aria-pressed='true'][data-level='medium'],
+.chip[data-level='medium'] {
+  color: var(--warning);
+  border-color: rgba(234, 179, 8, 0.4);
+  background: var(--warning-soft);
+}
+.difficulty-switch__btn[aria-pressed='true'][data-level='hard'],
+.chip[data-level='hard'] {
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.4);
+  background: var(--danger-soft);
+}
+
+.difficulty-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.difficulty-bar__note {
+  flex: 1 1 220px;
+  margin: 0;
+}

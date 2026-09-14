@@ -31,19 +31,48 @@ function check(condition: boolean, message: string): void {
 
 const dataset = await loadDataset();
 
+// --------------------------------------------------- 0. the fame ranking
+// Every difficulty mode reads from this. If the JSON ever fails to load, the
+// Dataset quietly falls back to a derived ranking and the modes keep "working"
+// while asking about the wrong players — so fail loudly instead.
+check(dataset.fameIsPublished, 'fame: fell back to the derived ranking, fame-ranking.json did not load');
+const ranked = new Set(dataset.fame.map((entry) => entry.playerId));
+check(
+  dataset.roster.every((player) => ranked.has(player.id)),
+  'fame: players are missing from the ranking — re-run fame_calculation.ipynb',
+);
+for (const tier of ['easy', 'medium', 'hard'] as const) {
+  notes.push(`fame ${tier}: ${dataset.playersByTier(tier).length} playable of ${dataset.fame.filter((entry) => entry.tier === tier).length} ranked`);
+}
+
 // ------------------------------------------------------- 1. Higher or Lower
 for (const category of ['age', 'earnings'] as const) {
-  for (const difficulty of ['easy', 'hard'] as const) {
-    let state = hl.createGame(dataset.players, category, difficulty, `hl-${category}-${difficulty}`);
+  for (const difficulty of ['easy', 'medium', 'hard'] as const) {
+    // Built exactly as the game builds it, eligibility rule included.
+    const pool = dataset.playersFor(difficulty, {
+      minimum: 2,
+      eligible: (players) => hl.eligible(players, category),
+    });
+    let state = hl.createGame(pool, category, difficulty, `hl-${category}-${difficulty}`);
     check(state !== null, `higher-lower: could not start ${category}/${difficulty}`);
     if (!state) continue;
 
+    // Widening into a neighbouring tier is a legitimate last resort, but on this
+    // dataset no tier is small enough to need it — so it should never happen.
+    const offTier = pool.filter((player) => dataset.tierOf(player) !== difficulty);
+    check(
+      offTier.length === 0,
+      `higher-lower ${category}/${difficulty}: widened into another tier for ${offTier.length} player(s)`,
+    );
+
     let rounds = 0;
+    const seen: string[] = [];
     while (state.status !== 'cleared' && rounds < 500) {
       rounds++;
-      // Easy has no Equal button, so a tie is answered either way.
+      seen.push(state.challenger.id);
+      // Without the Equal button a tie is answered either way.
       const truth = hl.correctAnswer(state);
-      const answer = truth === 'equal' && difficulty === 'easy' ? 'higher' : truth;
+      const answer = truth === 'equal' && !hl.hasEqualButton(difficulty) ? 'higher' : truth;
       state = hl.submitAnswer(state, answer);
       if (state.status === 'gameover') break;
       state = hl.nextRound(state);
@@ -56,20 +85,31 @@ for (const category of ['age', 'earnings'] as const) {
       state.score === state.poolSize - 1,
       `higher-lower ${category}/${difficulty}: cleared with ${state.score}, expected ${state.poolSize - 1}`,
     );
-    if (category === 'age' && difficulty === 'easy') {
-      notes.push(`higher-lower: full clear = ${state.score} correct answers over ${state.poolSize} players`);
+    check(
+      new Set(seen).size === seen.length,
+      `higher-lower ${category}/${difficulty}: a player was shown twice in one run`,
+    );
+    if (category === 'age') {
+      notes.push(
+        `higher-lower ${difficulty}: full clear = ${state.score} correct answers over ${state.poolSize} players`,
+      );
     }
   }
 }
 
 // ------------------------------------------------------------------ 2. Wordle
-{
+for (const difficulty of ['easy', 'medium', 'hard'] as const) {
   const lengths = new Set<number>();
   for (let i = 0; i < 200; i++) {
-    const game = wordle.createGame(dataset.players, `w-${i}`);
-    check(game !== null, 'wordle: could not create a game');
+    const pool = dataset.playersFor(difficulty, { minimum: 1, eligible: wordle.eligible });
+    const game = wordle.createGame(pool, `w-${difficulty}-${i}`);
+    check(game !== null, `wordle: could not create a ${difficulty} game`);
     if (!game) continue;
     lengths.add(game.answer.length);
+    check(
+      dataset.tierOf(game.secret) === difficulty,
+      `wordle ${difficulty}: secret ${game.secret.name} is a ${dataset.tierOf(game.secret)} player`,
+    );
 
     const solved = wordle.submitGuess(game, game.secret.name.toLowerCase());
     check(solved.ok && solved.state.status === 'won', `wordle: correct name did not win for ${game.secret.name}`);
@@ -82,8 +122,16 @@ for (const category of ['age', 'earnings'] as const) {
     const wrongLength = wordle.submitGuess(game, 'A');
     check(!wrongLength.ok, 'wordle: a wrong-length guess was accepted');
   }
-  notes.push(`wordle: answer lengths in play = ${[...lengths].sort((a, b) => a - b).join(', ')}`);
+  notes.push(
+    `wordle ${difficulty}: ${wordle.eligible(dataset.playersByTier(difficulty)).length} usable names, answer lengths ${[
+      ...lengths,
+    ]
+      .sort((a, b) => a - b)
+      .join(', ')}`,
+  );
+}
 
+{
   // Scoring: duplicates must behave like real Wordle.
   const scores = wordle.scoreGuess('ABBA', 'ABCD').join(',');
   check(scores === 'correct,correct,absent,absent', `wordle: duplicate scoring wrong (${scores})`);

@@ -3,3 +3,4 @@ dist
 .idea
 *.local
 scripts/etl/.cache
+liquipedia_api.py
