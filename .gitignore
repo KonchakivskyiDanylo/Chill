@@ -4,3 +4,4 @@ dist
 *.local
 scripts/etl/.cache
 liquipedia_api.py
+liquipedia_data/
