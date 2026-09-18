@@ -4,3 +4,4 @@ dist
 *.local
 scripts/etl/.cache
 liquipedia_data/
+!liquipedia_data/clean_data/fortnite/players.json
