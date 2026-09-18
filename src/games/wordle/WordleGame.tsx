@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
-import { GameShell } from '@/components/GameShell';
+import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { Link } from 'react-router-dom';
+import { formatDate, GameShell } from '@/components/GameShell';
 import { CountryBadge } from '@/components/CountryBadge';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { Banner } from '@/components/ui';
 import { DifficultyCards, DifficultySwitch, useDifficulty } from '@/components/DifficultyPicker';
-import { DIFFICULTIES, type Difficulty } from '@/games/shared/difficulty';
-import { useDataset } from '@/data/DataProvider';
+import { type Difficulty } from '@/games/shared/difficulty';
+import { EXPORT_DATE, SOURCE, type Roster } from '@/data/liquipedia/roster';
+import { useRoster } from '@/data/liquipedia/useRoster';
 import { playerMoney, plural } from '@/lib/format';
 import { getGame } from '@/games/registry';
 import {
@@ -32,30 +34,38 @@ const KEY_ROWS = [
 ];
 
 /**
- * The three tile colours, shown rather than described.
+ * The rules, shown rather than described.
  *
  * Real handles, so the examples double as a hint about what the answers look
- * like — and MITR0 carries the digit rule, which reads as a footnote in prose
- * and as an obvious fact the moment you see a 0 in a tile.
+ * like. MITR0 carries the digit rule, which reads as a footnote in prose and as
+ * an obvious fact the moment you see a 0 in a tile; ANNAS carries the
+ * repeated-character rule, which is the one that catches people out — nearly
+ * half the answers in the roster repeat a character, so guessing two of
+ * something the name only has one of happens constantly.
+ *
+ * `states` is one entry per tile, `null` for a tile left neutral so the eye
+ * goes to the one being explained.
  */
-const EXAMPLES: { word: string; at: number; state: TileState; note: string }[] = [
+const EXAMPLES: { word: string; states: (TileState | null)[]; note: string }[] = [
   {
     word: 'BUGHA',
-    at: 0,
-    state: 'correct',
+    states: ['correct', null, null, null, null],
     note: 'B is in the player’s name and in the correct spot.',
   },
   {
     word: 'MITR0',
-    at: 4,
-    state: 'present',
+    states: [null, null, null, null, 'present'],
     note: '0 is in the player’s name but in the wrong spot — digits are characters too.',
   },
   {
     word: 'ACORN',
-    at: 1,
-    state: 'absent',
+    states: [null, 'absent', null, null, null],
     note: 'C is not in the player’s name in any spot.',
+  },
+  {
+    word: 'ANNAS',
+    states: [null, 'present', 'absent', null, null],
+    note: 'Two N’s guessed, but the name only has one: the first is yellow, the second greys out. On a repeated character, grey means “no more of these”, not “none at all”.',
   },
 ];
 
@@ -69,14 +79,14 @@ function Examples() {
             style={{ '--cols': example.word.length } as CSSProperties}
             aria-hidden="true"
           >
-            {example.word.split('').map((char, index) => (
-              <div
-                key={index}
-                className={`wordle-tile${index === example.at ? ` wordle-tile--${example.state}` : ''}`}
-              >
-                {char}
-              </div>
-            ))}
+            {example.word.split('').map((char, index) => {
+              const state = example.states[index];
+              return (
+                <div key={index} className={`wordle-tile${state ? ` wordle-tile--${state}` : ''}`}>
+                  {char}
+                </div>
+              );
+            })}
           </div>
           <p className="small muted center">{example.note}</p>
         </div>
@@ -86,7 +96,44 @@ function Examples() {
 }
 
 export default function WordleGame() {
-  const dataset = useDataset();
+  const { roster, error } = useRoster();
+
+  if (error) {
+    return (
+      <div className="card banner banner--danger">
+        <div>
+          <div className="banner__title">Player data unavailable</div>
+          <div className="small">{error}</div>
+        </div>
+      </div>
+    );
+  }
+  if (!roster) return <div className="card center muted">Loading players…</div>;
+  return <Game roster={roster} />;
+}
+
+/** Where the secret players come from, and under what licence. */
+function RosterNote() {
+  return (
+    <p className="tiny faint">
+      Secret players come from{' '}
+      <a href={SOURCE.url} className="link" target="_blank" rel="noreferrer noopener">
+        {SOURCE.name}
+      </a>{' '}
+      (last update {formatDate(EXPORT_DATE)}), reused under{' '}
+      <a href={SOURCE.licenseUrl} className="link" target="_blank" rel="noreferrer noopener">
+        {SOURCE.license}
+      </a>
+      . FNCS titles come from Wikipedia’s “Competitive Fortnite records and statistics”.{' '}
+      <Link to="/credits" className="link">
+        Full attribution
+      </Link>
+      .
+    </p>
+  );
+}
+
+function Game({ roster }: { roster: Roster }) {
   const [difficulty, setDifficulty] = useDifficulty();
   const [game, setGame] = useState<GameState | null>(null);
   const [draft, setDraft] = useState('');
@@ -95,14 +142,9 @@ export default function WordleGame() {
   // A handle only works as an answer at a playable length, so eligibility has to
   // be part of choosing the tier, not a filter applied after it.
   const poolFor = useCallback(
-    (level: Difficulty) => dataset.playersFor(level, { minimum: 1, eligible }),
-    [dataset],
+    (level: Difficulty) => roster.playersFor(level, { minimum: 1, eligible }),
+    [roster],
   );
-
-  const counts = useMemo(() => {
-    const entries = DIFFICULTIES.map((level) => [level, poolFor(level).length] as const);
-    return Object.fromEntries(entries) as Record<Difficulty, number>;
-  }, [poolFor]);
 
   const newGame = useCallback(
     (level: Difficulty) => {
@@ -163,13 +205,12 @@ export default function WordleGame() {
 
   if (!game) {
     return (
-      <GameShell game={meta} examples={<Examples />}>
+      <GameShell game={meta} examples={<Examples />} dataNote={<RosterNote />}>
         <Setup
           difficulty={difficulty}
-          counts={counts}
           onDifficulty={setDifficulty}
           onStart={() => newGame(difficulty)}
-          exhausted={counts[difficulty] === 0}
+          exhausted={poolFor(difficulty).length === 0}
         />
       </GameShell>
     );
@@ -189,6 +230,7 @@ export default function WordleGame() {
     <GameShell
       game={meta}
       examples={<Examples />}
+      dataNote={<RosterNote />}
       toolbar={
         <>
           {finished ? null : <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />}
@@ -239,10 +281,17 @@ export default function WordleGame() {
               <div>
                 <div className="bold">{game.secret.name}</div>
                 <div className="small muted">
-                  <CountryBadge code={game.secret.country} name={game.secret.countryName} />{' '}
-                  {game.secret.countryName}
+                  {game.secret.country ? (
+                    <>
+                      <CountryBadge
+                        code={game.secret.country}
+                        name={game.secret.countryName ?? game.secret.country}
+                      />{' '}
+                    </>
+                  ) : null}
+                  {game.secret.countryName ?? 'Unknown'}
                   {game.secret.team ? ` · ${game.secret.team}` : ''} · {playerMoney(game.secret)} ·{' '}
-                  {game.secret.fncsWins} FNCS
+                  {plural(game.secret.fncsWins, 'FNCS win')}
                 </div>
               </div>
             </div>
@@ -286,13 +335,11 @@ export default function WordleGame() {
  */
 function Setup({
   difficulty,
-  counts,
   onDifficulty,
   onStart,
   exhausted,
 }: {
   difficulty: Difficulty;
-  counts: Record<Difficulty, number>;
   onDifficulty: (value: Difficulty) => void;
   onStart: () => void;
   exhausted: boolean;
@@ -301,7 +348,7 @@ function Setup({
     <div className="stack">
       <section className="card stack">
         <div className="card__title">Pick a difficulty</div>
-        <DifficultyCards value={difficulty} onChange={onDifficulty} counts={counts} />
+        <DifficultyCards value={difficulty} onChange={onDifficulty} />
         <p className="tiny faint">
           This picks how well known the secret player is, not how the guessing works. You can switch level on
           the board too — it deals a new player.
@@ -317,9 +364,7 @@ function Setup({
       <button type="button" className="btn btn--primary btn--lg btn--block" disabled={exhausted} onClick={onStart}>
         Start
       </button>
-      <p className="tiny faint center">
-        6 guesses · {plural(counts[difficulty], 'possible answer')} at this level
-      </p>
+      <p className="tiny faint center">6 guesses</p>
     </div>
   );
 }

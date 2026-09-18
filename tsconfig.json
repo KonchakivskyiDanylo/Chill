@@ -16,7 +16,10 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
-    "paths": { "@/*": ["src/*"] }
+    "paths": {
+      "@/*": ["src/*"],
+      "@data/*": ["liquipedia_data/clean_data/fortnite/*"]
+    }
   },
   "include": ["src", "scripts", "vite.config.ts"]
 }

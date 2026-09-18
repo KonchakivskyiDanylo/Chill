@@ -6,12 +6,30 @@ import type { Player } from '@/data/types';
  * forgiving: case, spaces, punctuation and accents are ignored.
  */
 
+/**
+ * Cyrillic and Greek letters that look exactly like Latin ones.
+ *
+ * Three handles in the roster are spelled with them — `Drobbаn` carries a
+ * Cyrillic а (U+0430), `Crystаal` two, `Dуfs` a Cyrillic у. Without this they
+ * are silently *deleted* by the A-Z0-9 filter below, so Drobban becomes the
+ * six-tile word DROBBN: a Fortnitedle puzzle nobody can type their way out of,
+ * and a name no search will ever find. Folding them to their Latin twins fixes
+ * both, and covers any future ones the source picks up.
+ */
+const HOMOGLYPHS: Record<string, string> = {
+  А: 'A', В: 'B', Е: 'E', К: 'K', М: 'M', Н: 'H', О: 'O', Р: 'P', С: 'C',
+  Т: 'T', У: 'Y', Х: 'X', І: 'I', Ј: 'J', Ѕ: 'S', Α: 'A', Β: 'B', Ε: 'E',
+  Ζ: 'Z', Η: 'H', Ι: 'I', Κ: 'K', Μ: 'M', Ν: 'N', Ο: 'O', Ρ: 'P', Τ: 'T',
+  Υ: 'Y', Χ: 'X',
+};
+
 /** "Th0mas HD!" -> "TH0MASHD" */
 export function normalizeName(input: string): string {
   return input
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toUpperCase()
+    .replace(/[^\x00-\x7F]/g, (char) => HOMOGLYPHS[char] ?? char)
     .replace(/[^A-Z0-9]/g, '');
 }
 

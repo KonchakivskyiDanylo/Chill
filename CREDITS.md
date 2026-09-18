@@ -26,17 +26,14 @@ What was taken:
 
 ### The original work has been modified
 
-`scripts/build_liquipedia_roster.py` turns the export into
-`src/data/liquipedia/roster.json`. In doing so it:
+The export is cleaned and extended before the site reads it. In doing so:
 
-- narrows the rows to people with a competitive record (some prize money), and
-  leaves out players Liquipedia records as having died
-- maps nationality names to ISO 3166-1 alpha-2 country codes
-- replaces team page names with organisation display names
-- collapses tournaments that share a name, keeping the most prestigious
-- derives a **fame ranking** — 70% normalised log career earnings, 30% first
-  places weighted by Liquipedia's tournament tier, tier type and prize pool —
-  and cuts it into Easy / Medium / Hard tiers by rank
+- rows are filtered to people with a competitive record, and players Liquipedia
+  records as having died are marked unusable
+- a **difficulty tier** is derived from career earnings and tournament results
+- **FNCS title counts** are attached per player, matched over from Wikipedia
+- nationality names are mapped to ISO 3166-1 alpha-2 country codes for flags
+- team page names are shown as organisation display names
 
 Ages are computed in the browser from the published birth date, so they are
 correct on the day you play rather than on the day the data was exported.

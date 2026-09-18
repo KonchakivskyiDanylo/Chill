@@ -734,8 +734,10 @@ textarea {
 
 /* ------------------------------------------------------------ difficulty -- */
 
+/* A segmented control that fills its row, so the three levels divide the width
+   evenly instead of huddling at the left end of a stretched pill. */
 .difficulty-switch {
-  display: inline-flex;
+  display: flex;
   padding: 4px;
   gap: 4px;
   border-radius: 999px;
@@ -744,8 +746,10 @@ textarea {
 }
 
 .difficulty-switch__btn {
-  min-height: 36px;
-  padding: 0 14px;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 10px;
   border-radius: 999px;
   border: 1px solid transparent;
   background: transparent;
@@ -755,6 +759,7 @@ textarea {
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
 }
 .difficulty-switch__btn:hover {
@@ -785,17 +790,6 @@ textarea {
   color: var(--danger);
   border-color: rgba(239, 68, 68, 0.4);
   background: var(--danger-soft);
-}
-
-.difficulty-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.difficulty-bar__note {
-  flex: 1 1 220px;
-  margin: 0;
 }
 
 /* ------------------------------------------------------------------ links -- */

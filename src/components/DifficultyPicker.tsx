@@ -6,9 +6,8 @@ import { OptionCard, OptionGrid } from './ui';
 /**
  * The difficulty controls the fame-ranked games share.
  *
- * `DifficultyCards` for games with a setup step, `DifficultyBar` for games that
- * drop you straight onto a board, `DifficultyChip` to show what you picked while
- * playing.
+ * `DifficultyCards` for the setup step, `DifficultySwitch` to change level on
+ * the board, `DifficultyChip` to show what you picked while playing.
  */
 
 /**
@@ -106,27 +105,6 @@ export function DifficultySwitch({
           </button>
         );
       })}
-    </div>
-  );
-}
-
-/**
- * Switch plus an explanation of what the level means, for games that drop you
- * straight onto a board and restart when you change it.
- */
-export function DifficultyBar({
-  value,
-  onChange,
-  note,
-}: {
-  value: Difficulty;
-  onChange: (value: Difficulty) => void;
-  note?: string;
-}) {
-  return (
-    <div className="difficulty-bar">
-      <DifficultySwitch value={value} onChange={onChange} />
-      <p className="tiny faint difficulty-bar__note">{note ?? DIFFICULTY_META[value].blurb}</p>
     </div>
   );
 }

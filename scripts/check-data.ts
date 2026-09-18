@@ -16,7 +16,6 @@ import { loadDataset } from '@/data/repository';
 import { REGION_LABEL } from '@/data/types';
 import { eligible as careerPathEligible } from '@/games/career-path/engine';
 import { eligible as whoAreYaEligible } from '@/games/who-are-ya/engine';
-import { eligible as wordleEligible } from '@/games/wordle/engine';
 
 const problems: string[] = [];
 const notes: string[] = [];
@@ -170,9 +169,7 @@ const whoAreYaPool = whoAreYaEligible(dataset);
 notes.push(`Who Are Ya pool: ${whoAreYaPool.length}`);
 check(whoAreYaPool.length >= 20, 'not enough eligible players for Who Are Ya');
 
-const wordlePool = wordleEligible(players);
-notes.push(`Wordle pool: ${wordlePool.length}`);
-check(wordlePool.length >= 20, 'not enough eligible players for Wordle');
+// Fortnitedle runs on the Liquipedia roster, not this dataset — see check-games.ts.
 
 const fncsWinners = dataset.fncsWinners();
 notes.push(`FNCS winners in the pool: ${fncsWinners.length}`);

@@ -9,9 +9,9 @@
  * rare-but-impossible rather than one that happens to work.
  */
 import { loadDataset } from '@/data/repository';
-import { loadRoster } from '@/data/liquipedia/roster';
+import { EXPORT_DATE, loadRoster } from '@/data/liquipedia/roster';
 import { GAMES, getGame } from '@/games/registry';
-import { matchPlayer } from '@/lib/text';
+import { matchPlayer, normalizeName } from '@/lib/text';
 
 import * as hl from '@/games/higher-lower/engine';
 import * as wordle from '@/games/wordle/engine';
@@ -61,7 +61,7 @@ for (const tier of ['easy', 'medium', 'hard'] as const) {
 // The one game on the Liquipedia roster rather than the shared dataset, so it
 // is driven through its own data here too.
 const roster = await loadRoster();
-notes.push(`roster: ${roster.players.length} Liquipedia players, generated ${roster.generatedAt}`);
+notes.push(`roster: ${roster.players.length} playable Liquipedia players (export ${EXPORT_DATE})`);
 for (const tier of ['easy', 'medium', 'hard'] as const) {
   notes.push(`roster ${tier}: ${roster.playersFor(tier).length} players`);
 }
@@ -133,14 +133,14 @@ for (const category of ['age', 'earnings', 'fncsWins'] as const) {
 for (const difficulty of ['easy', 'medium', 'hard'] as const) {
   const lengths = new Set<number>();
   for (let i = 0; i < 200; i++) {
-    const pool = dataset.playersFor(difficulty, { minimum: 1, eligible: wordle.eligible });
+    const pool = roster.playersFor(difficulty, { minimum: 1, eligible: wordle.eligible });
     const game = wordle.createGame(pool, `w-${difficulty}-${i}`);
     check(game !== null, `wordle: could not create a ${difficulty} game`);
     if (!game) continue;
     lengths.add(game.answer.length);
     check(
-      dataset.tierOf(game.secret) === difficulty,
-      `wordle ${difficulty}: secret ${game.secret.name} is a ${dataset.tierOf(game.secret)} player`,
+      game.secret.tier === difficulty,
+      `wordle ${difficulty}: secret ${game.secret.name} is a ${game.secret.tier} player`,
     );
 
     const solved = wordle.submitGuess(game, game.secret.name.toLowerCase());
@@ -155,7 +155,7 @@ for (const difficulty of ['easy', 'medium', 'hard'] as const) {
     check(!wrongLength.ok, 'wordle: a wrong-length guess was accepted');
   }
   notes.push(
-    `wordle ${difficulty}: ${wordle.eligible(dataset.playersByTier(difficulty)).length} usable names, answer lengths ${[
+    `wordle ${difficulty}: ${wordle.eligible(roster.playersFor(difficulty)).length} usable names, answer lengths ${[
       ...lengths,
     ]
       .sort((a, b) => a - b)
@@ -164,9 +164,57 @@ for (const difficulty of ['easy', 'medium', 'hard'] as const) {
 }
 
 {
-  // Scoring: duplicates must behave like real Wordle.
-  const scores = wordle.scoreGuess('ABBA', 'ABCD').join(',');
-  check(scores === 'correct,correct,absent,absent', `wordle: duplicate scoring wrong (${scores})`);
+  // Scoring, with repeated characters — the rule players get wrong, and the one
+  // a naive implementation gets wrong too. Every expectation below is the
+  // standard two-pass result: exact hits claim their character first, then
+  // misplaced ones take from whatever copies are left, so a guess with more
+  // copies of a character than the answer holds greys out the surplus.
+  const key = (guess: string, answer: string) =>
+    wordle
+      .scoreGuess(guess, answer)
+      .map((s) => (s === 'correct' ? 'G' : s === 'present' ? 'Y' : '.'))
+      .join('');
+
+  const cases: [string, string, string][] = [
+    ['ABBA', 'ABCD', 'GG..'], // two B's, answer has one, and it is already placed
+    ['AAAA', 'AQUA', 'G..G'], // both A's land exactly; the middle pair have none left
+    ['ABAB', 'AQUA', 'G.Y.'], // second A is misplaced but real
+    ['SAAA', 'ANAS', 'YYG.'], // three A's guessed, answer holds two
+    ['AABBB', 'BBAAA', 'YYYY.'], // surplus B greys out, nothing is placed
+    ['LLAMA', 'MALLS', 'YYYY.'], // one A in the answer, two in the guess
+    ['ANNAS', 'ACORN', 'GY...'], // the How-to-play example, exactly as drawn
+    ['XXXX', 'ABCD', '....'], // nothing at all
+    ['ABCD', 'ABCD', 'GGGG'], // everything
+  ];
+  for (const [guess, answer, expected] of cases) {
+    const got = key(guess, answer);
+    check(got === expected, `wordle scoring: ${guess} vs ${answer} gave ${got}, expected ${expected}`);
+  }
+
+  // The keyboard reports the best a character has ever scored, so a later guess
+  // that greys a surplus copy cannot retract a green the player already earned.
+  const board = wordle.createGame(
+    roster.playersFor('easy', { minimum: 1, eligible: wordle.eligible }),
+    'kb',
+  )!;
+  const withGuess = { ...board, answer: 'ANAS', guesses: ['SAAA', 'XXXX'] };
+  const keys = wordle.keyboardState(withGuess);
+  check(keys.get('A') === 'correct', `wordle keyboard: A is "${keys.get('A')}", expected correct`);
+  check(keys.get('S') === 'present', `wordle keyboard: S is "${keys.get('S')}", expected present`);
+  check(keys.get('X') === 'absent', `wordle keyboard: X is "${keys.get('X')}", expected absent`);
+
+  // Answers that are technically guessable and miserable in practice.
+  const answers = wordle
+    .eligible(roster.players)
+    .map((player) => ({ name: player.name, answer: normalizeName(player.name) }));
+  const parenthesised = answers.filter((row) => /[(）)]/.test(row.name));
+  const flat = answers.filter((row) => new Set(row.answer).size < 2);
+  check(parenthesised.length === 0, `wordle: ${parenthesised.length} answer(s) carry a page disambiguator`);
+  check(flat.length === 0, `wordle: ${flat.length} answer(s) have fewer than two distinct characters`);
+  notes.push(
+    `wordle answers: ${answers.length} usable, ` +
+      `${answers.filter((r) => new Set(r.answer).size < r.answer.length).length} contain a repeated character`,
+  );
 }
 
 // ------------------------------------------------------------- 3. Career Path
@@ -479,7 +527,7 @@ for (const mode of ['exact', 'direction'] as const) {
   check(hl.giveUp(hlGone) === hlGone, 'give up higher-lower: a second give up changed the state');
 
   const rounds: [string, { status: string }, (s: never) => { status: string }][] = [
-    ['wordle', wordle.createGame(dataset.playersFor('easy', { minimum: 1, eligible: wordle.eligible }))!, wordle.giveUp as never],
+    ['wordle', wordle.createGame(roster.playersFor('easy', { minimum: 1, eligible: wordle.eligible }))!, wordle.giveUp as never],
     ['career-path', career.createGame(dataset, 'order', 'giveup')!, career.giveUp as never],
     ['who-are-ya', whoAreYa.createGame(dataset, 'easy', 'giveup')!, whoAreYa.giveUp as never],
     ['tenaball', tenaball.createGame(tenaball.buildPuzzle(dataset, 'career-earnings', 'giveup')!, 'hard'), tenaball.giveUp as never],

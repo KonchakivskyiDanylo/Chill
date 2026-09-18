@@ -7,7 +7,7 @@ import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
 import { DifficultyCards, DifficultyChip, useDifficulty } from '@/components/DifficultyPicker';
 import { DIFFICULTIES } from '@/games/shared/difficulty';
 import { useRoster } from '@/data/liquipedia/useRoster';
-import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
+import { EXPORT_DATE, SOURCE, type Roster, type RosterPlayer } from '@/data/liquipedia/roster';
 import { playerMoney, plural } from '@/lib/format';
 import { CountryBadge } from '@/components/CountryBadge';
 import { useBestScore } from '@/lib/storage';
@@ -134,7 +134,7 @@ function Game({ roster }: { roster: Roster }) {
   ) : null;
 
   return (
-    <GameShell game={meta} toolbar={toolbar} dataNote={<RosterNote roster={roster} />}>
+    <GameShell game={meta} toolbar={toolbar} dataNote={<RosterNote />}>
       {!game ? (
         <Setup
           category={category}
@@ -153,15 +153,15 @@ function Game({ roster }: { roster: Roster }) {
 }
 
 /** Where this game's numbers come from, and under what licence. */
-function RosterNote({ roster }: { roster: Roster }) {
-  const { source } = roster;
+function RosterNote() {
+  const source = SOURCE;
   return (
     <p className="tiny faint">
       Player values come from{' '}
       <a href={source.url} className="link" target="_blank" rel="noreferrer noopener">
         {source.name}
       </a>{' '}
-      (last update {formatDate(roster.generatedAt)}), reused under{' '}
+      (last update {formatDate(EXPORT_DATE)}), reused under{' '}
       <a href={source.licenseUrl} className="link" target="_blank" rel="noreferrer noopener">
         {source.license}
       </a>

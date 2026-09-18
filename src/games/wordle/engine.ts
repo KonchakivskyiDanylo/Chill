@@ -1,4 +1,4 @@
-import type { Player } from '@/data/types';
+import type { RosterPlayer } from '@/data/liquipedia/roster';
 import { makeRng } from '@/lib/rng';
 import { normalizeName } from '@/lib/text';
 
@@ -8,22 +8,38 @@ export type TileState = 'correct' | 'present' | 'absent';
 export const MAX_GUESSES = 6;
 
 export interface GameState {
-  secret: Player;
+  secret: RosterPlayer;
   /** The secret reduced to A-Z0-9 — what the player actually types. */
   answer: string;
   guesses: string[];
   status: 'playing' | 'won' | 'lost';
 }
 
-/** Players whose handle makes a fair puzzle once spaces are stripped. */
-export function eligible(players: readonly Player[]): Player[] {
+/**
+ * Players whose handle makes a fair puzzle once punctuation is stripped.
+ *
+ * Length is the obvious rule; the other two are answers that are technically
+ * guessable and miserable in practice:
+ *
+ *   - a parenthetical is Liquipedia page bookkeeping, not part of a handle, and
+ *     it leaks straight into the answer — "Nate (NA player)" becomes the
+ *     twelve-tile word NATENAPLAYER, which no one can be expected to reach.
+ *   - one distinct character means the grid gives nothing back. "666" scores
+ *     every tile green or every tile grey and the round is a coin flip.
+ */
+export function eligible(players: readonly RosterPlayer[]): RosterPlayer[] {
   return players.filter((player) => {
+    if (/[(）)]/.test(player.name)) return false;
     const key = normalizeName(player.name);
-    return key.length >= 3 && key.length <= 12;
+    if (key.length < 3 || key.length > 12) return false;
+    return new Set(key).size >= 2;
   });
 }
 
-export function createGame(players: readonly Player[], seed: string = String(Date.now())): GameState | null {
+export function createGame(
+  players: readonly RosterPlayer[],
+  seed: string = String(Date.now()),
+): GameState | null {
   const pool = eligible(players);
   if (pool.length === 0) return null;
   const rng = makeRng(seed);
@@ -65,11 +81,20 @@ export function submitGuess(state: GameState, rawGuess: string): SubmitResult {
   if (state.status !== 'playing') return { ok: false, reason: 'This round is already over.' };
 
   const guess = normalizeName(rawGuess);
-  if (guess.length !== state.answer.length) {
-    return { ok: false, reason: `Needs to be ${state.answer.length} characters.` };
+  if (guess.length === 0) {
+    return { ok: false, reason: `Type ${state.answer.length} characters first.` };
+  }
+  // Say what is wrong and by how much, rather than restating the rule: a player
+  // two letters short should not have to count the tiles to find that out.
+  if (guess.length < state.answer.length) {
+    const missing = state.answer.length - guess.length;
+    return { ok: false, reason: `${missing} more character${missing === 1 ? '' : 's'} needed.` };
+  }
+  if (guess.length > state.answer.length) {
+    return { ok: false, reason: `Too long — the name is ${state.answer.length} characters.` };
   }
   if (state.guesses.includes(guess)) {
-    return { ok: false, reason: 'You already tried that.' };
+    return { ok: false, reason: `You already tried ${guess}.` };
   }
 
   const guesses = [...state.guesses, guess];
@@ -84,12 +109,19 @@ export function submitGuess(state: GameState, rawGuess: string): SubmitResult {
   };
 }
 
-/** Best-known state per character, for colouring the on-screen keyboard. */
 /** Ends the round unsolved, so the answer can be revealed. */
 export function giveUp(state: GameState): GameState {
   return state.status === 'playing' ? { ...state, status: 'lost' } : state;
 }
 
+/**
+ * Best-known state per character, for colouring the on-screen keyboard.
+ *
+ * Best, not latest: a character green in one guess stays green even if a later
+ * guess puts a second copy of it somewhere the answer does not have one. That
+ * second copy is grey on the grid — correctly, there is only one — but greying
+ * the key would retract information the player has already earned.
+ */
 export function keyboardState(state: GameState): Map<string, TileState> {
   const best = new Map<string, TileState>();
   const rank: Record<TileState, number> = { absent: 0, present: 1, correct: 2 };

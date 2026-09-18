@@ -9,7 +9,7 @@ There are two datasets. This document is mostly about the first one.
 | Dataset | Rows | Read by |
 | --- | --- | --- |
 | `src/data/fortnite/` — the Wikipedia import | 316 players with full career histories | Nine games, through `Dataset` |
-| `src/data/liquipedia/roster.json` — the Liquipedia dump | 5,678 players, no per-event rows | Higher or Lower, through `Roster` |
+| `liquipedia_data/.../players.json` — the Liquipedia export | 5,700 players, no per-event rows | Higher or Lower and Fortnitedle, through `Roster` |
 
 See [The Liquipedia roster](#the-liquipedia-roster) at the end for the second
 one. Licensing for both is in [CREDITS.md](CREDITS.md) and
@@ -201,13 +201,21 @@ Connections groups and ten-slot Tenaball boards from whatever the data now says.
 
 ## The Liquipedia roster
 
-Higher or Lower runs on a separate, much larger dataset:
-`src/data/liquipedia/roster.json`, built by
-`scripts/build_liquipedia_roster.py` (`npm run data:roster`).
+Higher or Lower and Fortnitedle run on a separate, much larger dataset:
+`liquipedia_data/clean_data/fortnite/players.json`, read **in place** through
+the `@data` alias. There is no build step and no derived copy — edit that file
+and reload.
 
-```bash
-npm run data:roster    # liquipedia_data/clean_data/ -> src/data/liquipedia/roster.json
-```
+Two columns in it are maintained upstream, by the notebook that owns the data:
+
+| column | values | meaning |
+| --- | --- | --- |
+| `tier` | `easy` / `medium` / `hard` / `unused` | difficulty band; `unused` rows are dropped when the roster loads and never reach a game |
+| `fncs_wins` | integer ≥ 0 | FNCS grand finals won, matched over from the Wikipedia import |
+
+`tier` is opaque to the app. Nothing recomputes it and there is no fallback
+ranking, so changing how it is calculated changes every game at once and
+requires no code change.
 
 ### Why it is separate
 
@@ -239,8 +247,9 @@ liquipedia_data/clean_data/fortnite/
   transfers.json     40,119 roster moves (not used yet)
 ```
 
-`liquipedia_data/` is gitignored, so `roster.json` is committed and the site
-builds without it.
+`liquipedia_data/` is gitignored **except** `players.json`, which is committed
+so the site builds anywhere. It is 3.7 MB, 310 KB gzipped. `placements.json` at
+154 MB stays ignored.
 
 ### What the build does
 
