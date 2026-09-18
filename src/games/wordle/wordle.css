@@ -99,3 +99,20 @@
     gap: 4px;
   }
 }
+
+/* Worked examples in "How to play" — the same tiles as the board, smaller. */
+.wordle-example {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.wordle-example + .wordle-example {
+  margin-top: 6px;
+}
+.wordle-grid--example {
+  width: min(100%, calc(var(--cols) * 46px));
+  gap: 4px;
+}
+.wordle-grid--example .wordle-tile {
+  font-size: clamp(0.72rem, 3.2vw, 1.05rem);
+}

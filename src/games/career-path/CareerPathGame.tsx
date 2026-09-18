@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { GameShell } from '@/components/GameShell';
+import { GiveUpButton } from '@/components/GiveUpButton';
 import { CountryBadge } from '@/components/CountryBadge';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { PlayerSearch } from '@/components/PlayerSearch';
@@ -8,7 +9,7 @@ import { useDataset } from '@/data/DataProvider';
 import type { Player } from '@/data/types';
 import { money, ordinal, playerMoney } from '@/lib/format';
 import { getGame } from '@/games/registry';
-import { cluesLeft, createGame, revealNext, submitGuess, type GameState, type Mode } from './engine';
+import { cluesLeft, createGame, giveUp, revealNext, submitGuess, type GameState, type Mode } from './engine';
 import './career-path.css';
 
 const meta = getGame('career-path')!;
@@ -75,9 +76,14 @@ export default function CareerPathGame() {
     <GameShell
       game={meta}
       toolbar={
-        <button type="button" className="icon-btn" onClick={() => start(game.mode)}>
-          ↺ New player
-        </button>
+        <>
+          {game.status === 'playing' ? (
+            <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />
+          ) : null}
+          <button type="button" className="icon-btn" onClick={() => start(game.mode)}>
+            ↺ New player
+          </button>
+        </>
       }
     >
       <div className="stack">

@@ -1,5 +1,5 @@
 {
-  "name": "fnpuzzle",
+  "name": "offspawn",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -12,7 +12,8 @@
     "check:games": "tsx scripts/check-games.ts",
     "audit": "tsx scripts/audit-roster.ts",
     "etl:fetch": "tsx scripts/etl/fetch-sources.ts",
-    "etl:build": "tsx scripts/etl/build-dataset.ts"
+    "etl:build": "tsx scripts/etl/build-dataset.ts",
+    "data:roster": "python scripts/build_liquipedia_roster.py"
   },
   "dependencies": {
     "react": "^18.3.1",

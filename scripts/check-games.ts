@@ -9,6 +9,8 @@
  * rare-but-impossible rather than one that happens to work.
  */
 import { loadDataset } from '@/data/repository';
+import { loadRoster } from '@/data/liquipedia/roster';
+import { GAMES, getGame } from '@/games/registry';
 import { matchPlayer } from '@/lib/text';
 
 import * as hl from '@/games/higher-lower/engine';
@@ -31,6 +33,16 @@ function check(condition: boolean, message: string): void {
 
 const dataset = await loadDataset();
 
+// ------------------------------------------------------------ 0. the registry
+// Games look themselves up with `getGame('<id>')` while the router looks them
+// up by slug, and a rename moves the slug away from the id. If either lookup
+// misses, `meta` is undefined and the game crashes on its first render — so
+// check both resolve to the same entry.
+for (const game of GAMES) {
+  check(getGame(game.slug) === game, `registry: getGame('${game.slug}') did not find ${game.title}`);
+  check(getGame(game.id) === game, `registry: getGame('${game.id}') did not find ${game.title}`);
+}
+
 // --------------------------------------------------- 0. the fame ranking
 // Every difficulty mode reads from this. If the JSON ever fails to load, the
 // Dataset quietly falls back to a derived ranking and the modes keep "working"
@@ -46,10 +58,18 @@ for (const tier of ['easy', 'medium', 'hard'] as const) {
 }
 
 // ------------------------------------------------------- 1. Higher or Lower
-for (const category of ['age', 'earnings'] as const) {
+// The one game on the Liquipedia roster rather than the shared dataset, so it
+// is driven through its own data here too.
+const roster = await loadRoster();
+notes.push(`roster: ${roster.players.length} Liquipedia players, generated ${roster.generatedAt}`);
+for (const tier of ['easy', 'medium', 'hard'] as const) {
+  notes.push(`roster ${tier}: ${roster.playersFor(tier).length} players`);
+}
+
+for (const category of ['age', 'earnings', 'fncsWins'] as const) {
   for (const difficulty of ['easy', 'medium', 'hard'] as const) {
     // Built exactly as the game builds it, eligibility rule included.
-    const pool = dataset.playersFor(difficulty, {
+    const pool = roster.playersFor(difficulty, {
       minimum: 2,
       eligible: (players) => hl.eligible(players, category),
     });
@@ -57,17 +77,29 @@ for (const category of ['age', 'earnings'] as const) {
     check(state !== null, `higher-lower: could not start ${category}/${difficulty}`);
     if (!state) continue;
 
-    // Widening into a neighbouring tier is a legitimate last resort, but on this
-    // dataset no tier is small enough to need it — so it should never happen.
-    const offTier = pool.filter((player) => dataset.tierOf(player) !== difficulty);
-    check(
-      offTier.length === 0,
-      `higher-lower ${category}/${difficulty}: widened into another tier for ${offTier.length} player(s)`,
-    );
+    // Widening into a neighbouring tier is a legitimate last resort. Age and
+    // earnings never need it. FNCS Wins does: exactly one player outside the
+    // top 20% of the ranking holds a title, so Hard has to borrow from Medium
+    // or the category cannot be dealt at all.
+    const offTier = pool.filter((player) => player.tier !== difficulty);
+    if (category === 'fncsWins') {
+      notes.push(
+        `higher-lower fncsWins/${difficulty}: ${pool.length} in the pool` +
+          (offTier.length ? `, ${offTier.length} borrowed from another tier` : ''),
+      );
+    } else {
+      check(
+        offTier.length === 0,
+        `higher-lower ${category}/${difficulty}: widened into another tier for ${offTier.length} player(s)`,
+      );
+    }
 
     let rounds = 0;
     const seen: string[] = [];
-    while (state.status !== 'cleared' && rounds < 500) {
+    // One round per player, plus slack — the loop has to be able to reach a
+    // full clear of a 4,500-player Hard pool, or the clear check is meaningless.
+    const maxRounds = pool.length + 5;
+    while (state.status !== 'cleared' && rounds < maxRounds) {
       rounds++;
       seen.push(state.challenger.id);
       // Without the Equal button a tie is answered either way.
@@ -427,6 +459,43 @@ for (const mode of ['exact', 'direction'] as const) {
       check(age.direction === undefined, 'guess-the-player: exact mode leaked a direction arrow on age');
     }
   }
+}
+
+// ------------------------------------------------------------ 11. Giving up
+// Every game has a give-up button, and every one of them must end the round
+// from a mid-round state and then stay ended — a `giveUp` that left the status
+// on 'playing' would render a board you cannot escape, and one that fired twice
+// could resurrect a finished round.
+{
+  const ended = (status: string) => status !== 'playing';
+
+  const hlPool = roster.playersFor('easy', {
+    minimum: 2,
+    eligible: (players) => hl.eligible(players, 'age'),
+  });
+  const hlGame = hl.createGame(hlPool, 'age', 'easy', 'giveup')!;
+  const hlGone = hl.giveUp(hlGame);
+  check(hlGone.status === 'gameover', `give up higher-lower: status is "${hlGone.status}"`);
+  check(hl.giveUp(hlGone) === hlGone, 'give up higher-lower: a second give up changed the state');
+
+  const rounds: [string, { status: string }, (s: never) => { status: string }][] = [
+    ['wordle', wordle.createGame(dataset.playersFor('easy', { minimum: 1, eligible: wordle.eligible }))!, wordle.giveUp as never],
+    ['career-path', career.createGame(dataset, 'order', 'giveup')!, career.giveUp as never],
+    ['who-are-ya', whoAreYa.createGame(dataset, 'easy', 'giveup')!, whoAreYa.giveUp as never],
+    ['tenaball', tenaball.createGame(tenaball.buildPuzzle(dataset, 'career-earnings', 'giveup')!, 'hard'), tenaball.giveUp as never],
+    ['impostor', impostor.createGame(impostor.createRound(dataset, 'giveup')!, 'all-at-once'), impostor.giveUp as never],
+    ['tic-tac-toe', ttt.createGame(ttt.generateBoard(dataset, 'giveup')!), ttt.giveUp as never],
+    ['connections', connections.createGame(connections.generatePuzzle(dataset, 'giveup')!), connections.giveUp as never],
+    ['guess-the-player', gtp.createGame(dataset.players, 'exact', 'giveup')!, gtp.giveUp as never],
+  ];
+
+  for (const [name, game, surrender] of rounds) {
+    check(!ended(game.status), `give up ${name}: the fixture was already over before giving up`);
+    const gone = surrender(game as never);
+    check(gone.status === 'lost', `give up ${name}: status is "${gone.status}", expected "lost"`);
+    check(surrender(gone as never) === gone, `give up ${name}: a second give up changed the state`);
+  }
+  notes.push(`give up: ${rounds.length + 1} engines end the round and stay ended`);
 }
 
 // ------------------------------------------------------------------- report --

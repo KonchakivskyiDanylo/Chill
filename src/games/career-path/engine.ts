@@ -77,6 +77,12 @@ export function revealNext(state: GameState): GameState {
   return { ...state, revealed: state.revealed + 1 };
 }
 
+/** Ends the round unsolved, with every remaining clue turned face up. */
+export function giveUp(state: GameState): GameState {
+  if (state.status !== 'playing') return state;
+  return { ...state, revealed: state.clues.length, status: 'lost' };
+}
+
 export function cluesLeft(state: GameState): number {
   return state.clues.length - state.revealed;
 }

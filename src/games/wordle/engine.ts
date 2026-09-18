@@ -85,6 +85,11 @@ export function submitGuess(state: GameState, rawGuess: string): SubmitResult {
 }
 
 /** Best-known state per character, for colouring the on-screen keyboard. */
+/** Ends the round unsolved, so the answer can be revealed. */
+export function giveUp(state: GameState): GameState {
+  return state.status === 'playing' ? { ...state, status: 'lost' } : state;
+}
+
 export function keyboardState(state: GameState): Map<string, TileState> {
   const best = new Map<string, TileState>();
   const rank: Record<TileState, number> = { absent: 0, present: 1, correct: 2 };

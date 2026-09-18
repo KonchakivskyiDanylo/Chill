@@ -1,22 +1,24 @@
-import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { GameShell } from '@/components/GameShell';
 import { CountryBadge } from '@/components/CountryBadge';
+import { GiveUpButton } from '@/components/GiveUpButton';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
-import { Banner, Stat } from '@/components/ui';
-import { DifficultyBar, useDifficulty } from '@/components/DifficultyPicker';
-import type { Difficulty } from '@/games/shared/difficulty';
+import { Banner } from '@/components/ui';
+import { DifficultyCards, DifficultySwitch, useDifficulty } from '@/components/DifficultyPicker';
+import { DIFFICULTIES, type Difficulty } from '@/games/shared/difficulty';
 import { useDataset } from '@/data/DataProvider';
-import { playerMoney } from '@/lib/format';
-import { useLocalState } from '@/lib/storage';
+import { playerMoney, plural } from '@/lib/format';
 import { getGame } from '@/games/registry';
 import {
   createGame,
   eligible,
+  giveUp,
   keyboardState,
   MAX_GUESSES,
   scoreGuess,
   submitGuess,
   type GameState,
+  type TileState,
 } from './engine';
 import './wordle.css';
 
@@ -29,32 +31,78 @@ const KEY_ROWS = [
   ['ENTER', ...'ZXCVBNM'.split(''), 'DEL'],
 ];
 
-/** Played / won per difficulty, in one key so switching level keeps both. */
-type Tallies = Partial<Record<Difficulty, { played: number; won: number }>>;
-
 /**
- * Its own key, not the old `wordle:record`.
+ * The three tile colours, shown rather than described.
  *
- * That one held a single `{ played, won }` from before difficulty existed.
- * Reading it back as a per-level record would leave those two numbers stranded
- * as junk keys in every returning player's storage forever.
+ * Real handles, so the examples double as a hint about what the answers look
+ * like — and MITR0 carries the digit rule, which reads as a footnote in prose
+ * and as an obvious fact the moment you see a 0 in a tile.
  */
-const RECORD_KEY = 'wordle:record-by-difficulty';
+const EXAMPLES: { word: string; at: number; state: TileState; note: string }[] = [
+  {
+    word: 'BUGHA',
+    at: 0,
+    state: 'correct',
+    note: 'B is in the player’s name and in the correct spot.',
+  },
+  {
+    word: 'MITR0',
+    at: 4,
+    state: 'present',
+    note: '0 is in the player’s name but in the wrong spot — digits are characters too.',
+  },
+  {
+    word: 'ACORN',
+    at: 1,
+    state: 'absent',
+    note: 'C is not in the player’s name in any spot.',
+  },
+];
+
+function Examples() {
+  return (
+    <div className="stack-sm">
+      {EXAMPLES.map((example) => (
+        <div key={example.word} className="wordle-example">
+          <div
+            className="wordle-grid wordle-grid--example"
+            style={{ '--cols': example.word.length } as CSSProperties}
+            aria-hidden="true"
+          >
+            {example.word.split('').map((char, index) => (
+              <div
+                key={index}
+                className={`wordle-tile${index === example.at ? ` wordle-tile--${example.state}` : ''}`}
+              >
+                {char}
+              </div>
+            ))}
+          </div>
+          <p className="small muted center">{example.note}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function WordleGame() {
   const dataset = useDataset();
   const [difficulty, setDifficulty] = useDifficulty();
+  const [game, setGame] = useState<GameState | null>(null);
+  const [draft, setDraft] = useState('');
+  const [message, setMessage] = useState<string | null>(null);
+
   // A handle only works as an answer at a playable length, so eligibility has to
   // be part of choosing the tier, not a filter applied after it.
   const poolFor = useCallback(
     (level: Difficulty) => dataset.playersFor(level, { minimum: 1, eligible }),
     [dataset],
   );
-  const [game, setGame] = useState<GameState | null>(() => createGame(poolFor(difficulty)));
-  const [draft, setDraft] = useState('');
-  const [message, setMessage] = useState<string | null>(null);
-  const [record, setRecord] = useLocalState<Tallies>(RECORD_KEY, {});
-  const tally = record[difficulty] ?? { played: 0, won: 0 };
+
+  const counts = useMemo(() => {
+    const entries = DIFFICULTIES.map((level) => [level, poolFor(level).length] as const);
+    return Object.fromEntries(entries) as Record<Difficulty, number>;
+  }, [poolFor]);
 
   const newGame = useCallback(
     (level: Difficulty) => {
@@ -80,16 +128,7 @@ export default function WordleGame() {
     setMessage(null);
     setDraft('');
     setGame(result.state);
-    if (result.state.status !== 'playing') {
-      setRecord({
-        ...record,
-        [difficulty]: {
-          played: tally.played + 1,
-          won: tally.won + (result.state.status === 'won' ? 1 : 0),
-        },
-      });
-    }
-  }, [game, draft, record, setRecord, difficulty, tally]);
+  }, [game, draft]);
 
   const press = useCallback(
     (key: string) => {
@@ -124,13 +163,14 @@ export default function WordleGame() {
 
   if (!game) {
     return (
-      <GameShell game={meta}>
-        <div className="stack">
-          <DifficultyBar value={difficulty} onChange={changeDifficulty} />
-          <Banner tone="danger" title="No puzzle available">
-            No player at this difficulty has a usable name for this game.
-          </Banner>
-        </div>
+      <GameShell game={meta} examples={<Examples />}>
+        <Setup
+          difficulty={difficulty}
+          counts={counts}
+          onDifficulty={setDifficulty}
+          onStart={() => newGame(difficulty)}
+          exhausted={counts[difficulty] === 0}
+        />
       </GameShell>
     );
   }
@@ -148,28 +188,20 @@ export default function WordleGame() {
   return (
     <GameShell
       game={meta}
+      examples={<Examples />}
       toolbar={
-        <button type="button" className="icon-btn" onClick={() => newGame(difficulty)}>
-          ↺ New game
-        </button>
+        <>
+          {finished ? null : <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />}
+          <button type="button" className="icon-btn" onClick={() => setGame(null)}>
+            ↺ Change level
+          </button>
+        </>
       }
     >
       <div className="stack">
-        <div className="stats">
-          <Stat label="Length" value={game.answer.length} />
-          <Stat label="Guess" value={`${Math.min(game.guesses.length + (finished ? 0 : 1), MAX_GUESSES)}/${MAX_GUESSES}`} />
-          <Stat label="Solved" value={`${tally.won}/${tally.played}`} />
-        </div>
-
-        <DifficultyBar
-          value={difficulty}
-          onChange={changeDifficulty}
-          note="Changes who the secret player can be — and starts a new game."
-        />
-
-        <p className="center muted small">
-          The answer is <strong>{game.answer.length}</strong> characters — letters and digits, no spaces.
-        </p>
+        {/* Where a length / guess / solved readout used to be. The grid already
+            shows both of those; the level is the one thing it cannot show. */}
+        <DifficultySwitch value={difficulty} onChange={changeDifficulty} />
 
         <div
           className="wordle-grid"
@@ -196,7 +228,10 @@ export default function WordleGame() {
 
         {finished ? (
           <div className="stack">
-            <Banner tone={game.status === 'won' ? 'success' : 'danger'} title={game.status === 'won' ? 'Solved!' : 'Out of guesses'}>
+            <Banner
+              tone={game.status === 'won' ? 'success' : 'danger'}
+              title={game.status === 'won' ? 'Solved!' : 'Round over'}
+            >
               The player was <strong>{game.secret.name}</strong>.
             </Banner>
             <div className="card row" style={{ gap: 14 }}>
@@ -241,5 +276,50 @@ export default function WordleGame() {
         )}
       </div>
     </GameShell>
+  );
+}
+
+/**
+ * Difficulty as a first step rather than a control on the board, so the level
+ * is a decision you make before meeting a secret player — the same shape as
+ * picking a category in Higher or Lower and Tenaball.
+ */
+function Setup({
+  difficulty,
+  counts,
+  onDifficulty,
+  onStart,
+  exhausted,
+}: {
+  difficulty: Difficulty;
+  counts: Record<Difficulty, number>;
+  onDifficulty: (value: Difficulty) => void;
+  onStart: () => void;
+  exhausted: boolean;
+}) {
+  return (
+    <div className="stack">
+      <section className="card stack">
+        <div className="card__title">Pick a difficulty</div>
+        <DifficultyCards value={difficulty} onChange={onDifficulty} counts={counts} />
+        <p className="tiny faint">
+          This picks how well known the secret player is, not how the guessing works. You can switch level on
+          the board too — it deals a new player.
+        </p>
+      </section>
+
+      {exhausted ? (
+        <Banner tone="danger" title="No puzzle available">
+          No player at this difficulty has a name this game can use.
+        </Banner>
+      ) : null}
+
+      <button type="button" className="btn btn--primary btn--lg btn--block" disabled={exhausted} onClick={onStart}>
+        Start
+      </button>
+      <p className="tiny faint center">
+        6 guesses · {plural(counts[difficulty], 'possible answer')} at this level
+      </p>
+    </div>
   );
 }

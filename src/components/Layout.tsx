@@ -1,8 +1,29 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useLocalState } from '@/lib/storage';
+import { Footer } from './Footer';
 
 type Theme = 'dark' | 'light';
+
+/**
+ * The crown. Drop your own file at `public/logo.png` (any crop works — it is
+ * rendered with `object-fit: contain`) and it shows up here and as the favicon.
+ * Until then the wordmark stands on its own rather than showing a broken image.
+ */
+function BrandMark() {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <span className="brand__mark" aria-hidden="true">OS</span>;
+  return (
+    <img
+      src="/logo.jpg"
+      alt=""
+      className="brand__logo"
+      width={34}
+      height={34}
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 export function Layout({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useLocalState<Theme>('theme', 'dark');
@@ -16,10 +37,10 @@ export function Layout({ children }: { children: ReactNode }) {
       <header className="site-header">
         <div className="site-header__inner">
           <Link to="/" className="brand">
-            <span className="brand__mark" aria-hidden="true">
-              FN
+            <BrandMark />
+            <span>
+              Off<span className="brand__accent">Spawn</span>
             </span>
-            <span>ChillFN</span>
           </Link>
           <span className="chip chip--primary tiny" style={{ marginLeft: 2 }}>
             Prototype
@@ -37,6 +58,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
       </header>
       {children}
+      <Footer />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GameShell } from '@/components/GameShell';
+import { GiveUpButton } from '@/components/GiveUpButton';
 import { GuessInput } from '@/components/GuessInput';
 import { Banner, OptionCard, OptionGrid, PlayerLine, Stat } from '@/components/ui';
 import { useDataset } from '@/data/DataProvider';
@@ -30,6 +31,8 @@ export default function ListGame() {
   );
   const [running, setRunning] = useState(false);
   const [finished, setFinished] = useState(false);
+  /** Ended by the give-up button rather than by the clock. */
+  const [gaveUp, setGaveUp] = useState(false);
   const [found, setFound] = useState<Player[]>([]);
   const [timeLeft, setTimeLeft] = useState(START_SECONDS);
   const [feedback, setFeedback] = useState<{ tone: string; message: string } | null>(null);
@@ -64,6 +67,7 @@ export default function ListGame() {
     setFound([]);
     setFeedback(null);
     setFinished(false);
+    setGaveUp(false);
     setTimeLeft(START_SECONDS);
     deadlineRef.current = Date.now() + START_SECONDS * 1000;
     setRunning(true);
@@ -73,6 +77,7 @@ export default function ListGame() {
     setCriterion(drawCriterion(criteria, makeRng(String(Date.now())), criterion?.id));
     setFound([]);
     setFinished(false);
+    setGaveUp(false);
     setFeedback(null);
     setTimeLeft(START_SECONDS);
   };
@@ -136,11 +141,24 @@ export default function ListGame() {
     <GameShell
       game={meta}
       toolbar={
-        idle || finished ? (
-          <button type="button" className="icon-btn" onClick={shuffleCriterion}>
-            ↺ New criterion
-          </button>
-        ) : null
+        <>
+          {running ? (
+            <GiveUpButton
+              onGiveUp={() => {
+                setRunning(false);
+                setFinished(true);
+                setGaveUp(true);
+                setTimeLeft(0);
+                setFeedback(null);
+              }}
+            />
+          ) : null}
+          {idle || finished ? (
+            <button type="button" className="icon-btn" onClick={shuffleCriterion}>
+              ↺ New criterion
+            </button>
+          ) : null}
+        </>
       }
     >
       <div className="stack">
@@ -220,7 +238,7 @@ export default function ListGame() {
               title={
                 found.length >= criterion.answers.length
                   ? `Perfect — all ${criterion.answers.length}!`
-                  : `Time! ${found.length} of ${criterion.answers.length}`
+                  : `${gaveUp ? 'Gave up' : 'Time!'} ${found.length} of ${criterion.answers.length}`
               }
             >
               {missed.length > 0 ? `You missed ${missed.length}.` : 'You named every single one.'}

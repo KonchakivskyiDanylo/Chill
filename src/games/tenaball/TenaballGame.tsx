@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { GameShell } from '@/components/GameShell';
+import { GiveUpButton } from '@/components/GiveUpButton';
 import { GuessInput } from '@/components/GuessInput';
 import { Banner, OptionCard, OptionGrid, PlayerLine, Stat } from '@/components/ui';
 import { useDataset } from '@/data/DataProvider';
@@ -10,6 +11,7 @@ import {
   buildPuzzle,
   availableCategories,
   createGame,
+  giveUp,
   HARD_LIVES,
   type CategoryId,
   type Difficulty,
@@ -27,12 +29,35 @@ function outcomeMessage(outcome: GuessOutcome, text: string): { tone: string; me
     case 'duplicate':
       return { tone: 'var(--warning)', message: `Already found at #${outcome.rank}.` };
     case 'tied':
-      return { tone: 'var(--warning)', message: `Level with 10th, but the tie rule leaves them off the board.` };
+      return {
+        tone: 'var(--warning)',
+        message: 'Level with 10th, but the tie rule puts them outside the ten — no penalty, try another name.',
+      };
     case 'unknown':
       return { tone: 'var(--text-muted)', message: `No player called “${text}” in the dataset.` };
     default:
       return { tone: 'var(--danger)', message: `${text} is not in this top 10.` };
   }
+}
+
+/**
+ * How this board resolves ties, stated on the board itself.
+ *
+ * Every category ranks on a number that players can be level on, and the answer
+ * to "is my guess wrong, or just unlucky?" changes per category — so it is a
+ * labelled line you read before guessing, not a faint footnote you find
+ * afterwards. Guessing someone level with 10th costs nothing, and that is worth
+ * knowing in advance on Hard, where a wrong name costs a life.
+ */
+function TieRule({ rule }: { rule: string }) {
+  return (
+    <p className="tb-tie small">
+      <span className="tb-tie__label">Ties</span>
+      <span className="muted">
+        {rule} A player level with 10th is a near miss, not a mistake, and never costs a life.
+      </span>
+    </p>
+  );
 }
 
 export default function TenaballGame() {
@@ -126,16 +151,26 @@ export default function TenaballGame() {
     <GameShell
       game={meta}
       toolbar={
-        <button
-          type="button"
-          className="icon-btn"
-          onClick={() => {
-            setGame(null);
-            setFeedback(null);
-          }}
-        >
-          ↺ Change category
-        </button>
+        <>
+          {game.status === 'playing' ? (
+            <GiveUpButton
+              onGiveUp={() => {
+                setFeedback(null);
+                setGame(giveUp(game));
+              }}
+            />
+          ) : null}
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => {
+              setGame(null);
+              setFeedback(null);
+            }}
+          >
+            ↺ Change category
+          </button>
+        </>
       }
     >
       <div className="stack">
@@ -147,7 +182,7 @@ export default function TenaballGame() {
 
         <section className="card stack">
           <h2>{puzzle.title}</h2>
-          <p className="tiny faint">{puzzle.tieRule}</p>
+          <TieRule rule={puzzle.tieRule} />
 
           <ol className="tb-slots list-reset">
             {puzzle.slots.map((slot) => {
@@ -179,7 +214,13 @@ export default function TenaballGame() {
           <div className="stack">
             <Banner
               tone={game.status === 'won' ? 'success' : 'danger'}
-              title={game.status === 'won' ? 'All ten found!' : 'Out of lives'}
+              title={
+                game.status === 'won'
+                  ? 'All ten found!'
+                  : game.difficulty === 'hard' && game.lives <= 0
+                    ? 'Out of lives'
+                    : 'Board revealed'
+              }
             >
               {game.status === 'won'
                 ? `Completed with ${game.wrong.length} wrong ${game.wrong.length === 1 ? 'guess' : 'guesses'}.`

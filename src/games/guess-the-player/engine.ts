@@ -123,6 +123,11 @@ export function submitGuess(state: GameState, guess: Player): GameState {
   };
 }
 
+/** Ends the round unsolved, so the secret player can be revealed. */
+export function giveUp(state: GameState): GameState {
+  return state.status === 'playing' ? { ...state, status: 'lost' } : state;
+}
+
 export function guessesLeft(state: GameState): number {
   return MAX_GUESSES - state.rows.length;
 }

@@ -1,10 +1,10 @@
-import type { Player } from '@/data/types';
+import type { RosterPlayer } from '@/data/liquipedia/roster';
 import type { Difficulty } from '@/games/shared/difficulty';
 import { makeRng, shuffle } from '@/lib/rng';
 
 /** Pure game logic for Higher or Lower — no React, no DOM. */
 
-export type Category = 'age' | 'earnings';
+export type Category = 'age' | 'earnings' | 'fncsWins';
 export type Answer = 'higher' | 'lower' | 'equal';
 
 export type { Difficulty };
@@ -35,28 +35,39 @@ export const CATEGORIES: CategoryMeta[] = [
     hint: 'Total prize money won across their career.',
     title: 'Career Earnings',
   },
+  {
+    id: 'fncsWins',
+    label: 'FNCS Wins',
+    hint: 'Grand finals won across every FNCS season and region.',
+    title: 'FNCS Wins',
+  },
 ];
 
-export function valueOf(player: Player, category: Category): number {
-  return category === 'age' ? (player.age ?? 0) : player.earnings;
+export function valueOf(player: RosterPlayer, category: Category): number {
+  if (category === 'age') return player.age ?? 0;
+  if (category === 'fncsWins') return player.fncsWins;
+  return player.earnings;
 }
 
 /** Players usable for a category — guards against missing data (e.g. no birth date). */
-export function eligible(players: readonly Player[], category: Category): Player[] {
-  // An unverified total is a lower bound built from the per-year tables, and
-  // comparing one against a published total can make a right answer look wrong.
-  return players.filter((player) =>
-    category === 'age' ? player.age !== null : player.earningsKnown && player.earnings > 0,
-  );
+export function eligible(players: readonly RosterPlayer[], category: Category): RosterPlayer[] {
+  return players.filter((player) => {
+    if (category === 'age') return player.age !== null;
+    // A player with no title is not a wrong answer, but a pool where four in
+    // five hold zero would be all ties and no question, so the category asks
+    // only about players who have actually won one.
+    if (category === 'fncsWins') return player.fncsWins > 0;
+    return player.earningsKnown && player.earnings > 0;
+  });
 }
 
 export interface GameState {
   category: Category;
   difficulty: Difficulty;
   /** Players not yet shown this run. */
-  queue: Player[];
-  current: Player;
-  challenger: Player;
+  queue: RosterPlayer[];
+  current: RosterPlayer;
+  challenger: RosterPlayer;
   score: number;
   status: Status;
   lastAnswer: Answer | null;
@@ -70,7 +81,7 @@ export interface GameState {
  * renown.
  */
 export function createGame(
-  players: readonly Player[],
+  players: readonly RosterPlayer[],
   category: Category,
   difficulty: Difficulty,
   seed: string = String(Date.now()),
@@ -120,6 +131,16 @@ export function submitAnswer(state: GameState, answer: Answer): GameState {
     score: correct ? state.score + 1 : state.score,
     status: correct ? 'revealed' : 'gameover',
   };
+}
+
+/**
+ * Ends the run on the spot, revealing the hidden value.
+ *
+ * `gameover` rather than `cleared`: giving up is not clearing the pool, and the
+ * board reads the difference — the run-over banner shows what the answer was.
+ */
+export function giveUp(state: GameState): GameState {
+  return state.status === 'playing' ? { ...state, status: 'gameover' } : state;
 }
 
 /**

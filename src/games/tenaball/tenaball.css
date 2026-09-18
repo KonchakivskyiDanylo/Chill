@@ -54,3 +54,26 @@
     font-size: 0.8rem;
   }
 }
+
+/* The tie rule, on the board rather than in a footnote. */
+.tb-tie {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.tb-tie__label {
+  flex: none;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--warning);
+  line-height: 1.7;
+}

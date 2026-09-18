@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { GameShell } from '@/components/GameShell';
+import { Link } from 'react-router-dom';
+import { formatDate, GameShell } from '@/components/GameShell';
+import { GiveUpButton } from '@/components/GiveUpButton';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
 import { DifficultyCards, DifficultyChip, useDifficulty } from '@/components/DifficultyPicker';
 import { DIFFICULTIES } from '@/games/shared/difficulty';
-import { useDataset } from '@/data/DataProvider';
-import type { Player } from '@/data/types';
+import { useRoster } from '@/data/liquipedia/useRoster';
+import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
 import { playerMoney, plural } from '@/lib/format';
 import { CountryBadge } from '@/components/CountryBadge';
 import { useBestScore } from '@/lib/storage';
@@ -15,6 +17,7 @@ import {
   correctAnswer,
   createGame,
   eligible,
+  giveUp,
   hasEqualButton,
   nextRound,
   submitAnswer,
@@ -27,12 +30,38 @@ import './higher-lower.css';
 
 const meta = getGame('higher-lower')!;
 
-function displayValue(player: Player, category: Category): string {
-  return category === 'age' ? `${player.age} years old` : playerMoney(player);
+function displayValue(player: RosterPlayer, category: Category): string {
+  if (category === 'age') return `${player.age} years old`;
+  if (category === 'fncsWins') return plural(player.fncsWins, 'FNCS win');
+  return playerMoney(player);
+}
+
+/**
+ * The fact shown under the revealed value: something true about the player
+ * that is not the answer to the round they just played.
+ */
+function secondaryFact(player: RosterPlayer, category: Category): string {
+  return category === 'fncsWins' ? playerMoney(player) : plural(player.fncsWins, 'FNCS win');
 }
 
 export default function HigherLowerGame() {
-  const dataset = useDataset();
+  const { roster, error: loadError } = useRoster();
+
+  if (loadError) {
+    return (
+      <div className="card banner banner--danger">
+        <div>
+          <div className="banner__title">Player data unavailable</div>
+          <div className="small">{loadError}</div>
+        </div>
+      </div>
+    );
+  }
+  if (!roster) return <div className="card center muted">Loading players…</div>;
+  return <Game roster={roster} />;
+}
+
+function Game({ roster }: { roster: Roster }) {
   const [category, setCategory] = useState<Category | null>(null);
   const [difficulty, setDifficulty] = useDifficulty();
   const [game, setGame] = useState<GameState | null>(null);
@@ -49,11 +78,11 @@ export default function HigherLowerGame() {
    */
   const poolFor = useCallback(
     (tier: Difficulty, forCategory: Category) =>
-      dataset.playersFor(tier, {
+      roster.playersFor(tier, {
         minimum: 2, // a pair is the smallest run that can be dealt
         eligible: (players) => eligible(players, forCategory),
       }),
-    [dataset],
+    [roster],
   );
 
   const counts = useMemo(() => {
@@ -94,13 +123,18 @@ export default function HigherLowerGame() {
   };
 
   const toolbar = game ? (
-    <button type="button" className="icon-btn" onClick={reset}>
-      ↺ Change mode
-    </button>
+    <>
+      {game.status === 'playing' ? (
+        <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />
+      ) : null}
+      <button type="button" className="icon-btn" onClick={reset}>
+        ↺ Change mode
+      </button>
+    </>
   ) : null;
 
   return (
-    <GameShell game={meta} toolbar={toolbar}>
+    <GameShell game={meta} toolbar={toolbar} dataNote={<RosterNote roster={roster} />}>
       {!game ? (
         <Setup
           category={category}
@@ -115,6 +149,29 @@ export default function HigherLowerGame() {
         <Board game={game} best={best} onAnswer={answer} onRestart={() => start(game.category, game.difficulty)} />
       )}
     </GameShell>
+  );
+}
+
+/** Where this game's numbers come from, and under what licence. */
+function RosterNote({ roster }: { roster: Roster }) {
+  const { source } = roster;
+  return (
+    <p className="tiny faint">
+      Player values come from{' '}
+      <a href={source.url} className="link" target="_blank" rel="noreferrer noopener">
+        {source.name}
+      </a>{' '}
+      (last update {formatDate(roster.generatedAt)}), reused under{' '}
+      <a href={source.licenseUrl} className="link" target="_blank" rel="noreferrer noopener">
+        {source.license}
+      </a>
+      . FNCS titles come from Wikipedia’s “Competitive Fortnite records and statistics”. Where a source
+      publishes no figure the player is left out of that category rather than counted as a zero.{' '}
+      <Link to="/credits" className="link">
+        Full attribution
+      </Link>
+      .
+    </p>
   );
 }
 
@@ -207,12 +264,17 @@ function Board({
       </div>
 
       <div className="hl-board">
-        <PlayerPanel player={game.current} value={displayValue(game.current, game.category)} />
+        <PlayerPanel
+          player={game.current}
+          category={game.category}
+          value={displayValue(game.current, game.category)}
+        />
         <div className="hl-vs" aria-hidden="true">
           VS
         </div>
         <PlayerPanel
           player={game.challenger}
+          category={game.category}
           value={revealed ? displayValue(game.challenger, game.category) : null}
           tone={
             revealed && game.lastAnswer
@@ -231,7 +293,7 @@ function Board({
               You made it through all {game.poolSize} players in the pool with a score of {game.score}.
             </Banner>
           ) : (
-            <Banner tone="danger" title="Run over">
+            <Banner tone="danger" title={game.lastAnswer ? 'Run over' : 'Gave up'}>
               {game.challenger.name} was {displayValue(game.challenger, game.category)} — the answer was{' '}
               <strong>{truth}</strong>. Final score: {game.score}.
             </Banner>
@@ -281,10 +343,12 @@ function Board({
 
 function PlayerPanel({
   player,
+  category,
   value,
   tone,
 }: {
-  player: Player;
+  player: RosterPlayer;
+  category: Category;
   value: string | null;
   tone?: 'right' | 'wrong';
 }) {
@@ -293,12 +357,17 @@ function PlayerPanel({
       <PlayerAvatar player={player} size={72} />
       <div className="hl-panel__name">{player.name}</div>
       <div className="hl-panel__meta">
-        <CountryBadge code={player.country} name={player.countryName} /> {player.countryName}
+        {player.country ? (
+          <>
+            <CountryBadge code={player.country} name={player.countryName ?? player.country} />{' '}
+          </>
+        ) : null}
+        {player.countryName ?? 'Unknown'}
         {player.team ? ` · ${player.team}` : ''}
       </div>
       <div className={`hl-panel__value${value ? '' : ' hl-panel__value--hidden'}`}>{value ?? '???'}</div>
-      {/* Only shown once the value is out — FNCS titles correlate with earnings. */}
-      <div className="tiny faint">{value ? plural(player.fncsWins, 'FNCS title') : ' '}</div>
+      {/* Only shown once the value is out — the two numbers correlate. */}
+      <div className="tiny faint">{value ? secondaryFact(player, category) : ' '}</div>
     </div>
   );
 }

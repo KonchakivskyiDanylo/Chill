@@ -3,6 +3,7 @@ import { Link, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { DataProvider, RequireData } from '@/data/DataProvider';
 import { getGame } from '@/games/registry';
+import { Credits } from '@/pages/Credits';
 import { Home } from '@/pages/Home';
 
 function GamePage() {
@@ -12,13 +13,15 @@ function GamePage() {
   if (!game) return <Navigate to="/" replace />;
 
   const { Component } = game;
-  return (
-    <RequireData>
-      <Suspense fallback={<div className="page center muted">Loading game…</div>}>
-        <Component />
-      </Suspense>
-    </RequireData>
+  const board = (
+    <Suspense fallback={<div className="page center muted">Loading game…</div>}>
+      <Component />
+    </Suspense>
   );
+
+  // Higher or Lower loads its own roster, so it must not queue behind the
+  // shared dataset it never reads.
+  return game.needsDataset === false ? board : <RequireData>{board}</RequireData>;
 }
 
 function NotFound() {
@@ -38,6 +41,7 @@ export function App() {
       <Layout>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/credits" element={<Credits />} />
           <Route path="/game/:slug" element={<GamePage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>

@@ -177,6 +177,11 @@ export function place(
 }
 
 /** One valid answer per empty cell, for the reveal after a loss. */
+/** Ends the round unsolved, so the remaining cells can be revealed. */
+export function giveUp(state: GameState): GameState {
+  return state.status === 'playing' ? { ...state, status: 'lost' } : state;
+}
+
 export function solutionFor(state: GameState, row: number, col: number): Player[] {
   const usedIds = new Set([...state.filled.values()].map((player) => player.id));
   const options = state.board.candidates[row][col].filter((player) => !usedIds.has(player.id));

@@ -213,6 +213,16 @@ textarea {
   font-size: 1.1rem;
 }
 
+/* The crown, from public/logo.png. `contain` so any crop of the source image
+   sits correctly instead of being stretched to a square. */
+.brand__logo {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  flex: none;
+}
+
+/* Fallback mark, shown only when public/logo.png is missing. */
 .brand__mark {
   width: 30px;
   height: 30px;
@@ -224,6 +234,10 @@ textarea {
   font-size: 0.85rem;
   font-weight: 900;
   box-shadow: 0 4px 14px rgba(91, 140, 255, 0.35);
+}
+
+.brand__accent {
+  color: var(--primary);
 }
 
 .icon-btn {
@@ -244,6 +258,14 @@ textarea {
 .icon-btn:hover {
   color: var(--text);
   border-color: var(--border-strong);
+}
+
+/* Armed "give up" — one more click and the round is over. */
+.icon-btn--danger,
+.icon-btn--danger:hover {
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.45);
+  background: var(--danger-soft);
 }
 
 /* ----------------------------------------------------------------- cards -- */
@@ -774,4 +796,70 @@ textarea {
 .difficulty-bar__note {
   flex: 1 1 220px;
   margin: 0;
+}
+
+/* ------------------------------------------------------------------ links -- */
+
+/* Inline links inside body copy. Plain `a` stays unstyled on purpose — the
+   whole site is made of link-wrapped cards that must not look like text. */
+.link {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, var(--primary) 45%, transparent);
+}
+.link:hover {
+  text-decoration-color: var(--primary);
+}
+
+/* ---------------------------------------------------------------- footer -- */
+
+.site-footer {
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+  margin-top: auto;
+}
+
+.site-footer__inner {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 28px 16px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.site-footer__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.site-footer__socials {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.site-footer__socials a {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.site-footer__socials a:hover {
+  color: var(--text);
+}
+
+.site-footer__links {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.site-footer__links a:hover {
+  color: var(--text);
 }

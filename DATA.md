@@ -1,8 +1,19 @@
 # The data
 
-The dataset is **imported, not authored**. Two sources are fetched, parsed and
-written out as TypeScript; nothing is typed in by hand and nothing is invented
+All data is **imported, not authored**. Sources are fetched, parsed and written
+out as TypeScript or JSON; nothing is typed in by hand and nothing is invented
 to fill a gap.
+
+There are two datasets. This document is mostly about the first one.
+
+| Dataset | Rows | Read by |
+| --- | --- | --- |
+| `src/data/fortnite/` — the Wikipedia import | 316 players with full career histories | Nine games, through `Dataset` |
+| `src/data/liquipedia/roster.json` — the Liquipedia dump | 5,678 players, no per-event rows | Higher or Lower, through `Roster` |
+
+See [The Liquipedia roster](#the-liquipedia-roster) at the end for the second
+one. Licensing for both is in [CREDITS.md](CREDITS.md) and
+[src/data/LICENSE.md](src/data/LICENSE.md) — the data is CC-BY-SA 3.0, not MIT.
 
 | Source | What it gives |
 | --- | --- |
@@ -184,3 +195,100 @@ npm run check:games
 Plays all ten games to completion headlessly. Run it after any data change: it
 proves the generators can still build solvable Tic Tac Toe boards, clean
 Connections groups and ten-slot Tenaball boards from whatever the data now says.
+
+
+---
+
+## The Liquipedia roster
+
+Higher or Lower runs on a separate, much larger dataset:
+`src/data/liquipedia/roster.json`, built by
+`scripts/build_liquipedia_roster.py` (`npm run data:roster`).
+
+```bash
+npm run data:roster    # liquipedia_data/clean_data/ -> src/data/liquipedia/roster.json
+```
+
+### Why it is separate
+
+The two datasets are not two versions of the same thing; they answer different
+questions.
+
+The Wikipedia import is **deep and narrow**: 316 players, but for each of them
+who they placed with, where, and under which org. Career Path, Who Are Ya,
+Connections and Tenaball cannot work without that, and `Dataset`'s
+puzzle-eligibility rule is written around having it.
+
+The Liquipedia dump is **wide and shallow**: 5,678 players with a handle, a
+country, a birthday and a career earnings figure, and no per-event rows at all.
+Higher or Lower never asks for more than that, and eighteen times the players
+makes it a much better game — so it reads the dump directly through `Roster`
+rather than being squeezed through a model built for careers.
+
+### Inputs
+
+Read-only, and untouched by the build:
+
+```
+liquipedia_data/clean_data/fortnite/
+  players.json       5,726 pages — handle, real name, nationalities, region,
+                     birthdate, career and per-year earnings, current team
+  teams.json         535 organisations
+  tournaments.json   14,645 tournaments with Liquipedia tier and prize pool
+  placements.json    442,736 finishes; only 1st places are used
+  transfers.json     40,119 roster moves (not used yet)
+```
+
+`liquipedia_data/` is gitignored, so `roster.json` is committed and the site
+builds without it.
+
+### What the build does
+
+1. Keeps pages with a competitive record (some prize money). Liquipedia files
+   the scene's streamers as `staff`, but Nate Hill, SypherPK, Myth and CouRage
+   have all won real money and are more recognisable than most tier-1
+   competitors, so `type` is not filtered on. Players recorded as having died
+   are left out — the game asks how old someone is *today*.
+2. Maps nationalities to ISO 3166-1 alpha-2 for the flag badge; all 121 values
+   in the dump are covered, and the build reports any that are not.
+3. Resolves handles to pages. 142 handles belong to two or more pages ("Aqua"
+   is both the Austrian World Cup winner and a Japanese player); nationality
+   settles it where the caller knows one, otherwise the biggest career wins.
+4. Scores every 1st place by Liquipedia's tier, tier type and prize pool, and
+   derives the fame ranking from that plus career earnings.
+5. Carries **FNCS titles** over from the Wikipedia import by handle, with three
+   hand-verified aliases for winners the two sources spell differently
+   (Kalgamer710, Kiryache32, Speedy). Seven winners have no Liquipedia page at
+   all; the build names them when it runs.
+
+### The FNCS Wins category
+
+The Liquipedia export publishes no per-player FNCS title count, which is why
+this one number crosses over from the older Wikipedia data. That table lists
+every grand-final winner in every region since 2019, so a handle missing from
+it has no title, and reads as 0.
+
+278 players hold at least one, and the category asks only about them — in a pool
+where four in five players held zero, nearly every pair would be a tie and there
+would be no question to answer. Even so, ties are common, because 189 of those
+278 hold exactly one title:
+
+| Tier | Players with a title | Chance a random pair ties |
+| --- | --- | --- |
+| Easy | 83 | ~23% |
+| Medium | 194 | ~70% |
+| Hard | 1 → borrows Medium | — |
+
+On Easy and Medium there is no Equal button, so a tie accepts either answer.
+That makes Medium generous. If you would rather it were a real question, give
+the category its own Equal rule in `hasEqualButton()`:
+
+```ts
+export function hasEqualButton(difficulty: Difficulty, category?: Category): boolean {
+  return difficulty === 'hard' || category === 'fncsWins';
+}
+```
+
+Hard has exactly one title-holder of its own, so it borrows Medium's pool
+through `playersFor`'s normal tier widening. `npm run check:games` reports that
+as a note rather than a failure, because for this category it is expected.

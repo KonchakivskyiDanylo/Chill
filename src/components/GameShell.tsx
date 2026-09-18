@@ -12,11 +12,24 @@ import { Modal } from './ui';
 export function GameShell({
   game,
   toolbar,
+  dataNote,
+  examples,
   children,
 }: {
   game: GameMeta;
   /** Optional controls rendered on the right of the title row (e.g. New game). */
   toolbar?: ReactNode;
+  /**
+   * Where this game's numbers come from. Games reading the shared dataset can
+   * leave it out; Higher or Lower runs on its own roster and says so itself.
+   */
+  dataNote?: ReactNode;
+  /**
+   * Worked examples shown between the goal and the bullets. Some rules are far
+   * easier to show than to write: Fortnitedle's three tile colours are three
+   * sentences as prose, and three tiles as a picture.
+   */
+  examples?: ReactNode;
   children: ReactNode;
 }) {
   const seenKey = `seen-rules:${game.id}`;
@@ -56,11 +69,10 @@ export function GameShell({
 
       {children}
 
-      <RulesCard game={game} />
+      <RulesCard game={game} dataNote={dataNote} examples={examples} />
 
-      <Modal open={showRules} title={`How to play — ${game.title}`} onClose={dismiss}>
-        <RulesList rules={game.rules} />
-        <DataNote />
+      <Modal open={showRules} title={`How to play ${game.title}`} onClose={dismiss}>
+        <Rules game={game} dataNote={dataNote} examples={examples} />
         <button type="button" className="btn btn--primary btn--block" onClick={dismiss}>
           Got it
         </button>
@@ -84,13 +96,61 @@ function RulesList({ rules }: { rules: string[] }) {
   );
 }
 
-export function RulesCard({ game }: { game: GameMeta }) {
+/**
+ * A game's rules, in the order they read best: the plain-English goal first,
+ * then the bullets, then where the numbers came from, then the named groups
+ * (categories, modes) that only make sense once you know the goal.
+ */
+function Rules({
+  game,
+  dataNote,
+  examples,
+}: {
+  game: GameMeta;
+  dataNote?: ReactNode;
+  examples?: ReactNode;
+}) {
+  return (
+    <div className="stack">
+      {game.intro?.length ? (
+        <div className="stack-sm">
+          {game.intro.map((line) => (
+            <p key={line} className="small muted">
+              {line}
+            </p>
+          ))}
+        </div>
+      ) : null}
+
+      {examples}
+
+      {game.rules?.length ? <RulesList rules={game.rules} /> : null}
+
+      {dataNote ?? <DataNote />}
+
+      {game.sections?.map((section) => (
+        <div key={section.title} className="stack-sm">
+          <h3>{section.title}</h3>
+          <RulesList rules={section.items} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function RulesCard({
+  game,
+  dataNote,
+  examples,
+}: {
+  game: GameMeta;
+  dataNote?: ReactNode;
+  examples?: ReactNode;
+}) {
   return (
     <section className="card stack">
-      <div className="card__title">Rules</div>
-      <RulesList rules={game.rules} />
-      <hr className="divider" />
-      <DataNote />
+      <div className="card__title">How to play</div>
+      <Rules game={game} dataNote={dataNote} examples={examples} />
     </section>
   );
 }
@@ -104,7 +164,7 @@ export function DataNote() {
   );
 }
 
-function formatDate(iso: string): string {
+export function formatDate(iso: string): string {
   const [year, month, day] = iso.split('-');
   return `${day}/${month}/${year}`;
 }

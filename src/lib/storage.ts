@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from 'react';
  * and quota errors must never break a game, they just lose persistence.
  */
 
+// Pre-dates the rename to OffSpawn, and stays: it is an invisible key, and
+// changing it would silently wipe every best score already on a player's device.
 const PREFIX = 'chillfn:';
 
 export function readLocal<T>(key: string, fallback: T): T {

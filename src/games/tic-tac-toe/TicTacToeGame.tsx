@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { GameShell } from '@/components/GameShell';
+import { GiveUpButton } from '@/components/GiveUpButton';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { PlayerSearch } from '@/components/PlayerSearch';
 import { Banner, Modal, Stat } from '@/components/ui';
@@ -10,6 +11,7 @@ import {
   cellKey,
   createGame,
   generateBoard,
+  giveUp,
   MAX_MISTAKES,
   place,
   SIZE,
@@ -90,9 +92,14 @@ export default function TicTacToeGame() {
     <GameShell
       game={meta}
       toolbar={
-        <button type="button" className="icon-btn" onClick={newBoard}>
-          ↺ New board
-        </button>
+        <>
+          {game.status === 'playing' ? (
+            <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />
+          ) : null}
+          <button type="button" className="icon-btn" onClick={newBoard}>
+            ↺ New board
+          </button>
+        </>
       }
     >
       <div className="stack">

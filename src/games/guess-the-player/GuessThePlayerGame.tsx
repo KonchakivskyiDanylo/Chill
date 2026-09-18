@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { GameShell } from '@/components/GameShell';
+import { GiveUpButton } from '@/components/GiveUpButton';
 import { CountryBadge } from '@/components/CountryBadge';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { PlayerSearch } from '@/components/PlayerSearch';
@@ -11,6 +12,7 @@ import { playerMoney } from '@/lib/format';
 import { getGame } from '@/games/registry';
 import {
   createGame,
+  giveUp,
   guessesLeft,
   MAX_GUESSES,
   submitGuess,
@@ -85,9 +87,14 @@ export default function GuessThePlayerGame() {
     <GameShell
       game={meta}
       toolbar={
-        <button type="button" className="icon-btn" onClick={() => start(game.mode)}>
-          ↺ New player
-        </button>
+        <>
+          {game.status === 'playing' ? (
+            <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />
+          ) : null}
+          <button type="button" className="icon-btn" onClick={() => start(game.mode)}>
+            ↺ New player
+          </button>
+        </>
       }
     >
       <div className="stack">

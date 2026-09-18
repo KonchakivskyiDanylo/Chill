@@ -157,6 +157,11 @@ export function submit(state: GameState): GameState {
 }
 
 /** Groups still hidden — revealed when the board is lost. */
+/** Ends the round unsolved, so the remaining groups can be revealed. */
+export function giveUp(state: GameState): GameState {
+  return state.status === 'playing' ? { ...state, selected: [], status: 'lost' } : state;
+}
+
 export function unsolvedGroups(state: GameState): Group[] {
   return state.puzzle.groups.filter((group) => !state.solved.some((solved) => solved.id === group.id));
 }

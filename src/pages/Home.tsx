@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { GAMES } from '@/games/registry';
 import { useDataState } from '@/data/DataProvider';
-import { DataNote } from '@/components/GameShell';
 
 export function Home() {
   const { dataset } = useDataState();
@@ -10,12 +9,15 @@ export function Home() {
     <div className="page stack-lg">
       <section className="stack" style={{ paddingTop: 12 }}>
         <span className="chip chip--primary" style={{ width: 'fit-content' }}>
-          {dataset ? `${dataset.roster.length} players · ${dataset.events.length} tournaments` : 'Loading dataset…'}
+          {dataset
+            ? `${GAMES.length} games · ${dataset.roster.length} players · ${dataset.events.length} tournaments`
+            : `${GAMES.length} games · loading players…`}
         </span>
-        <h1>Ten puzzles about Fortnite competitive players.</h1>
-        <p className="muted" style={{ maxWidth: '58ch' }}>
-          Guess players from their career results, their teammates, their earnings and their trophies. No account,
-          no sign-up — pick a game and play.
+        <h1>How well do you actually know competitive Fortnite?</h1>
+        <p className="muted" style={{ maxWidth: '60ch' }}>
+          Ten puzzles built on the real competitive record — FNCS grand finals, the World Cup, the LANs and
+          everything under them. Name the player from their career, their teammates, their earnings or six
+          green letters. No account, no sign-up: pick a game and play.
         </p>
       </section>
 
@@ -36,15 +38,33 @@ export function Home() {
         ))}
       </section>
 
-      <section className="card card--muted">
-        <div className="card__title">About the data</div>
+      <section className="card card--muted stack">
+        <div className="card__title">About this prototype</div>
         <p className="small muted">
-          Every game runs on the same imported dataset: every FNCS winner in every region since 2019, plus the
-          World Cup, the LANs and the game's biggest earners — with their birthdays, orgs, career results and the
-          teammates they won alongside. It sits behind a single repository interface, so a live API can replace it
-          without touching the games.
+          OffSpawn is a fan project, and an unfinished one — the games work, the data is still growing, and
+          the scoring is all local to your browser. Everything it knows comes from people who wrote it down
+          first:{' '}
+          <a className="link" href="https://liquipedia.net/fortnite" target="_blank" rel="noreferrer noopener">
+            Liquipedia
+          </a>{' '}
+          for who these players are, where they are from, when they were born and what they have won, and
+          Wikipedia's competitive Fortnite records for the FNCS title counts. Both are CC-BY-SA, so the data
+          this site derives from them is too.
         </p>
-        <DataNote />
+        <p className="small muted">
+          Where a source says nothing, so does OffSpawn: a missing earnings figure shows as a dash rather
+          than a zero, and a player with no published birthday is simply left out of the questions that need
+          one. Nothing on the site is estimated or filled in.
+        </p>
+        <p className="small muted">
+          Every game reads through one repository interface, so a live API can replace the imported files
+          without a single game changing.
+        </p>
+        <p className="tiny faint">
+          <Link to="/credits" className="link">
+            Credits &amp; data licence
+          </Link>
+        </p>
       </section>
     </div>
   );

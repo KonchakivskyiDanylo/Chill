@@ -90,6 +90,11 @@ export function pick(state: GameState, player: Player): GameState {
   };
 }
 
+/** Ends the round unsolved, so the board can be revealed. */
+export function giveUp(state: GameState): GameState {
+  return state.status === 'playing' ? { ...state, status: 'lost' } : state;
+}
+
 export function impostorsLeft(state: GameState): number {
   return state.round.impostorIds.size - [...state.selected].filter((id) => state.round.impostorIds.has(id)).length;
 }

@@ -204,6 +204,11 @@ export function createGame(puzzle: Puzzle, difficulty: Difficulty): GameState {
   };
 }
 
+/** Ends the board unsolved, so the remaining ten can be revealed. */
+export function giveUp(state: GameState): GameState {
+  return state.status === 'playing' ? { ...state, status: 'lost' } : state;
+}
+
 export type GuessOutcome =
   | { kind: 'correct'; rank: number }
   | { kind: 'duplicate'; rank: number }

@@ -1,6 +1,16 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 
+/** A named block of rules, e.g. "Game modes". */
+export interface RuleSection {
+  title: string;
+  items: string[];
+}
+
 export interface GameMeta {
+  /**
+   * Stable key. Local best scores and the "seen the rules" flag hang off it, so
+   * renaming a game changes its `title` and `slug` and leaves this alone.
+   */
   id: string;
   /** URL path segment. */
   slug: string;
@@ -8,8 +18,23 @@ export interface GameMeta {
   /** One-line pitch for the home page card. */
   tagline: string;
   icon: string;
-  /** Short bullets shown in the "How to play" card and modal. */
-  rules: string[];
+  /**
+   * Short bullets shown in the "How to play" card and modal. Optional: a game
+   * that explains itself with `intro` and `sections` needs no flat list.
+   */
+  rules?: string[];
+  /**
+   * Opening paragraphs above the bullets, for games whose rules read better as
+   * prose than as a list.
+   */
+  intro?: string[];
+  /** Grouped rules shown under their own headings, below `rules`. */
+  sections?: RuleSection[];
+  /**
+   * False for games that read their own data instead of the shared dataset, so
+   * the app does not make them wait on a load they never use.
+   */
+  needsDataset?: boolean;
   Component: LazyExoticComponent<ComponentType>;
 }
 
@@ -20,32 +45,56 @@ export const GAMES: GameMeta[] = [
     title: 'Higher or Lower',
     tagline: 'Is the next player above or below? Keep the streak alive.',
     icon: '📈',
-    rules: [
-      'Two players are shown. One value is revealed, the other is hidden.',
-      'Higher means the hidden player’s value is greater than the shown one.',
-      'Lower means the hidden player’s value is smaller than the shown one.',
-      'Easy, Medium and Hard choose how well known the players are, not how the round works: Easy asks about champions and top earners, Hard about names only the scene remembers.',
-      'Easy and Medium have no Equal button, so two equal values accept either answer.',
-      'Hard adds an Equal button, and you must use it when the values match exactly.',
-      'One mistake ends the run. Players never repeat inside a run.',
+    intro: [
+      'The goal is to decide whether the player on the right is higher or lower than the one on the left, on the category you picked.',
+      'If you make the correct choice you score 1 point, the right-hand player slides across and a new one appears. Keep going and get the best score!',
     ],
+    sections: [
+      {
+        title: 'Categories',
+        items: [
+          'Age — how old each player is today, from their published birthday.',
+          'Career Earnings — every dollar of tournament prize money on record.',
+          'FNCS Wins — FNCS grand finals won, across every season and region. Only players who have won at least one appear, and matching totals are common.',
+        ],
+      },
+      {
+        title: 'Game modes',
+        items: [
+          'Easy 🟢 — the names everyone knows: World Cup and FNCS champions, the game’s biggest earners.',
+          'Medium 🟡 — regulars of the competitive scene: known if you watch, not household names.',
+          'Hard 🔴 — deep cuts, and the only mode with an Equal button. Use it when the two values match exactly.',
+          'On Easy and Medium there is no Equal button, so two matching values accept either answer.',
+        ],
+      },
+    ],
+    needsDataset: false,
     Component: lazy(() => import('./higher-lower/HigherLowerGame')),
   },
   {
     id: 'wordle',
-    slug: 'wordle',
-    title: 'Wordle',
+    slug: 'fortnitedle',
+    title: 'Fortnitedle',
     tagline: 'Guess the player’s name, letter by letter.',
     icon: '🟩',
+    intro: [
+      'Guess the competitive Fortnite player in 6 tries. After each guess the colour of the tiles changes to show how close your guess was to the player’s name.',
+    ],
     rules: [
-      'One secret player is chosen. Guess their name in 6 tries.',
-      'Easy, Medium and Hard choose how well known that player is. Each level keeps its own solved count.',
-      'Green: right character in the right spot.',
-      'Yellow: the character is in the name but somewhere else.',
-      'Grey: the character is not in the name at all.',
       'Spaces and punctuation are removed, capitalisation does not matter.',
       'Digits 0–9 count as characters and are on the keyboard.',
       'Any combination of letters and digits is allowed — it does not have to be a real player.',
+    ],
+    sections: [
+      {
+        title: 'Difficulty',
+        items: [
+          'Easy 🟢 — the names everyone knows: World Cup and FNCS champions, the game’s biggest earners.',
+          'Medium 🟡 — regulars of the competitive scene: known if you watch, not household names.',
+          'Hard 🔴 — deep cuts, regional winners and one-off qualifiers only the scene remembers.',
+          'Pick a level before you start, or switch it on the board — switching deals a new secret player.',
+        ],
+      },
     ],
     Component: lazy(() => import('./wordle/WordleGame')),
   },
@@ -93,7 +142,8 @@ export const GAMES: GameMeta[] = [
       'Correct answers lock into their real position in the ranking.',
       'Easy: unlimited guesses — just find all ten.',
       'Hard: you start with 3 lives and every wrong guess costs one.',
-      'How ties are handled depends on the category; each category states its rule.',
+      'Ties are handled per category, and the board says which rule is in play above the ten slots.',
+      'Naming a player who is level with 10th but ranked out by the tie rule is a near miss: it is called out, and it never costs a life.',
     ],
     Component: lazy(() => import('./tenaball/TenaballGame')),
   },
@@ -116,22 +166,22 @@ export const GAMES: GameMeta[] = [
   },
   {
     id: 'impostor',
-    slug: 'impostor',
-    title: 'Impostor',
+    slug: 'griefer',
+    title: 'Griefer',
     tagline: 'Spot the players who do not belong.',
     icon: '🕵️',
     rules: [
       'You get a rule, for example "plays for NRG", and a group of players.',
-      'Most of them fit the rule. The impostors do not.',
-      'All at once: select every impostor you can see, then hit Check. One mistake loses the round.',
-      'One by one: click impostors one at a time. A correct pick continues, a wrong pick ends the round.',
+      'Most of them fit the rule. The griefers do not.',
+      'All at once: select every griefer you can see, then hit Check. One mistake loses the round.',
+      'One by one: click griefers one at a time. A correct pick continues, a wrong pick ends the round.',
     ],
     Component: lazy(() => import('./impostor/ImpostorGame')),
   },
   {
     id: 'tic-tac-toe',
-    slug: 'tic-tac-toe',
-    title: 'Tic Tac Toe',
+    slug: 'piece-control',
+    title: 'Piece Control',
     tagline: 'Fill the grid with players who match both conditions.',
     icon: '⭕',
     rules: [
@@ -175,6 +225,15 @@ export const GAMES: GameMeta[] = [
   },
 ];
 
-export function getGame(slug: string): GameMeta | undefined {
-  return GAMES.find((game) => game.slug === slug);
+/**
+ * A game by its URL slug or its id.
+ *
+ * Both, because they can differ: a rename changes `slug` and leaves `id` alone
+ * so local best scores survive it, and the game components ask for themselves
+ * by id (`getGame('wordle')` inside Fortnitedle). Slug wins on a tie, so the
+ * router always resolves to the game whose URL was actually requested, and a
+ * link to a game's old slug — which is still its id — keeps working.
+ */
+export function getGame(key: string): GameMeta | undefined {
+  return GAMES.find((game) => game.slug === key) ?? GAMES.find((game) => game.id === key);
 }

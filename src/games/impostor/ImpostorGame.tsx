@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { GameShell } from '@/components/GameShell';
+import { GiveUpButton } from '@/components/GiveUpButton';
 import { CountryBadge } from '@/components/CountryBadge';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
@@ -7,7 +8,7 @@ import { useDataset } from '@/data/DataProvider';
 import type { Player } from '@/data/types';
 import { playerMoneyShort } from '@/lib/format';
 import { getGame } from '@/games/registry';
-import { check, createGame, createRound, impostorsLeft, pick, toggle, type GameState, type Mode } from './engine';
+import { check, createGame, createRound, giveUp, impostorsLeft, pick, toggle, type GameState, type Mode } from './engine';
 import './impostor.css';
 
 const meta = getGame('impostor')!;
@@ -39,12 +40,12 @@ export default function ImpostorGame() {
             <OptionGrid>
               <OptionCard
                 label="All at once"
-                hint="Select every impostor you can see, then check. One mistake loses the round."
+                hint="Select every griefer you can see, then check. One mistake loses the round."
                 onClick={() => start('all-at-once')}
               />
               <OptionCard
                 label="One by one"
-                hint="Click impostors one at a time. A wrong pick ends the round instantly."
+                hint="Click griefers one at a time. A wrong pick ends the round instantly."
                 onClick={() => start('one-by-one')}
               />
             </OptionGrid>
@@ -73,14 +74,19 @@ export default function ImpostorGame() {
     <GameShell
       game={meta}
       toolbar={
-        <button type="button" className="icon-btn" onClick={() => start(game.mode)}>
-          ↺ New round
-        </button>
+        <>
+          {game.status === 'playing' ? (
+            <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />
+          ) : null}
+          <button type="button" className="icon-btn" onClick={() => start(game.mode)}>
+            ↺ New round
+          </button>
+        </>
       }
     >
       <div className="stack">
         <div className="stats">
-          <Stat label="Impostors" value={round.impostorIds.size} />
+          <Stat label="Griefers" value={round.impostorIds.size} />
           <Stat label="Left to find" value={finished ? 0 : impostorsLeft(game)} />
           <Stat label="Mode" value={game.mode === 'all-at-once' ? 'All at once' : 'One by one'} />
         </div>
@@ -91,7 +97,7 @@ export default function ImpostorGame() {
             Every player here <span style={{ color: 'var(--primary)' }}>{round.criterion.label}</span>
           </h2>
           <p className="small muted" style={{ marginTop: 6 }}>
-            …except {round.impostorIds.size === 1 ? 'one impostor' : `${round.impostorIds.size} impostors`}.
+            …except {round.impostorIds.size === 1 ? 'one griefer' : `${round.impostorIds.size} griefers`}.
             {game.mode === 'all-at-once'
               ? ' Select them all, then hit Check.'
               : ' Click them one at a time.'}
@@ -129,7 +135,7 @@ export default function ImpostorGame() {
                 </span>
                 {reveal ? (
                   <span className={`imp-card__tag ${isImpostor ? 'imp-card__tag--impostor' : ''}`}>
-                    {isImpostor ? 'Impostor' : 'Fits the rule'}
+                    {isImpostor ? 'Griefer' : 'Fits the rule'}
                   </span>
                 ) : null}
               </button>
@@ -141,13 +147,13 @@ export default function ImpostorGame() {
           <div className="stack">
             <Banner
               tone={game.status === 'won' ? 'success' : 'danger'}
-              title={game.status === 'won' ? 'All impostors caught!' : 'Round lost'}
+              title={game.status === 'won' ? 'All griefers caught!' : 'Round lost'}
             >
               {game.mistake
-                ? `${game.mistake.name} ${round.criterion.label} — not an impostor.`
+                ? `${game.mistake.name} ${round.criterion.label} — not a griefer.`
                 : game.status === 'won'
                   ? 'Exactly the right selection.'
-                  : 'That selection did not match the impostors.'}
+                  : 'That selection did not match the griefers.'}
             </Banner>
             <button type="button" className="btn btn--primary btn--lg btn--block" onClick={() => start(game.mode)}>
               Next round

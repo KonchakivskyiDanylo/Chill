@@ -72,7 +72,12 @@ export function DifficultyCards({
   );
 }
 
-function DifficultySwitch({
+/**
+ * Compact segmented control. Exported so a game can put it where a stats row
+ * would otherwise go — Fortnitedle shows the level on the board instead of a
+ * length/guess/solved readout the grid already tells you.
+ */
+export function DifficultySwitch({
   value,
   onChange,
 }: {

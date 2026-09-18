@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { GameShell } from '@/components/GameShell';
+import { GiveUpButton } from '@/components/GiveUpButton';
 import { Banner, Stat } from '@/components/ui';
 import { useDataset } from '@/data/DataProvider';
 import type { Player } from '@/data/types';
@@ -7,6 +8,7 @@ import { getGame } from '@/games/registry';
 import {
   createGame,
   generatePuzzle,
+  giveUp,
   GROUP_SIZE,
   MAX_MISTAKES,
   submit,
@@ -61,9 +63,14 @@ export default function ConnectionsGame() {
     <GameShell
       game={meta}
       toolbar={
-        <button type="button" className="icon-btn" onClick={newPuzzle}>
-          ↺ New board
-        </button>
+        <>
+          {game.status === 'playing' ? (
+            <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />
+          ) : null}
+          <button type="button" className="icon-btn" onClick={newPuzzle}>
+            ↺ New board
+          </button>
+        </>
       }
     >
       <div className="stack">
