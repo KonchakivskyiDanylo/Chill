@@ -14,8 +14,6 @@
  */
 import { loadDataset } from '@/data/repository';
 import { REGION_LABEL } from '@/data/types';
-import { eligible as careerPathEligible } from '@/games/career-path/engine';
-import { eligible as whoAreYaEligible } from '@/games/who-are-ya/engine';
 
 const problems: string[] = [];
 const notes: string[] = [];
@@ -161,15 +159,8 @@ notes.push(`events by tier: ${Object.entries(tiers).map(([t, n]) => `${t}:${n}`)
 // --- game feasibility -----------------------------------------------------
 // Ask each game for its own pool rather than restating its rules here, so a
 // threshold change in an engine shows up in this report instead of drifting.
-const careerPathPool = careerPathEligible(dataset);
-notes.push(`Career Path pool: ${careerPathPool.length}`);
-check(careerPathPool.length >= 20, 'not enough eligible players for Career Path');
-
-const whoAreYaPool = whoAreYaEligible(dataset);
-notes.push(`Who Are Ya pool: ${whoAreYaPool.length}`);
-check(whoAreYaPool.length >= 20, 'not enough eligible players for Who Are Ya');
-
-// Fortnitedle runs on the Liquipedia roster, not this dataset — see check-games.ts.
+// Higher or Lower, Fortnitedle, Career Path and Who Are Ya run on the
+// Liquipedia files rather than this dataset — see check-games.ts.
 
 const fncsWinners = dataset.fncsWinners();
 notes.push(`FNCS winners in the pool: ${fncsWinners.length}`);

@@ -84,8 +84,17 @@ export const GAMES: GameMeta[] = [
       'Spaces and punctuation are removed, capitalisation does not matter.',
       'Digits 0–9 count as characters and are on the keyboard.',
       'Any combination of letters and digits is allowed — it does not have to be a real player.',
+      'Every player in the pool comes up once before any of them comes round again.',
     ],
     sections: [
+      {
+        title: 'Region',
+        items: [
+          'Pick a region first, or All regions to play the whole roster.',
+          'A region also changes what the levels mean: they are ranked inside that region, so Easy is “well known in Asia”, not “well known worldwide”.',
+          'The card for each region shows how many players it can ask you about.',
+        ],
+      },
       {
         title: 'Difficulty',
         items: [
@@ -105,13 +114,29 @@ export const GAMES: GameMeta[] = [
     tagline: 'Name the player from their major results alone.',
     icon: '🗺️',
     rules: [
-      'Clues are major results only: FNCS Grand Finals, global championships and major LANs.',
-      'Each clue is one tournament and the placement the player got there.',
-      'The path starts at the first major event the player actually reached.',
-      'It ends at their most recent major result in the dataset.',
-      'Order mode reveals results oldest to newest. Random mode reveals them in any order.',
+      'Clues are majors only: the Epic-run grand finals since the 2019 World Cup — FNCS regionals, the Globals, the World Cup itself.',
+      'Each clue is one tournament and where the player finished.',
+      'The path starts at the first major they actually reached and ends at their most recent.',
+      'Only players with at least five majors on record can be the answer.',
       'You get one guess per revealed clue — guess early for a better score.',
     ],
+    sections: [
+      {
+        title: 'Difficulty',
+        items: [
+          'Easy 🟢 / Medium 🟡 / Hard 🔴 pick how well known the secret player is, not how the clues work.',
+          'Every player at the chosen level comes up once before any of them comes round again.',
+        ],
+      },
+      {
+        title: 'Game modes',
+        items: [
+          'Order — results appear oldest to newest, the way the career ran.',
+          'Random — the same results in a random order. Much harder to read.',
+        ],
+      },
+    ],
+    needsDataset: false,
     Component: lazy(() => import('./career-path/CareerPathGame')),
   },
   {
@@ -122,12 +147,28 @@ export const GAMES: GameMeta[] = [
     icon: '🤝',
     rules: [
       'A secret player is picked. The teammates they have entered tournaments with are revealed one at a time.',
-      'Teammates are ranked by how many tournaments the pair entered together.',
-      'Easy: teammates come fewest → most shared tournaments, with the count shown.',
-      'Hard: same order, counts hidden.',
-      'Random: random order, counts hidden.',
+      'Teammates are ranked by how many tournaments the pair entered together, counted across every tournament in the export.',
+      'Only players with at least three recorded teammates can be the answer.',
       'You may guess after every clue. The game ends on a correct guess or when the clues run out.',
     ],
+    sections: [
+      {
+        title: 'Difficulty',
+        items: [
+          'Easy 🟢 / Medium 🟡 / Hard 🔴 pick how well known the secret player is, not how the clues work.',
+          'Every player at the chosen level comes up once before any of them comes round again.',
+        ],
+      },
+      {
+        title: 'Clue order',
+        items: [
+          'Counts shown — fewest → most shared tournaments, with the number on each teammate.',
+          'Counts hidden — the same order, without the numbers.',
+          'Random order — no ramp-up, and the counts stay hidden.',
+        ],
+      },
+    ],
+    needsDataset: false,
     Component: lazy(() => import('./who-are-ya/WhoAreYaGame')),
   },
   {

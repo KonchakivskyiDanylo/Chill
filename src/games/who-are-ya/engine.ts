@@ -1,68 +1,58 @@
-import type { Dataset } from '@/data/dataset';
-import type { Player } from '@/data/types';
+import type { TeammateClue } from '@/data/liquipedia/teammates';
+import type { RosterPlayer } from '@/data/liquipedia/roster';
 import { makeRng, shuffle } from '@/lib/rng';
 
 /** Pure logic for Who Are Ya? */
 
+/** What the clue list does, not how famous the answer is — that is the difficulty. */
 export type Mode = 'easy' | 'hard' | 'random';
 
 export const MAX_CLUES = 10;
 /**
- * A secret player needs this many recorded teammates before the round is fair.
+ * Teammates a secret player needs before the round is fair.
  *
- * The dataset records the rosters that won events, so even a decorated player
- * tops out at around eight distinct teammates; three is the point where the
- * clue chain still narrows to one person.
+ * Three is where the chain still narrows to one person. It bites far less than
+ * it used to: counting every tournament in the export rather than only the
+ * ones somebody won, 4,808 players have three or more — including all 113 in
+ * the Easy band.
  */
 export const MIN_CLUES = 3;
 
-export interface TeammateClue {
-  player: Player;
-  /** Tournaments the clue player and the secret player entered together. */
-  events: number;
-}
-
 export interface GameState {
   mode: Mode;
-  secret: Player;
+  secret: RosterPlayer;
   clues: TeammateClue[];
   revealed: number;
-  guesses: Player[];
+  guesses: RosterPlayer[];
   status: 'playing' | 'won' | 'lost';
 }
 
-export function eligible(dataset: Dataset): Player[] {
-  return dataset.players.filter((player) => dataset.teammatesOf(player).length >= MIN_CLUES);
-}
-
-/** Shared-event counts are only shown on Easy. */
+/** Shared-tournament counts are only shown on the first mode. */
 export function showsMatches(mode: Mode): boolean {
   return mode === 'easy';
 }
 
-export function createGame(dataset: Dataset, mode: Mode, seed: string = String(Date.now())): GameState | null {
-  const pool = eligible(dataset);
-  if (pool.length === 0) return null;
-
+/**
+ * A round on a secret player the caller has already chosen.
+ *
+ * `clues` must be that player's teammates most-shared first, which is how
+ * `Teammates.cluesFor` returns them. Easy and Hard then walk them backwards so
+ * the weakest hint lands first and the strongest last; Random shuffles.
+ */
+export function createGame(
+  secret: RosterPlayer,
+  clues: readonly TeammateClue[],
+  mode: Mode,
+  seed: string = String(Date.now()),
+): GameState | null {
+  if (clues.length < MIN_CLUES) return null;
   const rng = makeRng(seed);
-  const secret = pool[Math.floor(rng() * pool.length)];
-
-  // The ten teammates they share the most tournaments with.
-  const top = dataset.teammatesOf(secret).slice(0, MAX_CLUES);
-  // Easy and Hard walk fewest → most, so the strongest hint lands last.
+  const top = clues.slice(0, MAX_CLUES);
   const ordered = mode === 'random' ? shuffle(rng, top) : [...top].reverse();
-
-  return {
-    mode,
-    secret,
-    clues: ordered.map((entry) => ({ player: entry.player, events: entry.events })),
-    revealed: 1,
-    guesses: [],
-    status: 'playing',
-  };
+  return { mode, secret, clues: ordered, revealed: 1, guesses: [], status: 'playing' };
 }
 
-export function submitGuess(state: GameState, guess: Player): GameState {
+export function submitGuess(state: GameState, guess: RosterPlayer): GameState {
   if (state.status !== 'playing') return state;
   if (state.guesses.some((g) => g.id === guess.id)) return state;
 

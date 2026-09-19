@@ -1,22 +1,44 @@
 import { useEffect, type ReactNode } from 'react';
-import type { Player } from '@/data/types';
+import type { Nameable } from '@/lib/text';
 import { CountryBadge } from './CountryBadge';
 import { PlayerAvatar } from './PlayerAvatar';
+
+/**
+ * Everything the shared player UI renders: an avatar, a name and a flag.
+ *
+ * Structural rather than `Player`, because the Wikipedia import and the
+ * Liquipedia roster are two different row shapes and both are rendered by
+ * these components.
+ */
+export interface Displayable extends Nameable {
+  country: string | null;
+  countryName: string | null;
+  photoUrl: string | null;
+}
 
 /** A selectable card — used for every category / difficulty / mode choice. */
 export function OptionCard({
   label,
   hint,
   selected,
+  disabled,
   onClick,
 }: {
   label: ReactNode;
   hint?: ReactNode;
   selected?: boolean;
+  /** For a choice the data cannot serve — an empty tier in the chosen region. */
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
-    <button type="button" className="option" aria-pressed={Boolean(selected)} onClick={onClick}>
+    <button
+      type="button"
+      className="option"
+      aria-pressed={Boolean(selected)}
+      disabled={disabled}
+      onClick={onClick}
+    >
       <span className="option__label">{label}</span>
       {hint ? <span className="option__hint">{hint}</span> : null}
     </button>
@@ -62,7 +84,7 @@ export function PlayerLine({
   meta,
   showFlag = true,
 }: {
-  player: Player;
+  player: Displayable;
   size?: number;
   meta?: ReactNode;
   showFlag?: boolean;

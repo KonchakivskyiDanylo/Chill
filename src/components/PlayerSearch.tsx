@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Player } from '@/data/types';
 import { suggestPlayers } from '@/lib/text';
 import { CountryBadge } from './CountryBadge';
 import { PlayerAvatar } from './PlayerAvatar';
+import type { Displayable } from './ui';
 import './player-search.css';
 
 /**
@@ -11,8 +11,11 @@ import './player-search.css';
  *
  * Recall games (List, Tenaball) deliberately do NOT use this — suggesting
  * names there would hand over the answers.
+ *
+ * Generic over the row, because Career Path and Who Are Ya search the
+ * Liquipedia roster while Guess the Player searches the Wikipedia import.
  */
-export function PlayerSearch({
+export function PlayerSearch<T extends Displayable>({
   players,
   onPick,
   exclude,
@@ -20,8 +23,8 @@ export function PlayerSearch({
   disabled,
   buttonLabel = 'Guess',
 }: {
-  players: readonly Player[];
-  onPick: (player: Player) => void;
+  players: readonly T[];
+  onPick: (player: T) => void;
   /** Player ids already used — hidden from the suggestions. */
   exclude?: ReadonlySet<string>;
   placeholder?: string;
@@ -48,7 +51,7 @@ export function PlayerSearch({
     return () => document.removeEventListener('mousedown', onClickAway);
   }, []);
 
-  const choose = (player: Player) => {
+  const choose = (player: T) => {
     onPick(player);
     setQuery('');
     setOpen(false);

@@ -36,6 +36,17 @@ export function eligible(players: readonly RosterPlayer[]): RosterPlayer[] {
   });
 }
 
+/**
+ * A round on a secret player the caller has already chosen.
+ *
+ * Separate from `createGame` because the board no longer picks: the game deals
+ * from a no-repeat rotation (`games/shared/rotation.ts`) and hands the result
+ * here, so the choice of player and the rules of the round stay apart.
+ */
+export function gameFor(secret: RosterPlayer): GameState {
+  return { secret, answer: normalizeName(secret.name), guesses: [], status: 'playing' };
+}
+
 export function createGame(
   players: readonly RosterPlayer[],
   seed: string = String(Date.now()),
@@ -43,8 +54,7 @@ export function createGame(
   const pool = eligible(players);
   if (pool.length === 0) return null;
   const rng = makeRng(seed);
-  const secret = pool[Math.floor(rng() * pool.length)];
-  return { secret, answer: normalizeName(secret.name), guesses: [], status: 'playing' };
+  return gameFor(pool[Math.floor(rng() * pool.length)]);
 }
 
 /**

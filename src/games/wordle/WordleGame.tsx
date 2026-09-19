@@ -1,19 +1,22 @@
-import { useCallback, useEffect, useState, type CSSProperties } from 'react';
-import { Link } from 'react-router-dom';
-import { formatDate, GameShell } from '@/components/GameShell';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { GameShell } from '@/components/GameShell';
 import { CountryBadge } from '@/components/CountryBadge';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
+import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { Banner } from '@/components/ui';
 import { DifficultyCards, DifficultySwitch, useDifficulty } from '@/components/DifficultyPicker';
-import { type Difficulty } from '@/games/shared/difficulty';
-import { EXPORT_DATE, SOURCE, type Roster } from '@/data/liquipedia/roster';
+import { RegionCards, RegionChip, useRegion, type RegionChoice } from '@/components/RegionPicker';
+import { DIFFICULTIES, type Difficulty } from '@/games/shared/difficulty';
+import { deal, rotationKey } from '@/games/shared/rotation';
+import { type Roster, type RosterPlayer } from '@/data/liquipedia/roster';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import { playerMoney, plural } from '@/lib/format';
+import { readLocal, writeLocal } from '@/lib/storage';
 import { getGame } from '@/games/registry';
 import {
-  createGame,
   eligible,
+  gameFor,
   giveUp,
   keyboardState,
   MAX_GUESSES,
@@ -38,10 +41,7 @@ const KEY_ROWS = [
  *
  * Real handles, so the examples double as a hint about what the answers look
  * like. MITR0 carries the digit rule, which reads as a footnote in prose and as
- * an obvious fact the moment you see a 0 in a tile; ANNAS carries the
- * repeated-character rule, which is the one that catches people out — nearly
- * half the answers in the roster repeat a character, so guessing two of
- * something the name only has one of happens constantly.
+ * an obvious fact the moment you see a 0 in a tile.
  *
  * `states` is one entry per tile, `null` for a tile left neutral so the eye
  * goes to the one being explained.
@@ -61,11 +61,6 @@ const EXAMPLES: { word: string; states: (TileState | null)[]; note: string }[] =
     word: 'ACORN',
     states: [null, 'absent', null, null, null],
     note: 'C is not in the player’s name in any spot.',
-  },
-  {
-    word: 'ANNAS',
-    states: [null, 'present', 'absent', null, null],
-    note: 'Two N’s guessed, but the name only has one: the first is yellow, the second greys out. On a repeated character, grey means “no more of these”, not “none at all”.',
   },
 ];
 
@@ -97,58 +92,47 @@ function Examples() {
 
 export default function WordleGame() {
   const { roster, error } = useRoster();
-
-  if (error) {
-    return (
-      <div className="card banner banner--danger">
-        <div>
-          <div className="banner__title">Player data unavailable</div>
-          <div className="small">{error}</div>
-        </div>
-      </div>
-    );
-  }
-  if (!roster) return <div className="card center muted">Loading players…</div>;
-  return <Game roster={roster} />;
-}
-
-/** Where the secret players come from, and under what licence. */
-function RosterNote() {
   return (
-    <p className="tiny faint">
-      Secret players come from{' '}
-      <a href={SOURCE.url} className="link" target="_blank" rel="noreferrer noopener">
-        {SOURCE.name}
-      </a>{' '}
-      (last update {formatDate(EXPORT_DATE)}), reused under{' '}
-      <a href={SOURCE.licenseUrl} className="link" target="_blank" rel="noreferrer noopener">
-        {SOURCE.license}
-      </a>
-      . FNCS titles come from Wikipedia’s “Competitive Fortnite records and statistics”.{' '}
-      <Link to="/credits" className="link">
-        Full attribution
-      </Link>
-      .
-    </p>
+    <LiquipediaGate error={error} ready={Boolean(roster)}>
+      {roster ? <Game roster={roster} /> : null}
+    </LiquipediaGate>
   );
 }
 
 function Game({ roster }: { roster: Roster }) {
   const [difficulty, setDifficulty] = useDifficulty();
+  const [storedRegion, setRegion] = useRegion();
+  // The choice is remembered across sessions, and the export's region labels
+  // are not ours to guarantee. One that is no longer in the data reads as "all".
+  const region = storedRegion && !roster.regions.includes(storedRegion) ? null : storedRegion;
   const [game, setGame] = useState<GameState | null>(null);
   const [draft, setDraft] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+  /** Set when a round opened a fresh cycle, so the board can say so. */
+  const [wrapped, setWrapped] = useState(false);
 
   // A handle only works as an answer at a playable length, so eligibility has to
-  // be part of choosing the tier, not a filter applied after it.
+  // be part of choosing the pool, not a filter applied after it.
   const poolFor = useCallback(
-    (level: Difficulty) => roster.playersFor(level, { minimum: 1, eligible }),
+    (level: Difficulty, where: RegionChoice) =>
+      roster.playersFor(level, { minimum: 1, eligible, region: where }),
     [roster],
   );
 
+  /**
+   * Deal a player nobody in this pool has had yet.
+   *
+   * The cycle is keyed by region *and* level because those are the two things
+   * that change who is in the bag; switching level starts a separate cycle
+   * rather than poisoning the one you were on.
+   */
   const newGame = useCallback(
-    (level: Difficulty) => {
-      setGame(createGame(poolFor(level)));
+    (level: Difficulty, where: RegionChoice) => {
+      const key = rotationKey(meta.id, where, level);
+      const drawn = deal(poolFor(level, where), readLocal<string[]>(key, []));
+      if (drawn) writeLocal(key, drawn.seen);
+      setGame(drawn ? gameFor(drawn.pick) : null);
+      setWrapped(drawn?.wrapped ?? false);
       setDraft('');
       setMessage(null);
     },
@@ -157,7 +141,7 @@ function Game({ roster }: { roster: Roster }) {
 
   const changeDifficulty = (level: Difficulty) => {
     setDifficulty(level);
-    newGame(level);
+    newGame(level, region);
   };
 
   const commit = useCallback(() => {
@@ -205,12 +189,15 @@ function Game({ roster }: { roster: Roster }) {
 
   if (!game) {
     return (
-      <GameShell game={meta} examples={<Examples />} dataNote={<RosterNote />}>
+      <GameShell game={meta} examples={<Examples />} dataNote={<RosterNote fncs />}>
         <Setup
+          roster={roster}
+          poolFor={poolFor}
           difficulty={difficulty}
           onDifficulty={setDifficulty}
-          onStart={() => newGame(difficulty)}
-          exhausted={poolFor(difficulty).length === 0}
+          region={region}
+          onRegion={setRegion}
+          onStart={() => newGame(difficulty, region)}
         />
       </GameShell>
     );
@@ -230,20 +217,23 @@ function Game({ roster }: { roster: Roster }) {
     <GameShell
       game={meta}
       examples={<Examples />}
-      dataNote={<RosterNote />}
+      dataNote={<RosterNote fncs />}
       toolbar={
         <>
           {finished ? null : <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />}
           <button type="button" className="icon-btn" onClick={() => setGame(null)}>
-            ↺ Change level
+            ↺ Change setup
           </button>
         </>
       }
     >
       <div className="stack">
         {/* Where a length / guess / solved readout used to be. The grid already
-            shows both of those; the level is the one thing it cannot show. */}
-        <DifficultySwitch value={difficulty} onChange={changeDifficulty} />
+            shows both of those; the level and the region are what it cannot. */}
+        <div className="row-between" style={{ gap: 8 }}>
+          <DifficultySwitch value={difficulty} onChange={changeDifficulty} />
+          <RegionChip region={region} />
+        </div>
 
         <div
           className="wordle-grid"
@@ -281,14 +271,7 @@ function Game({ roster }: { roster: Roster }) {
               <div>
                 <div className="bold">{game.secret.name}</div>
                 <div className="small muted">
-                  {game.secret.country ? (
-                    <>
-                      <CountryBadge
-                        code={game.secret.country}
-                        name={game.secret.countryName ?? game.secret.country}
-                      />{' '}
-                    </>
-                  ) : null}
+                  <CountryBadge code={game.secret.country} name={game.secret.countryName} />{' '}
                   {game.secret.countryName ?? 'Unknown'}
                   {game.secret.team ? ` · ${game.secret.team}` : ''} · {playerMoney(game.secret)} ·{' '}
                   {plural(game.secret.fncsWins, 'FNCS win')}
@@ -298,7 +281,7 @@ function Game({ roster }: { roster: Roster }) {
             <button
               type="button"
               className="btn btn--primary btn--lg btn--block"
-              onClick={() => newGame(difficulty)}
+              onClick={() => newGame(difficulty, region)}
             >
               New game
             </button>
@@ -323,48 +306,101 @@ function Game({ roster }: { roster: Roster }) {
             ))}
           </div>
         )}
+
+        {wrapped ? (
+          <p className="tiny faint center">
+            You have now had every player in this pool — starting again, reshuffled.
+          </p>
+        ) : null}
       </div>
     </GameShell>
   );
 }
 
 /**
- * Difficulty as a first step rather than a control on the board, so the level
- * is a decision you make before meeting a secret player — the same shape as
- * picking a category in Higher or Lower and Tenaball.
+ * Region first, then difficulty, then start.
+ *
+ * That order because difficulty depends on the region: the counts under the
+ * three cards are counts *within* the region you picked, and in a small region
+ * a level can be empty. Picking level first and region second would move the
+ * ground under a choice already made.
  */
 function Setup({
+  roster,
+  poolFor,
   difficulty,
   onDifficulty,
+  region,
+  onRegion,
   onStart,
-  exhausted,
 }: {
+  roster: Roster;
+  poolFor: (level: Difficulty, region: RegionChoice) => RosterPlayer[];
   difficulty: Difficulty;
   onDifficulty: (value: Difficulty) => void;
+  region: RegionChoice;
+  onRegion: (value: RegionChoice) => void;
   onStart: () => void;
-  exhausted: boolean;
 }) {
+  const regionCounts = useMemo(() => {
+    const counts = new Map<RegionChoice, number>();
+    for (const where of [null, ...roster.regions]) {
+      counts.set(
+        where,
+        DIFFICULTIES.reduce((n, level) => n + roster.exactly(level, { eligible, region: where }).length, 0),
+      );
+    }
+    return counts;
+  }, [roster]);
+
+  // Exact counts, never widened: a card that says 0 has to mean 0.
+  const levelCounts = useMemo(
+    () =>
+      Object.fromEntries(
+        DIFFICULTIES.map((level) => [level, roster.exactly(level, { eligible, region }).length]),
+      ) as Record<Difficulty, number>,
+    [roster, region],
+  );
+
+  const exhausted = poolFor(difficulty, region).length === 0;
+  const empty = levelCounts[difficulty] === 0;
+
   return (
     <div className="stack">
       <section className="card stack">
+        <div className="card__title">Pick a region</div>
+        <RegionCards regions={roster.regions} value={region} onChange={onRegion} counts={regionCounts} />
+      </section>
+
+      <section className="card stack">
         <div className="card__title">Pick a difficulty</div>
-        <DifficultyCards value={difficulty} onChange={onDifficulty} />
+        <DifficultyCards value={difficulty} onChange={onDifficulty} counts={levelCounts} />
         <p className="tiny faint">
-          This picks how well known the secret player is, not how the guessing works. You can switch level on
-          the board too — it deals a new player.
+          This picks how well known the secret player is, not how the guessing works. With a region chosen
+          the levels are ranked inside that region, so “Easy” means well known in Asia, not well known
+          worldwide. You can switch level on the board too — it deals a new player.
         </p>
       </section>
 
+      {empty && !exhausted ? (
+        <Banner tone="info" title="Nobody at this level here">
+          No {region} player is ranked {difficulty}. Starting will deal from the next closest level in{' '}
+          {region}.
+        </Banner>
+      ) : null}
+
       {exhausted ? (
         <Banner tone="danger" title="No puzzle available">
-          No player at this difficulty has a name this game can use.
+          No player in this region has a name this game can use.
         </Banner>
       ) : null}
 
       <button type="button" className="btn btn--primary btn--lg btn--block" disabled={exhausted} onClick={onStart}>
         Start
       </button>
-      <p className="tiny faint center">6 guesses</p>
+      <p className="tiny faint center">
+        6 guesses · every player in the pool comes up once before any of them comes round again
+      </p>
     </div>
   );
 }

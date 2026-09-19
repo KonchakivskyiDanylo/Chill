@@ -1,5 +1,3 @@
-import type { Player } from '@/data/types';
-
 /**
  * Name handling for the typing games (List, Tenaball, Wordle, Guess the
  * Player). Players type fast and on phones, so matching is deliberately
@@ -51,6 +49,18 @@ function levenshtein(a: string, b: string, max: number): number {
 }
 
 /**
+ * The minimum a row needs to be found by name.
+ *
+ * Structural rather than `Player`, because the two data sources are two
+ * different shapes and both are searched: the Wikipedia import's `Player` and
+ * the Liquipedia roster's `RosterPlayer`.
+ */
+export interface Nameable {
+  id: string;
+  name: string;
+}
+
+/**
  * Resolves typed text to a player.
  *
  * Exact (normalised) matches win. Otherwise a single one-character typo is
@@ -58,7 +68,7 @@ function levenshtein(a: string, b: string, max: number): number {
  * that close — so "peterbo" finds Peterbot while an ambiguous stub does not
  * silently pick the wrong player.
  */
-export function matchPlayer(input: string, players: readonly Player[]): Player | null {
+export function matchPlayer<T extends Nameable>(input: string, players: readonly T[]): T | null {
   const needle = normalizeName(input);
   if (needle.length < 2) return null;
 
@@ -74,17 +84,17 @@ export function matchPlayer(input: string, players: readonly Player[]): Player |
 }
 
 /** Autocomplete suggestions: prefix matches first, then substring matches. */
-export function suggestPlayers(input: string, players: readonly Player[], limit = 8): Player[] {
+export function suggestPlayers<T extends Nameable>(input: string, players: readonly T[], limit = 8): T[] {
   const needle = normalizeName(input);
   if (!needle) return [];
-  const prefix: Player[] = [];
-  const contains: Player[] = [];
+  const prefix: T[] = [];
+  const contains: T[] = [];
   for (const player of players) {
     const name = normalizeName(player.name);
     if (name.startsWith(needle)) prefix.push(player);
     else if (name.includes(needle)) contains.push(player);
   }
-  const byName = (a: Player, b: Player) => (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1);
+  const byName = (a: T, b: T) => (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1);
   return [...prefix.sort(byName), ...contains.sort(byName)].slice(0, limit);
 }
 

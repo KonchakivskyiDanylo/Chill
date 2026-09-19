@@ -63,6 +63,10 @@ export function DifficultyCards({
               </>
             }
             selected={value === id}
+            // A tier with nobody in it is not a choice. Better a greyed card
+            // saying "0 players" than a Start button that hands back another
+            // tier's players without saying so.
+            disabled={count === 0}
             onClick={() => onChange(id)}
           />
         );
@@ -75,6 +79,12 @@ export function DifficultyCards({
  * Compact segmented control. Exported so a game can put it where a stats row
  * would otherwise go — Fortnitedle shows the level on the board instead of a
  * length/guess/solved readout the grid already tells you.
+ *
+ * Re-picking the level you are already on does nothing. It has to: in
+ * Fortnitedle a switch deals a new secret player, and Enter — the key you
+ * press to submit a guess — also activates whatever button has focus, which
+ * straight after a level change is this one. That threw the round away
+ * mid-guess.
  */
 export function DifficultySwitch({
   value,
@@ -98,7 +108,9 @@ export function DifficultySwitch({
             // level itself ("Hard") would never be announced.
             aria-label={`${meta.label} — ${meta.blurb}`}
             title={meta.blurb}
-            onClick={() => onChange(id)}
+            onClick={() => {
+              if (id !== value) onChange(id);
+            }}
           >
             <span aria-hidden="true">{meta.icon}</span>
             {meta.label}

@@ -56,6 +56,17 @@ export interface LiquipediaRow {
   earnings: number | null;
   /** Difficulty band, maintained in the dataset. `unused` never reaches a game. */
   tier: FameTier | 'unused';
+  /**
+   * Difficulty band *within* `region`, maintained in the same notebook.
+   *
+   * `tier` ranks all 5,678 rows against each other, which is the right answer
+   * for "pick a difficulty" and the wrong one for "pick Asia, then pick a
+   * difficulty": on the global ranking Asia, Oceania and the Middle East have
+   * no Easy players at all. Optional, because a roster exported before the
+   * column existed still has to load — those rows fall back to `tier`, and the
+   * count under each difficulty card shows what that leaves.
+   */
+  region_tier?: FameTier | 'unused';
   fncs_wins: number;
 }
 
@@ -83,6 +94,8 @@ export interface RosterPlayer {
   status: string | null;
   fncsWins: number;
   tier: FameTier;
+  /** Difficulty band among players from the same region. */
+  regionTier: FameTier;
   /** Always null — the export ships no headshots. Kept for `PlayerAvatar`. */
   photoUrl: null;
 }
@@ -118,6 +131,22 @@ const TIER_FALLBACK: Record<FameTier, FameTier[]> = {
   hard: ['hard', 'medium', 'easy'],
 };
 
+/** Options shared by both pool queries. */
+export interface PoolOptions {
+  /**
+   * The caller's own filter, applied per tier — Higher or Lower drops players
+   * with no birth date from an Age run, Fortnitedle drops handles of the wrong
+   * length.
+   */
+  eligible?: (players: RosterPlayer[]) => RosterPlayer[];
+  /**
+   * A Liquipedia region label (`'Asia'`), or null for the whole roster. With a
+   * region the band read is `regionTier`, because a global ranking has no Easy
+   * players outside NA/EU/SA.
+   */
+  region?: string | null;
+}
+
 export class Roster {
   /** Everyone a game may use — `unused` rows are dropped on the way in. */
   readonly players: RosterPlayer[];
@@ -127,6 +156,9 @@ export class Roster {
     ['medium', []],
     ['hard', []],
   ]);
+
+  /** region -> regionTier -> players. Built once, same shape as `byTier`. */
+  private readonly byRegion = new Map<string, Map<FameTier, RosterPlayer[]>>();
 
   constructor(rows: readonly LiquipediaRow[], today: Date = new Date()) {
     this.players = [];
@@ -154,30 +186,73 @@ export class Roster {
         status: row.status ? row.status.toLowerCase() : null,
         fncsWins: row.fncs_wins ?? 0,
         tier: row.tier,
+        // A roster exported before the column existed still has to load, and
+        // the global band is the only honest answer when there is no other.
+        regionTier: row.region_tier && row.region_tier !== 'unused' ? row.region_tier : row.tier,
         photoUrl: null,
       });
     }
-    for (const player of this.players) this.byTier.get(player.tier)?.push(player);
+    for (const player of this.players) {
+      this.byTier.get(player.tier)?.push(player);
+      if (!player.region) continue;
+      let bands = this.byRegion.get(player.region);
+      if (!bands) {
+        bands = new Map([
+          ['easy', []],
+          ['medium', []],
+          ['hard', []],
+        ]);
+        this.byRegion.set(player.region, bands);
+      }
+      bands.get(player.regionTier)?.push(player);
+    }
+    this.regions = [...this.byRegion.entries()]
+      .map(([region, bands]) => ({
+        region,
+        size: [...bands.values()].reduce((n, list) => n + list.length, 0),
+      }))
+      .sort((a, b) => b.size - a.size || (a.region < b.region ? -1 : 1))
+      .map((entry) => entry.region);
+  }
+
+  /**
+   * Region labels that have at least one playable row, biggest first.
+   *
+   * Read off the data rather than listed anywhere, so a region the export
+   * starts publishing appears in the picker without a code change.
+   */
+  readonly regions: string[];
+
+  /**
+   * Exactly this tier, with no widening — what a difficulty card counts.
+   *
+   * Separate from `playersFor` on purpose: a card that says "0 players" and a
+   * card that quietly shows you Medium players are different promises, and the
+   * setup screen makes the first one and disables the option.
+   */
+  exactly(tier: FameTier, options: PoolOptions = {}): RosterPlayer[] {
+    const { eligible, region } = options;
+    const pool = region ? (this.byRegion.get(region)?.get(tier) ?? []) : (this.byTier.get(tier) ?? []);
+    return eligible ? eligible(pool) : pool;
   }
 
   /**
    * The pool a game may draw from at one difficulty.
    *
-   * `eligible` is the caller's own filter — Higher or Lower drops players with
-   * no birth date from an Age run, Fortnitedle drops handles of the wrong length
-   * — and it runs per tier, because whether a tier is big enough is a question
-   * about the players the game can actually use. If that leaves fewer than
-   * `minimum`, the next-closest tier is folded in rather than failing.
+   * `eligible` runs per tier, because whether a tier is big enough is a
+   * question about the players the game can actually use. If that leaves fewer
+   * than `minimum`, the next-closest tier is folded in rather than failing —
+   * within the chosen region, never across regions, because "Asia" is the
+   * promise the player made and the difficulty is the one they can live with.
    */
   playersFor(
     tier: FameTier,
-    options: { minimum?: number; eligible?: (players: RosterPlayer[]) => RosterPlayer[] } = {},
+    options: PoolOptions & { minimum?: number } = {},
   ): RosterPlayer[] {
-    const { minimum = 1, eligible } = options;
+    const { minimum = 1, ...rest } = options;
     const out: RosterPlayer[] = [];
     for (const step of TIER_FALLBACK[tier]) {
-      const pool = this.byTier.get(step) ?? [];
-      out.push(...(eligible ? eligible(pool) : pool));
+      out.push(...this.exactly(step, rest));
       if (out.length >= minimum) break;
     }
     return out;

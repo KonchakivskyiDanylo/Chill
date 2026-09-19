@@ -23,7 +23,7 @@ npm run dev          # http://localhost:5173
 | `npm run etl:build` | Regenerates `src/data/fortnite/` from the cache |
 | `npm run audit` | Checks the imported data for implausible values |
 | `npm run check:data` | Asserts the dataset's invariants (see below) |
-| `npm run check:games` | Drives all ten games through a full round headlessly |
+| `npm run check:games` | Drives all ten games through a full round headlessly. Career Path and Who Are Ya report SKIPPED until their generated files exist |
 
 **Where the data comes from and how to extend it: see [DATA.md](DATA.md).**
 
@@ -31,16 +31,24 @@ npm run dev          # http://localhost:5173
 
 | Game | Modes | Notes |
 | --- | --- | --- |
-| Higher or Lower | Age / Career earnings / FNCS wins × Easy / Medium / Hard | **Runs on the Liquipedia roster, not the shared dataset.** Endless, one mistake ends the run, best score in `localStorage`. Hard also adds the Equal button |
-| Fortnitedle | Easy / Medium / Hard | Level is picked before the board and switchable on it (switching deals a new player). 6 guesses, digits are playable characters, any string of the right length is allowed |
-| Career Path | Order / Random | Major results only, starts at the first major reached |
-| Who Are Ya? | Easy / Hard / Random | Teammates, fewest shared tournaments first |
+| Higher or Lower | Age / Career earnings / FNCS wins × Easy / Medium / Hard | **Liquipedia roster.** Endless, one mistake ends the run, best score in `localStorage`. Hard also adds the Equal button |
+| Fortnitedle | Region × Easy / Medium / Hard | **Liquipedia roster.** Region first, then level — inside a region the levels are `region_tier`. 6 guesses, digits are playable characters, any string of the right length is allowed |
+| Career Path | Easy / Medium / Hard × Order / Random | **Liquipedia majors** (`career_path.json`). Every major the player reached, up to 30 |
+| Who Are Ya? | Easy / Medium / Hard × Counts shown / hidden / Random | **Liquipedia teammates** (`teammates.json`). Every tournament in the export, fewest shared first |
 | Tenaball | Up to 5 categories × Easy / Hard | Each category's tie rule is stated on the board; categories the data cannot rank are hidden |
 | List | Easy / Hard | 90s, +5s per correct answer, −3s per miss on Hard |
 | Griefer | All at once / One by one | 6–8 players, 1–3 griefers |
 | Piece Control | — | Generated boards, 3 mistakes |
 | Connections | — | 16 players, 4 groups, 4 mistakes |
 | Guess the Player | Exact / Direction | 5 attributes, 8 guesses |
+
+Fortnitedle, Career Path and Who Are Ya deal their secret player from a
+**no-repeat rotation** (`games/shared/rotation.ts`): the pool empties before
+anyone comes round again, and the new cycle never opens with whoever closed the
+last one. The cycle is per pool — per region and level in Fortnitedle — and
+lives in `localStorage`, so it survives a reload. (Higher or Lower already
+never repeated inside a run; the other six deal a whole board rather than one
+player.)
 
 Every game has a **Give up** button in its title bar while a round is running.
 It is two-step — the first click arms it, the second reveals the answer — because
@@ -54,27 +62,41 @@ lives in `games/wordle/`, Griefer in `games/impostor/`, Piece Control in
 `games/tic-tac-toe/`. `GameMeta.id` is likewise unchanged, because local best
 scores hang off it — a rename touches `title` and `slug` only.
 
-Easy / Medium / Hard means two different things in that table. In Higher or
-Lower and Fortnitedle it is the **fame ranking** below — how well known the
-players you are asked about are. Everywhere else it is the mechanical setting
-that game always had (lives, time penalties, hidden counts), and has nothing to
-do with fame.
+Easy / Medium / Hard means two different things in that table. In the four
+games on the Liquipedia roster it is the **fame ranking** below — how well
+known the players you are asked about are. Everywhere else it is the
+mechanical setting that game always had (lives, time penalties), and has
+nothing to do with fame. Who Are Ya used to call its clue orders Easy / Hard /
+Random and now calls them Counts shown / Counts hidden / Random order, because
+it has a fame difficulty above them and two Easys on one screen meant two
+different things.
 
 ### Two data sources
 
 There are two, on purpose, and they answer different questions.
 
 `src/data/fortnite/` is the **Wikipedia import**: 316 players with full career
-histories — who placed where, alongside whom, under which org. Nine of the ten
-games read it through `Dataset`, because they ask questions only a career
-history can answer ("name the player from their results", "who did they win
-with"). It is also the only source that publishes FNCS titles per player.
+histories — who placed where, alongside whom, under which org. Six of the ten
+games read it through `Dataset`. It is also the only source that publishes
+FNCS titles per player, which is why Higher or Lower's FNCS Wins category
+borrows from it.
 
-`liquipedia_data/clean_data/fortnite/players.json` is the **Liquipedia export**:
-5,700 players with a handle, a country, a birthday and a career earnings figure,
-and no per-event rows at all. Higher or Lower and Fortnitedle read it through
-`Roster`, because those games only ever need "who exists and what are they
-worth" — and thirty times the roster makes them far better games.
+`liquipedia_data/clean_data/fortnite/` is the **Liquipedia export**, read in
+place through the `@data` alias. Four games run on it:
+
+| file | rows | read by |
+| --- | --- | --- |
+| `players.json` | 5,678 playable | Higher or Lower, Fortnitedle, and the other two for identity |
+| `career_path.json` | 188 majors, 1,175 players | Career Path |
+| `teammates.json` | 39,038 pairs, 5,496 players | Who Are Ya |
+
+The last two are **generated by the notebook**, from `tournaments.json` and
+`placements.json` — see `notebook_cells.md`. Until those cells have been run
+the files do not exist, `npm run dev` fails on the missing import and
+`npm run check:games` reports the two games as SKIPPED and stays green.
+Neither carries a `tier` column: difficulty is joined from `players.json` by
+page name, so re-tiering the roster re-tiers those games too and the derived
+files cannot go stale against it.
 
 **There is no build step.** The app imports that file in place, through the
 `@data` alias. Two columns in it are maintained by the notebook that owns the
@@ -83,7 +105,16 @@ data rather than by any code here:
 | column | values | meaning |
 | --- | --- | --- |
 | `tier` | `easy` / `medium` / `hard` / `unused` | difficulty band; `unused` rows never reach a game |
+| `region_tier` | same, optional | difficulty band *within* `region` |
 | `fncs_wins` | integer ≥ 0 | FNCS grand finals won |
+
+`region_tier` exists because the global band cannot serve Fortnitedle's region
+picker: `tier` ranks all 5,678 rows together, so Asia, Oceania and the Middle
+East have no Easy players between them and "Asia + Easy" would quietly hand
+back Medium. Ranked inside the region every region has all three. It is
+optional — a roster exported before the column existed falls back to `tier` —
+and a difficulty with nobody in it is greyed out with its count showing rather
+than silently widened.
 
 `tier` is **opaque to the app**: nothing recomputes it, nothing second-guesses
 it, and there is no fallback ranking. Re-tier the roster by editing that column
@@ -138,13 +169,17 @@ src/
       fame-ranking.json  GENERATED by fame_calculation.ipynb — the Easy/Medium/Hard tiers
       build.ts        Derives results, teammates, titles and org history
     liquipedia/
-      roster.ts       Reads liquipedia_data/.../players.json in place, via the @data alias
+      roster.ts       Reads .../players.json in place, via the @data alias
+      majors.ts       Reads .../career_path.json — Career Path's tournaments
+      teammates.ts    Reads .../teammates.json — who has played with whom
       countries.ts    Liquipedia nationality names -> ISO country codes
-      useRoster.ts    Loads it on mount, for the games that read it
+      useLoaded.ts    The load-on-mount hook the three share
   scripts/etl/        Fetches the sources and regenerates the three tables
   games/<game>/engine.ts + <Game>.tsx
   games/shared/criteria.ts   Player predicates shared by Griefer / Piece Control / Connections
-  games/shared/difficulty.ts Fame tier labels, shared by Higher or Lower / Fortnitedle
+  games/shared/difficulty.ts Fame tier labels, shared by the four Liquipedia games
+  games/shared/rotation.ts   Deals a pool out once before anyone repeats
+  components/SideNav.tsx     The games list down the left of every page
   components/Footer.tsx      Site footer — carries the Liquipedia attribution
   pages/Credits.tsx          Long-form attribution, as CC-BY-SA asks for
   components/, lib/, styles/
@@ -206,6 +241,11 @@ gracefully rather than dead-ending:
 The crown logo is loaded from `public/logo.png` — drop any crop of it there and
 it appears in the header and as the favicon. Until the file exists the header
 falls back to a plain `OS` mark rather than a broken image.
+
+The games list runs down the left of every page (`SideNav.tsx`). The header's
+☰ collapses it: to an icon rail on a wide screen, and under 900px to a drawer
+over the page with a backdrop. The wide-screen state is remembered; the drawer
+always opens closed, so nobody lands on a covered page.
 
 Social links live in `SOCIALS` at the top of `src/components/Footer.tsx`. An
 entry with an empty `href` is skipped, so fill in the ones you have and the rest
