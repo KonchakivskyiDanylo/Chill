@@ -67,3 +67,25 @@
   color: var(--text-faint);
   font-weight: 300;
 }
+
+/*
+ * A cell offered while the board waits for you to say where a player goes.
+ *
+ * Only reachable in the one case the grid cannot decide for you: the player
+ * fits several cells and is not the sole possible answer to any of them.
+ */
+.ttt-cell--offered {
+  border-style: solid;
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  animation: ttt-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes ttt-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.62; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ttt-cell--offered { animation: none; }
+}

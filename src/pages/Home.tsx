@@ -1,18 +1,10 @@
 import { Link } from 'react-router-dom';
 import { GAMES } from '@/games/registry';
-import { useDataState } from '@/data/DataProvider';
 
 export function Home() {
-  const { dataset } = useDataState();
-
   return (
     <div className="page stack-lg">
       <section className="stack" style={{ paddingTop: 12 }}>
-        <span className="chip chip--primary" style={{ width: 'fit-content' }}>
-          {dataset
-            ? `${GAMES.length} games · ${dataset.roster.length} players · ${dataset.events.length} tournaments`
-            : `${GAMES.length} games · loading players…`}
-        </span>
         <h1>How well do you actually know competitive Fortnite?</h1>
         <p className="muted" style={{ maxWidth: '60ch' }}>
           Ten puzzles built on the real competitive record — FNCS grand finals, the World Cup, the LANs and

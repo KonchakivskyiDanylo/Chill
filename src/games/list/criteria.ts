@@ -1,131 +1,77 @@
-import type { Dataset } from '@/data/dataset';
-import type { Player } from '@/data/types';
-import { REGION_LABEL } from '@/data/types';
-import { money } from '@/lib/format';
-import { shuffle, type Rng } from '@/lib/rng';
+import type { Facts } from '@/data/liquipedia/facts';
+import type { Pools } from '@/data/liquipedia/pools';
+import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
 
 /**
- * Criteria for the List game.
+ * The List categories.
  *
- * Every criterion is built from the dataset and carries its own answer set, so
- * a criterion can never be offered unless it has a real, checkable answer.
+ * Deliberately a short, hand-picked set rather than the hundreds the generator
+ * used to produce. A recall game only works when you can picture the answer
+ * set before you start typing — "players who competed at FNCS Chapter 3 Season
+ * 2 NA West Grand Finals" is a list nobody holds in their head, and forty of
+ * those made the game feel random rather than hard.
+ *
+ * These five are lists people actually argue about.
  */
 
 export interface Criterion {
   id: string;
   /** The prompt shown to the player. */
   title: string;
-  /** Extra context, e.g. the exact event name. */
+  /** Extra context, e.g. the event the field came from. */
   subtitle?: string;
-  answers: Player[];
+  answers: RosterPlayer[];
 }
 
-/** Answer sets outside this range are either unguessable or trivially long. */
+/** Below this a category is not worth a 90-second round. */
 const MIN_ANSWERS = 8;
-const MAX_ANSWERS = 45;
 
-function make(id: string, title: string, answers: Player[], subtitle?: string): Criterion | null {
-  if (answers.length < MIN_ANSWERS || answers.length > MAX_ANSWERS) return null;
-  return { id, title, subtitle, answers };
-}
+export function buildCriteria(roster: Roster, facts: Facts, pools: Pools | null): Criterion[] {
+  const out: Criterion[] = [];
+  const byId = new Map(roster.players.map((player) => [player.id, player]));
 
-/** Every criterion the current dataset can actually support. */
-export function buildCriteria(dataset: Dataset): Criterion[] {
-  const out: (Criterion | null)[] = [];
+  const add = (id: string, title: string, answers: RosterPlayer[], subtitle?: string) => {
+    if (answers.length < MIN_ANSWERS) return;
+    out.push({ id, title, subtitle, answers });
+  };
 
-  // Players in a specific FNCS season (any region's grand final).
-  const seasons = new Set(
-    dataset.events.filter((event) => event.tier === 'fncs' && event.season).map((event) => event.season!),
-  );
-  for (const season of seasons) {
-    const players = new Set<Player>();
-    for (const event of dataset.events) {
-      if (event.season !== season) continue;
-      for (const player of dataset.participantsOf(event.id)) players.add(player);
+  // ------------------------------------------------------- event fields --
+  // A qualified field is the best kind of list: finite, published, and argued
+  // about all week.
+  for (const pool of pools?.pools ?? []) {
+    const answers = pool.players
+      .map((id) => byId.get(id))
+      .filter((player): player is RosterPlayer => Boolean(player));
+    add(`pool:${pool.id}`, `Players who qualified for ${pool.label}`, answers, pool.event);
+  }
+
+  // ----------------------------------------------------- FNCS by region --
+  // Split, because "every FNCS winner ever" is a 280-name list and neither
+  // region's regulars help you with the other's.
+  const fncsRegions = new Map<string, RosterPlayer[]>();
+  for (const player of roster.players) {
+    const regions = new Set<string>();
+    for (const index of facts.of(player.id).won) {
+      const event = facts.events[index];
+      if (event?.kind === 'fncs' && event.region) regions.add(event.region);
     }
-    const label = season.replace(/^C(\d+)S(\d+)$/, 'Chapter $1 Season $2');
-    out.push(make(`fncs-season:${season}`, `Players in an FNCS ${label} Grand Final`, [...players]));
-  }
-
-  // Players at a specific headline event. Regional FNCS finals are excluded:
-  // their fields are small and obscure, and the season criterion above already
-  // covers them across every region.
-  for (const event of dataset.events) {
-    if (event.tier === 'fncs') continue;
-    const participants = dataset.participantsOf(event.id);
-    out.push(make(`event:${event.id}`, `Players who competed at ${event.name}`, participants));
-  }
-
-  // Winners of a specific event tier — "who has ever won a major LAN".
-  out.push(make('fncs-winners', 'Players who have won an FNCS title', dataset.fncsWinners()));
-  out.push(
-    make('major-winners', 'Players who have won a major LAN or global championship', dataset.winnersByTier(['lan', 'global'])),
-  );
-
-  // Global Championship participants.
-  const globalPlayers = new Set<Player>();
-  for (const event of dataset.events) {
-    if (event.tier !== 'global') continue;
-    for (const player of dataset.participantsOf(event.id)) globalPlayers.add(player);
-  }
-  out.push(make('global-participants', 'Players who have played a global championship', [...globalPlayers]));
-
-  // Organisations.
-  for (const team of dataset.teams) {
-    out.push(make(`team:${team}`, `Players signed to ${team}`, dataset.byTeam(team)));
-  }
-
-  // Countries and regions.
-  for (const country of dataset.countries) {
-    const players = dataset.byCountry(country);
-    if (players.length === 0) continue;
-    out.push(make(`country:${country}`, `Players from ${players[0].countryName}`, players));
-  }
-  for (const region of dataset.regions) {
-    out.push(make(`region:${region}`, `Players competing in ${REGION_LABEL[region]}`, dataset.byRegion(region)));
-  }
-
-  // Career earnings thresholds.
-  for (const threshold of [500_000, 750_000, 1_000_000]) {
-    out.push(
-      make(
-        `earnings:${threshold}`,
-        `Players with ${money(threshold)}+ in career earnings`,
-        dataset.players.filter((player) => player.earnings >= threshold),
-      ),
-    );
-  }
-
-  // FNCS win thresholds.
-  for (const threshold of [1, 2, 3]) {
-    out.push(
-      make(
-        `wins:${threshold}`,
-        `Players with ${threshold}+ FNCS ${threshold === 1 ? 'title' : 'titles'}`,
-        dataset.players.filter((player) => player.fncsWins >= threshold),
-      ),
-    );
-  }
-
-  // Earnings in a single year.
-  for (const year of dataset.years) {
-    for (const threshold of [100_000, 200_000]) {
-      out.push(
-        make(
-          `year:${year}:${threshold}`,
-          `Players who earned ${money(threshold)}+ during ${year}`,
-          dataset.players.filter((player) => dataset.earningsIn(player, year) >= threshold),
-        ),
-      );
+    for (const region of regions) {
+      const list = fncsRegions.get(region);
+      if (list) list.push(player);
+      else fncsRegions.set(region, [player]);
     }
   }
+  for (const [region, answers] of [...fncsRegions].sort((a, b) => b[1].length - a[1].length)) {
+    add(`fncs:${region}`, `FNCS grand final winners — ${region}`, answers);
+  }
 
-  return out.filter((criterion): criterion is Criterion => criterion !== null);
-}
+  // ---------------------------------------------------------- LAN wins --
+  add(
+    'lan-winners',
+    'Players who have won a LAN',
+    roster.players.filter((player) => facts.of(player.id).wins.lan > 0),
+    'Any offline tournament in the top two tiers',
+  );
 
-export function drawCriterion(criteria: Criterion[], rng: Rng, avoidId?: string): Criterion | null {
-  const pool = criteria.filter((criterion) => criterion.id !== avoidId);
-  const usable = pool.length > 0 ? pool : criteria;
-  if (usable.length === 0) return null;
-  return shuffle(rng, usable)[0];
+  return out;
 }

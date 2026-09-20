@@ -11,17 +11,27 @@ export const MAX_CLUES = 10;
 /**
  * Teammates a secret player needs before the round is fair.
  *
- * Three is where the chain still narrows to one person. It bites far less than
- * it used to: counting every tournament in the export rather than only the
- * ones somebody won, 4,808 players have three or more — including all 113 in
- * the Easy band.
+ * Three is where the chain still narrows to one person.
  */
 export const MIN_CLUES = 3;
+
+/**
+ * Tournaments a secret player needs on record.
+ *
+ * Separate from the teammate count and stricter than it. A player can pick up
+ * three teammates across three tournaments in a career that is otherwise
+ * invisible, and being asked to name them from three names is not a puzzle,
+ * it is a coin toss. Five entries means there is a career to recognise.
+ */
+export const MIN_TOURNAMENTS = 5;
 
 export interface GameState {
   mode: Mode;
   secret: RosterPlayer;
+  /** Clues in reveal order. */
   clues: TeammateClue[];
+  /** Every teammate on record, most shared first — shown once the round ends. */
+  all: TeammateClue[];
   revealed: number;
   guesses: RosterPlayer[];
   status: 'playing' | 'won' | 'lost';
@@ -49,7 +59,7 @@ export function createGame(
   const rng = makeRng(seed);
   const top = clues.slice(0, MAX_CLUES);
   const ordered = mode === 'random' ? shuffle(rng, top) : [...top].reverse();
-  return { mode, secret, clues: ordered, revealed: 1, guesses: [], status: 'playing' };
+  return { mode, secret, clues: ordered, all: [...clues], revealed: 1, guesses: [], status: 'playing' };
 }
 
 export function submitGuess(state: GameState, guess: RosterPlayer): GameState {

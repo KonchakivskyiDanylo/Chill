@@ -1,27 +1,32 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { suggestPlayers } from '@/lib/text';
-import { CountryBadge } from './CountryBadge';
-import { PlayerAvatar } from './PlayerAvatar';
-import type { Displayable } from './ui';
+import { ambiguousNames, disambiguator, normalizeName, suggestPlayers, type Searchable } from '@/lib/text';
 import './player-search.css';
 
 /**
- * Autocomplete for the games where you pick a known player (Career Path, Who
- * Are Ya, Guess the Player).
+ * Autocomplete for every game that takes a typed player name.
  *
- * Recall games (List, Tenaball) deliberately do NOT use this — suggesting
- * names there would hand over the answers.
+ * Used everywhere now, including the recall games. That used to be forbidden —
+ * suggesting names in List or Tenaball hands over the answers — but the
+ * objection was really to *what* was suggested, not to suggesting: the list
+ * showed a flag and an avatar, so "Top 10 earners in Brazil" could be solved by
+ * typing letters and reading the flags.
  *
- * Generic over the row, because Career Path and Who Are Ya search the
- * Liquipedia roster while Guess the Player searches the Wikipedia import.
+ * So the row is the handle and nothing else. The only exception is a handle
+ * more than one player answers to (121 of 5,678, e.g. two players called Aqua),
+ * where the Liquipedia parenthetical is shown because otherwise the two rows
+ * are indistinguishable. Nothing else about the player is rendered.
+ *
+ * Generic over the row, because the roster and the leaderboards are different
+ * shapes and both are searched.
  */
-export function PlayerSearch<T extends Displayable>({
+export function PlayerSearch<T extends Searchable>({
   players,
   onPick,
   exclude,
   placeholder = 'Guess a player…',
   disabled,
   buttonLabel = 'Guess',
+  autoFocus,
 }: {
   players: readonly T[];
   onPick: (player: T) => void;
@@ -30,18 +35,26 @@ export function PlayerSearch<T extends Displayable>({
   placeholder?: string;
   disabled?: boolean;
   buttonLabel?: string;
+  autoFocus?: boolean;
 }) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const suggestions = useMemo(() => {
-    const pool = exclude ? players.filter((p) => !exclude.has(p.id)) : players;
-    return suggestPlayers(query, pool, 7);
-  }, [query, players, exclude]);
+  const pool = useMemo(
+    () => (exclude ? players.filter((p) => !exclude.has(p.id)) : players),
+    [players, exclude],
+  );
+  const ambiguous = useMemo(() => ambiguousNames(pool), [pool]);
+  const suggestions = useMemo(() => suggestPlayers(query, pool, 7), [query, pool]);
 
   useEffect(() => setHighlight(0), [query]);
+
+  useEffect(() => {
+    if (autoFocus && !disabled) inputRef.current?.focus();
+  }, [autoFocus, disabled]);
 
   useEffect(() => {
     const onClickAway = (event: MouseEvent) => {
@@ -78,6 +91,7 @@ export function PlayerSearch<T extends Displayable>({
     <div className="player-search" ref={containerRef}>
       <div className="input-row">
         <input
+          ref={inputRef}
           className="input"
           value={query}
           placeholder={placeholder}
@@ -110,21 +124,23 @@ export function PlayerSearch<T extends Displayable>({
           {suggestions.length === 0 ? (
             <li className="player-search__empty">No player matches “{query}”.</li>
           ) : (
-            suggestions.map((player, index) => (
-              <li key={player.id}>
-                <button
-                  type="button"
-                  className={`player-search__item${index === highlight ? ' is-active' : ''}`}
-                  onMouseEnter={() => setHighlight(index)}
-                  onClick={() => choose(player)}
-                >
-                  <PlayerAvatar player={player} size={28} />
-                  <span className="bold">{player.name}</span>
-                  <span className="spacer" />
-                  <CountryBadge code={player.country} name={player.countryName} />
-                </button>
-              </li>
-            ))
+            suggestions.map((player, index) => {
+              // Only for a handle two players share — see the note above.
+              const tag = ambiguous.has(normalizeName(player.name)) ? disambiguator(player.id) : null;
+              return (
+                <li key={player.id}>
+                  <button
+                    type="button"
+                    className={`player-search__item${index === highlight ? ' is-active' : ''}`}
+                    onMouseEnter={() => setHighlight(index)}
+                    onClick={() => choose(player)}
+                  >
+                    <span className="bold">{player.name}</span>
+                    {tag ? <span className="player-search__tag">{tag}</span> : null}
+                  </button>
+                </li>
+              );
+            })
           )}
         </ul>
       ) : null}

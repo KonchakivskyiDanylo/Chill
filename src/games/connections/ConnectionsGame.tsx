@@ -1,15 +1,27 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
+import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
+import { PoolSetup } from '@/components/PoolSetup';
 import { Banner, Stat } from '@/components/ui';
-import { useDataset } from '@/data/DataProvider';
-import type { Player } from '@/data/types';
+import type { Facts } from '@/data/liquipedia/facts';
+import type { Orgs } from '@/data/liquipedia/orgs';
+import type { Pools } from '@/data/liquipedia/pools';
+import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
+import type { Teammates } from '@/data/liquipedia/teammates';
+import { useFacts } from '@/data/liquipedia/useFacts';
+import { useOrgs } from '@/data/liquipedia/useOrgs';
+import { usePools } from '@/data/liquipedia/usePools';
+import { useRoster } from '@/data/liquipedia/useRoster';
+import { useTeammates } from '@/data/liquipedia/useTeammates';
+import { resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { getGame } from '@/games/registry';
 import {
   createGame,
   generatePuzzle,
   giveUp,
   GROUP_SIZE,
+  livesLeft,
   MAX_MISTAKES,
   submit,
   toggle,
@@ -24,27 +36,75 @@ const meta = getGame('connections')!;
 const GROUP_TONES = ['a', 'b', 'c', 'd'];
 
 export default function ConnectionsGame() {
-  const dataset = useDataset();
-  const [game, setGame] = useState<GameState | null>(() => {
-    const puzzle = generatePuzzle(dataset);
-    return puzzle ? createGame(puzzle) : null;
-  });
+  const { roster, error: rosterError } = useRoster();
+  const { facts, error: factsError } = useFacts();
+  const { orgs, error: orgsError } = useOrgs();
+  const { teammates } = useTeammates();
+  const { pools } = usePools();
 
-  const newPuzzle = useCallback(() => {
-    const puzzle = generatePuzzle(dataset);
-    setGame(puzzle ? createGame(puzzle) : null);
-  }, [dataset]);
+  return (
+    <LiquipediaGate
+      error={rosterError ?? factsError ?? orgsError}
+      ready={Boolean(roster && facts && orgs)}
+    >
+      {roster && facts && orgs ? (
+        <Game roster={roster} facts={facts} orgs={orgs} teammates={teammates} pools={pools} />
+      ) : null}
+    </LiquipediaGate>
+  );
+}
+
+function Game({
+  roster,
+  facts,
+  orgs,
+  teammates,
+  pools,
+}: {
+  roster: Roster;
+  facts: Facts;
+  orgs: Orgs;
+  teammates: Teammates | null;
+  pools: Pools | null;
+}) {
+  const [choice, setChoice] = usePoolChoice();
+  const [game, setGame] = useState<GameState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const eligible = useMemo(() => facts.eligible(3), [facts]);
+  const players = useMemo(
+    () => resolvePool(roster, pools, choice, eligible, 80),
+    [roster, pools, choice, eligible],
+  );
+
+  const start = useCallback(() => {
+    const puzzle = generatePuzzle({ players, facts, orgs }, teammates);
+    if (!puzzle) {
+      setError('Could not find four clean groups of four in this pool. Try a wider one.');
+      return;
+    }
+    setError(null);
+    setGame(createGame(puzzle));
+  }, [players, facts, orgs, teammates]);
 
   if (!game) {
     return (
-      <GameShell game={meta}>
+      <GameShell game={meta} dataNote={<RosterNote what="Players" generated={facts.generated} />}>
         <div className="stack">
-          <Banner tone="danger" title="No board available">
-            The generator could not find four clean groups of four in the current dataset.
-          </Banner>
-          <button type="button" className="btn btn--primary btn--block" onClick={newPuzzle}>
-            Try again
-          </button>
+          <PoolSetup
+            roster={roster}
+            pools={pools}
+            value={choice}
+            onChange={setChoice}
+            eligible={eligible}
+            onStart={start}
+            startLabel="New board"
+          />
+          {error ? (
+            <Banner tone="danger" title="Cannot start">
+              {error}
+            </Banner>
+          ) : null}
         </div>
       </GameShell>
     );
@@ -57,26 +117,22 @@ export default function ConnectionsGame() {
   const toneOf = (group: Group) =>
     GROUP_TONES[game.puzzle.groups.findIndex((candidate) => candidate.id === group.id)] ?? 'a';
 
-  const onTile = (player: Player) => setGame((prev) => (prev ? toggle(prev, player) : prev));
+  const onTile = (player: RosterPlayer) => setGame((prev) => (prev ? toggle(prev, player) : prev));
 
   return (
     <GameShell
       game={meta}
+      dataNote={<RosterNote what="Players" generated={facts.generated} />}
       toolbar={
-        <>
-          {game.status === 'playing' ? (
-            <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />
-          ) : null}
-          <button type="button" className="icon-btn" onClick={newPuzzle}>
-            ↺ New board
-          </button>
-        </>
+        <button type="button" className="icon-btn" onClick={() => setGame(null)}>
+          ↺ New board
+        </button>
       }
     >
       <div className="stack">
         <div className="stats">
           <Stat label="Groups" value={`${game.solved.length}/4`} />
-          <Stat label="Mistakes" value={`${game.mistakes}/${MAX_MISTAKES}`} />
+          <Stat label="Lives" value={<Hearts left={livesLeft(game)} />} />
         </div>
 
         <div className="stack-sm">
@@ -105,50 +161,77 @@ export default function ConnectionsGame() {
           </div>
         ) : null}
 
-        {game.message ? (
-          <p className="small center" style={{ color: 'var(--warning)' }}>
-            {game.message}
-          </p>
+        {/*
+         * How close the last guess was, stated as a count. Far more use than
+         * the usual "One away…", which stays silent on the two-and-two guess
+         * that means you have merged two groups.
+         */}
+        {game.near !== null && !finished ? (
+          <Banner tone={game.near === GROUP_SIZE - 1 ? 'info' : 'danger'}>
+            <strong>
+              {game.near} of those {GROUP_SIZE}
+            </strong>{' '}
+            {game.near === 1 ? 'belongs' : 'belong'} to one group
+            {game.near === GROUP_SIZE - 1 ? ' — swap one out.' : '.'}
+          </Banner>
         ) : null}
 
         {finished ? (
           <div className="stack">
             <Banner
               tone={game.status === 'won' ? 'success' : 'danger'}
-              title={game.status === 'won' ? 'Board solved!' : 'Out of mistakes'}
+              title={game.status === 'won' ? 'Board solved!' : 'Out of lives'}
             >
               {game.status === 'won'
                 ? `Four groups with ${game.mistakes} ${game.mistakes === 1 ? 'mistake' : 'mistakes'}.`
                 : 'The remaining connections are revealed above.'}
             </Banner>
-            <button type="button" className="btn btn--primary btn--lg btn--block" onClick={newPuzzle}>
+            <button type="button" className="btn btn--primary btn--lg btn--block" onClick={start}>
               New board
             </button>
           </div>
         ) : (
-          <div className="row">
-            <button
-              type="button"
-              className="btn"
-              style={{ flex: 1 }}
-              disabled={game.selected.length === 0}
-              onClick={() => setGame((prev) => (prev ? { ...prev, selected: [], message: null } : prev))}
-            >
-              Clear
-            </button>
-            <button
-              type="button"
-              className="btn btn--primary"
-              style={{ flex: 2 }}
-              disabled={game.selected.length !== GROUP_SIZE}
-              onClick={() => setGame((prev) => (prev ? submit(prev) : prev))}
-            >
-              Submit ({game.selected.length}/{GROUP_SIZE})
-            </button>
+          <div className="stack-sm">
+            <div className="row">
+              <button
+                type="button"
+                className="btn"
+                style={{ flex: 1 }}
+                disabled={game.selected.length === 0}
+                onClick={() => setGame((prev) => (prev ? { ...prev, selected: [], near: null } : prev))}
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                className="btn btn--primary"
+                style={{ flex: 2 }}
+                disabled={game.selected.length !== GROUP_SIZE}
+                onClick={() => setGame((prev) => (prev ? submit(prev) : prev))}
+              >
+                Submit ({game.selected.length}/{GROUP_SIZE})
+              </button>
+            </div>
+            <div className="row" style={{ justifyContent: 'center' }}>
+              <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />
+            </div>
           </div>
         )}
       </div>
     </GameShell>
+  );
+}
+
+/** Lives as hearts: four filled, emptying as they are spent. */
+function Hearts({ left }: { left: number }) {
+  return (
+    <span className="cx-hearts" aria-label={`${left} of ${MAX_MISTAKES} lives left`}>
+      {Array.from({ length: MAX_MISTAKES }, (_, index) => (
+        <span key={index} className={`cx-heart${index < left ? '' : ' cx-heart--spent'}`} aria-hidden="true">
+          {index < left ? '♥' : '♡'}
+        </span>
+      ))}
+    </span>
   );
 }
 

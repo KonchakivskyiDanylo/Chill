@@ -31,72 +31,80 @@ npm run dev          # http://localhost:5173
 
 | Game | Modes | Notes |
 | --- | --- | --- |
-| Higher or Lower | Age / Career earnings / FNCS wins × Easy / Medium / Hard | **Liquipedia roster.** Endless, one mistake ends the run, best score in `localStorage`. Hard also adds the Equal button |
-| Fortnitedle | Region × Easy / Medium / Hard | **Liquipedia roster.** Region first, then level — inside a region the levels are `region_tier`. 6 guesses, digits are playable characters, any string of the right length is allowed |
-| Career Path | Easy / Medium / Hard × Order / Random | **Liquipedia majors** (`career_path.json`). Every major the player reached, up to 30 |
-| Who Are Ya? | Easy / Medium / Hard × Counts shown / hidden / Random | **Liquipedia teammates** (`teammates.json`). Every tournament in the export, fewest shared first |
-| Tenaball | Up to 5 categories × Easy / Hard | Each category's tie rule is stated on the board; categories the data cannot rank are hidden |
+| Higher or Lower | Age / Career earnings / FNCS wins | Endless, one mistake ends the run, best score in `localStorage`. Hard adds the Equal button. Pairs are chosen so the gap matches a target that narrows with difficulty *and* streak |
+| Fortnitedle | — | 6 guesses, digits are playable characters. A name's digits are revealed on a schedule: one after guess 3, two after 2 and 4, three after 1, 3 and 4 |
+| Career Path | Order / Random | 10 clues. Order tells the career as a story (first major, most recent, best of each stretch between); Random draws 10 at random from the whole career |
+| Who Are Ya? | Counts shown / hidden / Random order | Teammates fewest-shared first. Needs 3+ teammates and 5+ tournaments on record |
+| Tenaball | ~250 categories × Easy / Hard | Boards answer in players, organisations *or* countries. Each states its own tie rule |
 | List | Easy / Hard | 90s, +5s per correct answer, −3s per miss on Hard |
-| Griefer | All at once / One by one | 6–8 players, 1–3 griefers |
-| Piece Control | — | Generated boards, 3 mistakes |
-| Connections | — | 16 players, 4 groups, 4 mistakes |
-| Guess the Player | Exact / Direction | 5 attributes, 8 guesses |
+| Griefer | All at once / One by one | Find the 2–3 players who **fit** the rule among 6–8. Cards show the handle only |
+| Tic Tac Toe | Easy / Hard | Type a player; the grid works out which cell they belong in. Easy allows 3 mistakes, Hard gives 9 guesses |
+| Connections | — | 16 players, 4 groups, 4 lives shown as hearts |
+| Guess the Player | Exact / Direction | 6 attributes, 8 guesses |
 
-Fortnitedle, Career Path and Who Are Ya deal their secret player from a
-**no-repeat rotation** (`games/shared/rotation.ts`): the pool empties before
-anyone comes round again, and the new cycle never opens with whoever closed the
-last one. The cycle is per pool — per region and level in Fortnitedle — and
-lives in `localStorage`, so it survives a reload. (Higher or Lower already
-never repeated inside a run; the other six deal a whole board rather than one
-player.)
+Eight of the ten share a **setup step** (`components/PoolSetup`): an event pool
+*or* the roster narrowed by region, difficulty and active/retired, then Start.
+Tenaball and List pick a category instead, because that is their whole subject.
 
-Every game has a **Give up** button in its title bar while a round is running.
-It is two-step — the first click arms it, the second reveals the answer — because
-a single button next to "New game" is too easy to hit by accident, and in the
-endless games it would throw away a streak. Each engine exposes a pure
-`giveUp(state)` that ends the round and is a no-op once it has; `npm run
-check:games` asserts both halves of that for all nine.
+Fortnitedle, Career Path, Who Are Ya and Guess the Player deal their secret
+player from a **no-repeat rotation** (`games/shared/rotation.ts`): the pool
+empties before anyone comes round again, and the new cycle never opens with
+whoever closed the last one. The cycle is keyed by everything that changes who
+is in the bag (`poolScope`) and lives in `localStorage`, so it survives a
+reload. (Higher or Lower already never repeats inside a run; the rest deal a
+whole board rather than one player.)
+
+Every game has a **Give up** button next to its guess controls while a round is
+running — not in the title bar, where it sat beside "New game" and was too easy
+to hit by accident. It is two-step: the first click arms it, the second reveals
+the answer. Each engine exposes a pure `giveUp(state)` that ends the round and
+is a no-op once it has.
 
 A game's folder name is its original name, not its current one: Fortnitedle
-lives in `games/wordle/`, Griefer in `games/impostor/`, Piece Control in
-`games/tic-tac-toe/`. `GameMeta.id` is likewise unchanged, because local best
-scores hang off it — a rename touches `title` and `slug` only.
+lives in `games/wordle/`, Griefer in `games/impostor/`. `GameMeta.id` is
+likewise unchanged, because local best scores hang off it — a rename touches
+`title` and `slug` only. (Piece Control has been renamed back to Tic Tac Toe,
+which is both its folder and its id.)
 
-Easy / Medium / Hard means two different things in that table. In the four
-games on the Liquipedia roster it is the **fame ranking** below — how well
-known the players you are asked about are. Everywhere else it is the
-mechanical setting that game always had (lives, time penalties), and has
-nothing to do with fame. Who Are Ya used to call its clue orders Easy / Hard /
-Random and now calls them Counts shown / Counts hidden / Random order, because
-it has a fame difficulty above them and two Easys on one screen meant two
-different things.
+Easy / Medium / Hard means two different things across that table. In the
+shared setup step it is the **fame ranking** below — how well known the players
+you are asked about are, expressed on each card as the career-earnings band it
+covers. Inside Tenaball, List and Tic Tac Toe it is that game's own mechanical
+setting (lives, time penalties, guess budget) and has nothing to do with fame.
+Who Are Ya calls its clue orders Counts shown / Counts hidden / Random order
+for the same reason: it has a fame difficulty above them, and two Easys on one
+screen meant two different things.
 
-### Two data sources
+### One data source
 
-There are two, on purpose, and they answer different questions.
-
-`src/data/fortnite/` is the **Wikipedia import**: 316 players with full career
-histories — who placed where, alongside whom, under which org. Six of the ten
-games read it through `Dataset`. It is also the only source that publishes
-FNCS titles per player, which is why Higher or Lower's FNCS Wins category
-borrows from it.
-
-`liquipedia_data/clean_data/fortnite/` is the **Liquipedia export**, read in
-place through the `@data` alias. Four games run on it:
+All ten games read the **Liquipedia export** in
+`liquipedia_data/clean_data/fortnite/`, in place, with no build step.
 
 | file | rows | read by |
 | --- | --- | --- |
-| `players.json` | 5,678 playable | Higher or Lower, Fortnitedle, and the other two for identity |
+| `players.json` | 5,678 playable | every game — identity, earnings, tier, FNCS wins |
 | `career_path.json` | 188 majors, 1,175 players | Career Path |
-| `teammates.json` | 39,038 pairs, 5,496 players | Who Are Ya |
+| `teammates.json` | 39,038 pairs, 5,496 players | Who Are Ya, Connections |
+| `orgs.json` | 979 orgs | Griefer, Tic Tac Toe, Connections, Tenaball |
+| `facts.json` | per-player career facts | Griefer, Tic Tac Toe, Connections, List, Who Are Ya |
+| `rankings.json` | ~250 precomputed leaderboards | Tenaball |
+| `pools.json` | event-qualified fields | every game's setup step |
 
-The last two are **generated by the notebook**, from `tournaments.json` and
-`placements.json` — see `notebook_cells.md`. Until those cells have been run
-the files do not exist, `npm run dev` fails on the missing import and
-`npm run check:games` reports the two games as SKIPPED and stays green.
-Neither carries a `tier` column: difficulty is joined from `players.json` by
-page name, so re-tiering the roster re-tiers those games too and the derived
-files cannot go stale against it.
+All but `players.json` are **generated by the notebook** — see
+`notebook_cells.md`. A file that has not been generated is simply absent:
+`src/data/liquipedia/files.ts` reads the folder with `import.meta.glob`, so a
+missing file is a value to branch on rather than a build error, and
+`npm run check:games` reports the affected games as SKIPPED and stays green.
+
+None of the derived files carries a `tier` column: difficulty is joined from
+`players.json` by page name, so re-tiering the roster re-tiers every game and
+the derived files cannot go stale against it.
+
+`src/data/fortnite/` — the older **Wikipedia import**, 316 players — is still
+in the tree and is no longer read by anything. It is kept deliberately: it is
+the only source with hand-checked per-event rosters, and the `Dataset` /
+`PlayerRepository` layer around it still documents how a different backend
+would plug in.
 
 **There is no build step.** The app imports that file in place, through the
 `@data` alias. Two columns in it are maintained by the notebook that owns the

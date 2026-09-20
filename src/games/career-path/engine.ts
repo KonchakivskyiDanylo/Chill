@@ -1,20 +1,13 @@
 import type { MajorResult } from '@/data/liquipedia/majors';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
-import { makeRng, shuffle } from '@/lib/rng';
+import { makeRng, sample, shuffle } from '@/lib/rng';
 
 /** Pure logic for Career Path. */
 
 export type Mode = 'order' | 'random';
 
-/**
- * Every major the player reached, up to this many.
- *
- * The cap is a display limit, not a rule: on the current export the longest
- * path is EpikWhale's 34 and exactly 3 of the 1,175 answerable players go past
- * 30, so it almost never bites. It exists so a future export with a longer
- * record cannot produce a hundred-row clue list.
- */
-export const MAX_CLUES = 30;
+/** Clues in a round. Ten is enough for an arc and short enough to read. */
+export const MAX_CLUES = 10;
 
 export interface Clue {
   result: MajorResult;
@@ -25,9 +18,62 @@ export interface GameState {
   secret: RosterPlayer;
   /** Clues in reveal order. */
   clues: Clue[];
+  /** Every major on record, oldest first — shown once the round is over. */
+  career: MajorResult[];
   revealed: number;
   guesses: RosterPlayer[];
   status: 'playing' | 'won' | 'lost';
+}
+
+/**
+ * How much a result says about a career.
+ *
+ * Two things make a result worth showing: the event was big, and the player
+ * did well. A 91st at a regional qualifier is true and tells you nothing —
+ * which was the old game's problem, since it walked the whole career in order
+ * and most careers are mostly noise.
+ *
+ * Prize pool on a log scale so a $15M World Cup outranks a $100k major without
+ * drowning it; placement on a log scale too, because the gap between 1st and
+ * 4th matters and the gap between 40th and 60th does not.
+ */
+export function notability(result: MajorResult): number {
+  const pool = Math.log10((result.tournament.prizePool ?? 0) + 1);
+  const finish = Math.max(0, 6 - Math.log2(Math.max(1, result.placement)));
+  return pool + finish;
+}
+
+/**
+ * The ten results that tell the career as a story.
+ *
+ * The first major and the most recent one are always in — they are the two
+ * that frame everything else, "arrived in 2019" and "still here in 2026". The
+ * middle eight come one per equal slice of the span between them, each slice
+ * contributing its best result.
+ *
+ * Slicing by position in the career rather than taking the eight best overall
+ * is the whole point: the best eight of a long career cluster in whichever
+ * eighteen months the player peaked, and a clue list of five events from 2021
+ * reads as a career that started and ended in 2021.
+ */
+export function careerStory(results: readonly MajorResult[], limit = MAX_CLUES): MajorResult[] {
+  if (results.length <= limit) return [...results];
+
+  const first = results[0];
+  const last = results[results.length - 1];
+  const middle = results.slice(1, -1);
+  const slots = limit - 2;
+
+  const picked: MajorResult[] = [];
+  for (let slot = 0; slot < slots; slot++) {
+    const from = Math.floor((middle.length * slot) / slots);
+    const to = Math.floor((middle.length * (slot + 1)) / slots);
+    const window = middle.slice(from, to);
+    if (window.length === 0) continue;
+    picked.push(window.reduce((best, entry) => (notability(entry) > notability(best) ? entry : best)));
+  }
+
+  return [first, ...picked, last].sort((a, b) => (a.tournament.date < b.tournament.date ? -1 : 1));
 }
 
 /**
@@ -37,10 +83,9 @@ export interface GameState {
  * `games/shared/rotation.ts`) and the rules of the round are not.
  *
  * `results` must be the player's majors oldest first — `Majors.resultsFor`
- * guarantees that. Order mode walks them as they are; Random shuffles. When a
- * career is longer than `MAX_CLUES` the *most recent* majors are kept, because
- * a path that stops short of where someone got to reads as a career that
- * stopped there.
+ * guarantees that. Order walks the career story; Random draws ten at random
+ * from the whole career and shuffles them, which is a genuinely different
+ * game: no arc to read, just ten facts.
  */
 export function createGame(
   secret: RosterPlayer,
@@ -50,11 +95,17 @@ export function createGame(
 ): GameState | null {
   if (results.length === 0) return null;
   const rng = makeRng(seed);
-  const trimmed = results.slice(-MAX_CLUES).map((result) => ({ result }));
+
+  const chosen =
+    mode === 'order'
+      ? careerStory(results)
+      : shuffle(rng, sample(rng, results, Math.min(MAX_CLUES, results.length)));
+
   return {
     mode,
     secret,
-    clues: mode === 'order' ? trimmed : shuffle(rng, trimmed),
+    clues: chosen.map((result) => ({ result })),
+    career: [...results],
     revealed: 1,
     guesses: [],
     status: 'playing',

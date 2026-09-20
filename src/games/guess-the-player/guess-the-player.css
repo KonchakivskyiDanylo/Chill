@@ -1,6 +1,7 @@
 .gp-table {
   display: grid;
-  grid-template-columns: minmax(140px, 1.4fr) repeat(5, minmax(74px, 1fr));
+  /* Guess, then region / country / status / age / earnings / FNCS. */
+  grid-template-columns: minmax(140px, 1.4fr) repeat(6, minmax(74px, 1fr));
   gap: 5px;
   min-width: 560px;
 }

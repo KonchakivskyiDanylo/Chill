@@ -1,42 +1,99 @@
 import { useCallback, useMemo, useState } from 'react';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
-import { PlayerAvatar } from '@/components/PlayerAvatar';
+import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PlayerSearch } from '@/components/PlayerSearch';
-import { Banner, Modal, Stat } from '@/components/ui';
-import { useDataset } from '@/data/DataProvider';
-import type { Player } from '@/data/types';
+import { PoolSetup } from '@/components/PoolSetup';
+import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
+import type { Facts } from '@/data/liquipedia/facts';
+import type { Orgs } from '@/data/liquipedia/orgs';
+import type { Pools } from '@/data/liquipedia/pools';
+import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
+import { useFacts } from '@/data/liquipedia/useFacts';
+import { useOrgs } from '@/data/liquipedia/useOrgs';
+import { usePools } from '@/data/liquipedia/usePools';
+import { useRoster } from '@/data/liquipedia/useRoster';
+import { resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { getGame } from '@/games/registry';
 import {
   cellKey,
   createGame,
   generateBoard,
   giveUp,
+  guessesLeft,
+  HARD_GUESSES,
   MAX_MISTAKES,
   place,
   SIZE,
   solutionFor,
+  submit,
+  type Cell,
+  type Difficulty,
   type GameState,
 } from './engine';
 import './tic-tac-toe.css';
 
 const meta = getGame('tic-tac-toe')!;
 
-export default function TicTacToeGame() {
-  const dataset = useDataset();
-  const [game, setGame] = useState<GameState | null>(() => {
-    const board = generateBoard(dataset);
-    return board ? createGame(board) : null;
-  });
-  const [active, setActive] = useState<{ row: number; col: number } | null>(null);
-  const [feedback, setFeedback] = useState<{ tone: string; message: string } | null>(null);
+const RULESETS: { id: Difficulty; label: string; hint: string }[] = [
+  { id: 'easy', label: '🟢 Easy', hint: `Unlimited guesses. ${MAX_MISTAKES} wrong answers end the board.` },
+  { id: 'hard', label: '🔴 Hard', hint: `${HARD_GUESSES} guesses — one per cell. Every one has to land.` },
+];
 
-  const newBoard = useCallback(() => {
-    const board = generateBoard(dataset);
-    setGame(board ? createGame(board) : null);
-    setActive(null);
+export default function TicTacToeGame() {
+  const { roster, error: rosterError } = useRoster();
+  const { facts, error: factsError } = useFacts();
+  const { orgs, error: orgsError } = useOrgs();
+  const { pools } = usePools();
+
+  return (
+    <LiquipediaGate
+      error={rosterError ?? factsError ?? orgsError}
+      ready={Boolean(roster && facts && orgs)}
+    >
+      {roster && facts && orgs ? (
+        <Game roster={roster} facts={facts} orgs={orgs} pools={pools} />
+      ) : null}
+    </LiquipediaGate>
+  );
+}
+
+function Game({
+  roster,
+  facts,
+  orgs,
+  pools,
+}: {
+  roster: Roster;
+  facts: Facts;
+  orgs: Orgs;
+  pools: Pools | null;
+}) {
+  const [choice, setChoice] = usePoolChoice();
+  const [ruleset, setRuleset] = useState<Difficulty>('easy');
+  const [game, setGame] = useState<GameState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ tone: string; message: string } | null>(null);
+  /** Set when a player fits several cells and none of them is uniquely theirs. */
+  const [choosing, setChoosing] = useState<{ player: RosterPlayer; cells: Cell[] } | null>(null);
+
+  const eligible = useMemo(() => facts.eligible(3), [facts]);
+  const players = useMemo(
+    () => resolvePool(roster, pools, choice, eligible, 60),
+    [roster, pools, choice, eligible],
+  );
+
+  const start = useCallback(() => {
+    const board = generateBoard({ players, facts, orgs });
+    if (!board) {
+      setError('Not enough players in this pool to build a solvable grid. Try a wider one.');
+      return;
+    }
+    setError(null);
     setFeedback(null);
-  }, [dataset]);
+    setChoosing(null);
+    setGame(createGame(board, ruleset));
+  }, [players, facts, orgs, ruleset]);
 
   const usedIds = useMemo(
     () => new Set(game ? [...game.filled.values()].map((player) => player.id) : []),
@@ -45,14 +102,38 @@ export default function TicTacToeGame() {
 
   if (!game) {
     return (
-      <GameShell game={meta}>
+      <GameShell game={meta} dataNote={<RosterNote what="Players" generated={facts.generated} />}>
         <div className="stack">
-          <Banner tone="danger" title="No solvable board">
-            The generator could not find a 3×3 board where every cell has a valid, distinct player.
-          </Banner>
-          <button type="button" className="btn btn--primary btn--block" onClick={newBoard}>
-            Try again
-          </button>
+          <PoolSetup
+            roster={roster}
+            pools={pools}
+            value={choice}
+            onChange={setChoice}
+            eligible={eligible}
+            onStart={start}
+            startLabel="New board"
+            extra={
+              <section className="card stack">
+                <div className="card__title">Rules</div>
+                <OptionGrid>
+                  {RULESETS.map((option) => (
+                    <OptionCard
+                      key={option.id}
+                      label={option.label}
+                      hint={option.hint}
+                      selected={ruleset === option.id}
+                      onClick={() => setRuleset(option.id)}
+                    />
+                  ))}
+                </OptionGrid>
+              </section>
+            }
+          />
+          {error ? (
+            <Banner tone="danger" title="Cannot start">
+              {error}
+            </Banner>
+          ) : null}
         </div>
       </GameShell>
     );
@@ -61,14 +142,25 @@ export default function TicTacToeGame() {
   const { board } = game;
   const finished = game.status !== 'playing';
 
-  const submit = (player: Player) => {
-    if (!active) return;
-    const result = place(game, active.row, active.col, player);
+  /** Applies whatever `submit`/`place` came back with, and narrates it. */
+  const resolve = (result: ReturnType<typeof submit>, player: RosterPlayer) => {
     setGame(result.state);
-    switch (result.outcome) {
-      case 'placed':
-        setFeedback({ tone: 'var(--success)', message: `${player.name} fits.` });
-        setActive(null);
+    switch (result.outcome.kind) {
+      case 'placed': {
+        const { row, col } = result.outcome.cell;
+        setChoosing(null);
+        setFeedback({
+          tone: 'var(--success)',
+          message: `${player.name} → ${board.rows[row].short} × ${board.cols[col].short}.`,
+        });
+        break;
+      }
+      case 'choose':
+        setChoosing({ player, cells: result.outcome.cells });
+        setFeedback({
+          tone: 'var(--text-muted)',
+          message: `${player.name} fits more than one cell — pick which.`,
+        });
         break;
       case 'already-used':
         setFeedback({ tone: 'var(--warning)', message: `${player.name} is already on the board.` });
@@ -76,36 +168,35 @@ export default function TicTacToeGame() {
       case 'deadlock':
         setFeedback({
           tone: 'var(--warning)',
-          message: `${player.name} fits, but using them here would leave another cell impossible. Pick someone else.`,
+          message: `${player.name} fits, but using them there would leave another cell impossible.`,
         });
         break;
-      case 'wrong':
-        setFeedback({ tone: 'var(--danger)', message: `${player.name} does not fit that cell.` });
-        setActive(null);
-        break;
       default:
-        setActive(null);
+        setChoosing(null);
+        setFeedback({ tone: 'var(--danger)', message: `${player.name} does not fit any open cell.` });
     }
   };
+
+  const left = guessesLeft(game);
 
   return (
     <GameShell
       game={meta}
+      dataNote={<RosterNote what="Players" generated={facts.generated} />}
       toolbar={
-        <>
-          {game.status === 'playing' ? (
-            <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />
-          ) : null}
-          <button type="button" className="icon-btn" onClick={newBoard}>
-            ↺ New board
-          </button>
-        </>
+        <button type="button" className="icon-btn" onClick={() => setGame(null)}>
+          ↺ New board
+        </button>
       }
     >
       <div className="stack">
         <div className="stats">
           <Stat label="Filled" value={`${game.filled.size}/9`} />
-          <Stat label="Mistakes" value={`${game.mistakes}/${MAX_MISTAKES}`} />
+          {game.difficulty === 'easy' ? (
+            <Stat label="Mistakes" value={`${game.mistakes}/${MAX_MISTAKES}`} />
+          ) : (
+            <Stat label="Guesses left" value={Number.isFinite(left) ? left : '∞'} />
+          )}
         </div>
 
         <div className="scroll-x">
@@ -125,9 +216,10 @@ export default function TicTacToeGame() {
                 title={row.label}
                 game={game}
                 finished={finished}
-                onSelect={(col) => {
-                  setFeedback(null);
-                  setActive({ row: rowIndex, col });
+                choosing={choosing}
+                onChoose={(col) => {
+                  if (!choosing) return;
+                  resolve(place(game, { row: rowIndex, col }, choosing.player), choosing.player);
                 }}
               />
             ))}
@@ -144,58 +236,72 @@ export default function TicTacToeGame() {
           <div className="stack">
             <Banner
               tone={game.status === 'won' ? 'success' : 'danger'}
-              title={game.status === 'won' ? 'Board complete!' : 'Out of mistakes'}
+              title={game.status === 'won' ? 'Board complete!' : 'Board lost'}
             >
               {game.status === 'won'
-                ? `All nine cells filled with ${game.mistakes} ${game.mistakes === 1 ? 'mistake' : 'mistakes'}.`
-                : 'Tap an empty cell to see players who would have worked.'}
+                ? `All nine cells filled in ${game.guesses} guesses.`
+                : 'Every empty cell below shows players who would have worked.'}
             </Banner>
-            <button type="button" className="btn btn--primary btn--lg btn--block" onClick={newBoard}>
+            {game.status === 'lost' ? <Reveal game={game} /> : null}
+            <button type="button" className="btn btn--primary btn--lg btn--block" onClick={start}>
               New board
             </button>
           </div>
-        ) : null}
-
-        <Modal
-          open={active !== null}
-          title={
-            active
-              ? `${board.rows[active.row].short} × ${board.cols[active.col].short}`
-              : ''
-          }
-          onClose={() => setActive(null)}
-        >
-          {active ? (
-            <>
-              <p className="small muted">
-                Name a player who {board.rows[active.row].label} <strong>and</strong>{' '}
-                {board.cols[active.col].label}.
+        ) : (
+          <div className="stack-sm">
+            {choosing ? (
+              <p className="small center muted">
+                Tap the cell you want <strong>{choosing.player.name}</strong> in, or{' '}
+                <button type="button" className="link-btn" onClick={() => setChoosing(null)}>
+                  cancel
+                </button>
+                .
               </p>
-              {finished ? (
-                <div className="stack-sm">
-                  <div className="card__title">Players that would have worked</div>
-                  {solutionFor(game, active.row, active.col).map((player) => (
-                    <div key={player.id} className="row">
-                      <PlayerAvatar player={player} size={28} />
-                      <span className="bold">{player.name}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <>
-                  <PlayerSearch players={dataset.roster} onPick={submit} exclude={usedIds} buttonLabel="Place" />
-                  {feedback ? (
-                    <p className="small" style={{ color: feedback.tone }}>
-                      {feedback.message}
-                    </p>
-                  ) : null}
-                </>
-              )}
-            </>
-          ) : null}
-        </Modal>
+            ) : (
+              <PlayerSearch
+                players={players}
+                onPick={(player) => resolve(submit(game, player), player)}
+                exclude={usedIds}
+                placeholder="Name a player…"
+                buttonLabel="Place"
+                autoFocus
+              />
+            )}
+            <div className="row" style={{ justifyContent: 'center' }}>
+              <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />
+            </div>
+          </div>
+        )}
       </div>
     </GameShell>
+  );
+}
+
+/** Players who would have worked, per cell left empty. */
+function Reveal({ game }: { game: GameState }) {
+  const empty: Cell[] = [];
+  for (let row = 0; row < SIZE; row++) {
+    for (let col = 0; col < SIZE; col++) {
+      if (!game.filled.has(cellKey(row, col))) empty.push({ row, col });
+    }
+  }
+  return (
+    <section className="card stack-sm">
+      <div className="card__title">What would have worked</div>
+      {empty.map(({ row, col }) => (
+        <p key={cellKey(row, col)} className="small">
+          <span className="muted">
+            {game.board.rows[row].short} × {game.board.cols[col].short}
+          </span>{' '}
+          —{' '}
+          <span className="bold">
+            {solutionFor(game, row, col)
+              .map((player) => player.name)
+              .join(', ') || 'nobody left'}
+          </span>
+        </p>
+      ))}
+    </section>
   );
 }
 
@@ -205,14 +311,16 @@ function BoardRow({
   title,
   game,
   finished,
-  onSelect,
+  choosing,
+  onChoose,
 }: {
   rowIndex: number;
   label: string;
   title: string;
   game: GameState;
   finished: boolean;
-  onSelect: (col: number) => void;
+  choosing: { player: RosterPlayer; cells: Cell[] } | null;
+  onChoose: (col: number) => void;
 }) {
   return (
     <>
@@ -221,22 +329,23 @@ function BoardRow({
       </div>
       {Array.from({ length: SIZE }, (_, col) => {
         const player = game.filled.get(cellKey(rowIndex, col));
+        const offered = choosing?.cells.some((cell) => cell.row === rowIndex && cell.col === col);
+        const classes = ['ttt-cell'];
+        if (player) classes.push('ttt-cell--filled');
+        if (offered) classes.push('ttt-cell--offered');
         return (
           <button
             key={col}
             type="button"
-            className={`ttt-cell${player ? ' ttt-cell--filled' : ''}`}
-            onClick={() => onSelect(col)}
-            disabled={Boolean(player)}
+            className={classes.join(' ')}
+            onClick={() => offered && onChoose(col)}
+            disabled={Boolean(player) || finished || !offered}
           >
             {player ? (
-              <>
-                <PlayerAvatar player={player} size={34} />
-                <span className="ttt-cell__name">{player.name}</span>
-              </>
+              <span className="ttt-cell__name">{player.name}</span>
             ) : (
               <span className="ttt-cell__plus" aria-hidden="true">
-                {finished ? '?' : '+'}
+                {offered ? '↓' : finished ? '?' : ''}
               </span>
             )}
           </button>

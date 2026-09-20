@@ -2,77 +2,127 @@ import { useCallback, useMemo, useState } from 'react';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { CountryBadge } from '@/components/CountryBadge';
-import { DifficultyCards, DifficultyChip, useDifficulty } from '@/components/DifficultyPicker';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { PlayerSearch } from '@/components/PlayerSearch';
+import { PoolSetup } from '@/components/PoolSetup';
 import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
-import type { Majors } from '@/data/liquipedia/majors';
+import type { MajorResult, Majors } from '@/data/liquipedia/majors';
+import type { Pools } from '@/data/liquipedia/pools';
 import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
 import { useMajors } from '@/data/liquipedia/useMajors';
+import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
-import { DIFFICULTIES, type Difficulty } from '@/games/shared/difficulty';
 import { deal, rotationKey } from '@/games/shared/rotation';
+import { poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { moneyShort, ordinal, playerMoney, plural } from '@/lib/format';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { getGame } from '@/games/registry';
-import { cluesLeft, createGame, giveUp, revealNext, submitGuess, type GameState, type Mode } from './engine';
+import {
+  cluesLeft,
+  createGame,
+  giveUp,
+  revealNext,
+  submitGuess,
+  type GameState,
+  type Mode,
+} from './engine';
 import './career-path.css';
 
 const meta = getGame('career-path')!;
 
+const MODES: { id: Mode; label: string; hint: string }[] = [
+  {
+    id: 'order',
+    label: 'Order',
+    hint: 'Ten results telling the career as a story: the first major, the most recent, and the best of each stretch between.',
+  },
+  {
+    id: 'random',
+    label: 'Random',
+    hint: 'Ten results drawn at random from the whole career, in no order. No arc to read — just ten facts.',
+  },
+];
+
 export default function CareerPathGame() {
   const { roster, error: rosterError } = useRoster();
   const { majors, error: majorsError } = useMajors();
+  const { pools } = usePools();
 
   return (
     <LiquipediaGate error={rosterError ?? majorsError} ready={Boolean(roster && majors)}>
-      {roster && majors ? <Game roster={roster} majors={majors} /> : null}
+      {roster && majors ? <Game roster={roster} majors={majors} pools={pools} /> : null}
     </LiquipediaGate>
   );
 }
 
-function Game({ roster, majors }: { roster: Roster; majors: Majors }) {
-  const [difficulty, setDifficulty] = useDifficulty();
+function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools: Pools | null }) {
+  const [choice, setChoice] = usePoolChoice();
+  const [mode, setMode] = useState<Mode>('order');
   const [game, setGame] = useState<GameState | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   /** Everyone the game could ever ask about — what the search box covers. */
   const answerable = useMemo(() => majors.eligible(roster.players), [roster, majors]);
 
-  const counts = useMemo(
-    () =>
-      Object.fromEntries(
-        DIFFICULTIES.map((level) => [level, roster.exactly(level, { eligible: majors.eligible }).length]),
-      ) as Record<Difficulty, number>,
-    [roster, majors],
+  const players = useMemo(
+    () => resolvePool(roster, pools, choice, majors.eligible, 10),
+    [roster, pools, choice, majors],
   );
 
-  const start = useCallback(
-    (mode: Mode, level: Difficulty) => {
-      const key = rotationKey(meta.id, level);
-      const pool = roster.playersFor(level, { minimum: 1, eligible: majors.eligible });
-      const drawn = deal(pool, readLocal<string[]>(key, []));
-      if (!drawn) return;
-      writeLocal(key, drawn.seen);
-      setGame(createGame(drawn.pick, majors.resultsFor(drawn.pick.id), mode));
-    },
-    [roster, majors],
-  );
+  const start = useCallback(() => {
+    const key = rotationKey(meta.id, ...poolScope(choice));
+    const drawn = deal(players, readLocal<string[]>(key, []));
+    if (!drawn) {
+      setError(`No player in this pool has ${majors.minAppearances} majors on record.`);
+      return;
+    }
+    writeLocal(key, drawn.seen);
+    setError(null);
+    setGame(createGame(drawn.pick, majors.resultsFor(drawn.pick.id), mode));
+  }, [players, choice, majors, mode]);
 
   const note = <RosterNote what="Results" generated={majors.generated} />;
 
   if (!game) {
     return (
       <GameShell game={meta} dataNote={note}>
-        <Setup
-          difficulty={difficulty}
-          onDifficulty={setDifficulty}
-          counts={counts}
-          tournaments={majors.tournaments.length}
-          answerable={answerable.length}
-          minAppearances={majors.minAppearances}
-          onStart={(mode) => start(mode, difficulty)}
-        />
+        <div className="stack">
+          <PoolSetup
+            roster={roster}
+            pools={pools}
+            value={choice}
+            onChange={setChoice}
+            eligible={majors.eligible}
+            onStart={start}
+            startLabel="Start"
+            extra={
+              <section className="card stack">
+                <div className="card__title">Clue order</div>
+                <OptionGrid>
+                  {MODES.map((option) => (
+                    <OptionCard
+                      key={option.id}
+                      label={option.label}
+                      hint={option.hint}
+                      selected={mode === option.id}
+                      onClick={() => setMode(option.id)}
+                    />
+                  ))}
+                </OptionGrid>
+              </section>
+            }
+          />
+          {error ? (
+            <Banner tone="danger" title="Cannot start">
+              {error}
+            </Banner>
+          ) : null}
+          <p className="tiny faint center">
+            {plural(majors.tournaments.length, 'major')} on record ·{' '}
+            {plural(answerable.length, 'player')} with at least {majors.minAppearances} of them
+          </p>
+        </div>
       </GameShell>
     );
   }
@@ -80,6 +130,7 @@ function Game({ roster, majors }: { roster: Roster; majors: Majors }) {
   const finished = game.status !== 'playing';
   const visible = game.clues.slice(0, game.revealed);
   const guessedIds = new Set(game.guesses.map((p) => p.id));
+  const shownIds = new Set(game.clues.map((clue) => clue.result.tournament.name));
 
   return (
     <GameShell
@@ -87,12 +138,11 @@ function Game({ roster, majors }: { roster: Roster; majors: Majors }) {
       dataNote={note}
       toolbar={
         <>
-          {game.status === 'playing' ? <GiveUpButton onGiveUp={() => setGame(giveUp(game))} /> : null}
-          <button type="button" className="icon-btn" onClick={() => start(game.mode, difficulty)}>
+          <button type="button" className="icon-btn" onClick={start}>
             ↺ New player
           </button>
           <button type="button" className="icon-btn" onClick={() => setGame(null)}>
-            ↺ Change setup
+            ⚙ Setup
           </button>
         </>
       }
@@ -102,7 +152,6 @@ function Game({ roster, majors }: { roster: Roster; majors: Majors }) {
           <Stat label="Clues shown" value={`${game.revealed}/${game.clues.length}`} />
           <Stat label="Guesses" value={game.guesses.length} />
           <Stat label="Mode" value={game.mode === 'order' ? 'Order' : 'Random'} />
-          <Stat label="Level" value={<DifficultyChip difficulty={difficulty} />} />
         </div>
 
         <section className="card stack">
@@ -110,31 +159,13 @@ function Game({ roster, majors }: { roster: Roster; majors: Majors }) {
             {game.mode === 'order' ? 'Career path — oldest first' : 'Career path — random order'}
           </div>
           <ol className="cp-path list-reset">
-            {visible.map((clue, index) => {
-              const { tournament, placement } = clue.result;
-              return (
-                <li key={tournament.name} className="cp-clue">
-                  <span className="cp-clue__dot" aria-hidden="true" />
-                  <div className="cp-clue__body">
-                    <div className="cp-clue__event">{tournament.shortName}</div>
-                    <div className="cp-clue__meta">
-                      {tournament.mode ? `${tournament.mode} · ` : ''}
-                      {tournament.year}
-                      {tournament.prizePool ? ` · ${moneyShort(tournament.prizePool)} pool` : ''}
-                    </div>
-                  </div>
-                  <div
-                    className={`cp-clue__place${placement === 1 ? ' cp-clue__place--win' : ''}`}
-                    aria-label={`Placed ${ordinal(placement)}`}
-                  >
-                    {ordinal(placement)}
-                  </div>
-                  {index === visible.length - 1 && !finished ? (
-                    <span className="cp-clue__new">new</span>
-                  ) : null}
-                </li>
-              );
-            })}
+            {visible.map((clue, index) => (
+              <ClueRow
+                key={clue.result.tournament.name}
+                result={clue.result}
+                isNew={index === visible.length - 1 && !finished}
+              />
+            ))}
           </ol>
         </section>
 
@@ -147,27 +178,55 @@ function Game({ roster, majors }: { roster: Roster; majors: Majors }) {
               The player was <strong>{game.secret.name}</strong>.
             </Banner>
             <SecretCard player={game.secret} />
-            <button
-              type="button"
-              className="btn btn--primary btn--lg btn--block"
-              onClick={() => start(game.mode, difficulty)}
-            >
+
+            {/*
+             * The whole record, not just the ten clues. Half the fun of being
+             * told the answer is seeing the career you were only shown a
+             * tenth of.
+             */}
+            <section className="card stack-sm">
+              <div className="card__title">
+                Every major — {plural(game.career.length, 'result')}
+              </div>
+              <ol className="cp-path cp-path--full list-reset">
+                {game.career.map((result) => (
+                  <ClueRow
+                    key={result.tournament.name}
+                    result={result}
+                    dim={!shownIds.has(result.tournament.name)}
+                  />
+                ))}
+              </ol>
+            </section>
+
+            <button type="button" className="btn btn--primary btn--lg btn--block" onClick={start}>
               Next player
             </button>
           </div>
         ) : (
-          <div className="stack">
-            <PlayerSearch players={answerable} onPick={(player) => setGame(submitGuess(game, player))} exclude={guessedIds} />
-            <button
-              type="button"
-              className="btn btn--block"
-              onClick={() => setGame(revealNext(game))}
-              disabled={cluesLeft(game) === 0}
-            >
-              {cluesLeft(game) === 0
-                ? 'All clues revealed — last guess!'
-                : `Reveal next clue (${cluesLeft(game)} left)`}
-            </button>
+          <div className="stack-sm">
+            <PlayerSearch
+              players={answerable}
+              onPick={(player) => setGame(submitGuess(game, player))}
+              exclude={guessedIds}
+              autoFocus
+            />
+            <div className="row">
+              <button
+                type="button"
+                className="btn"
+                style={{ flex: 1 }}
+                onClick={() => setGame(revealNext(game))}
+                disabled={cluesLeft(game) === 0}
+              >
+                {cluesLeft(game) === 0
+                  ? 'All clues revealed — last guess!'
+                  : `Reveal next clue (${cluesLeft(game)} left)`}
+              </button>
+            </div>
+            <div className="row" style={{ justifyContent: 'center' }}>
+              <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />
+            </div>
           </div>
         )}
 
@@ -191,55 +250,36 @@ function Game({ roster, majors }: { roster: Roster; majors: Majors }) {
   );
 }
 
-function Setup({
-  difficulty,
-  onDifficulty,
-  counts,
-  tournaments,
-  answerable,
-  minAppearances,
-  onStart,
+function ClueRow({
+  result,
+  isNew,
+  dim,
 }: {
-  difficulty: Difficulty;
-  onDifficulty: (value: Difficulty) => void;
-  counts: Record<Difficulty, number>;
-  tournaments: number;
-  answerable: number;
-  minAppearances: number;
-  onStart: (mode: Mode) => void;
+  result: MajorResult;
+  isNew?: boolean;
+  /** A result that was never one of the ten clues, in the full reveal. */
+  dim?: boolean;
 }) {
+  const { tournament, placement } = result;
   return (
-    <div className="stack">
-      <section className="card stack">
-        <div className="card__title">Pick a difficulty</div>
-        <DifficultyCards value={difficulty} onChange={onDifficulty} counts={counts} />
-        <p className="tiny faint">
-          How well known the secret player is. The clues are the same either way — a more famous player is
-          simply one you have a chance of recognising from them.
-        </p>
-      </section>
-
-      <section className="card stack">
-        <div className="card__title">Pick a mode</div>
-        <OptionGrid>
-          <OptionCard
-            label="Order"
-            hint="Results appear oldest → newest, the way the career actually ran."
-            onClick={() => onStart('order')}
-          />
-          <OptionCard
-            label="Random"
-            hint="The same results, revealed in a random order. Harder to read."
-            onClick={() => onStart('random')}
-          />
-        </OptionGrid>
-      </section>
-
-      <p className="tiny faint center">
-        {plural(tournaments, 'major')} · {plural(answerable, 'player')} with at least {minAppearances} of
-        them · every player comes up once before any of them comes round again
-      </p>
-    </div>
+    <li className={`cp-clue${dim ? ' cp-clue--dim' : ''}`}>
+      <span className="cp-clue__dot" aria-hidden="true" />
+      <div className="cp-clue__body">
+        <div className="cp-clue__event">{tournament.shortName}</div>
+        <div className="cp-clue__meta">
+          {tournament.mode ? `${tournament.mode} · ` : ''}
+          {tournament.year}
+          {tournament.prizePool ? ` · ${moneyShort(tournament.prizePool)} pool` : ''}
+        </div>
+      </div>
+      <div
+        className={`cp-clue__place${placement === 1 ? ' cp-clue__place--win' : ''}`}
+        aria-label={`Placed ${ordinal(placement)}`}
+      >
+        {ordinal(placement)}
+      </div>
+      {isNew ? <span className="cp-clue__new">new</span> : null}
+    </li>
   );
 }
 

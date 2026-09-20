@@ -57,6 +57,61 @@ export function createGame(
   return gameFor(pool[Math.floor(rng() * pool.length)]);
 }
 
+// ------------------------------------------------------- digit reveals --
+
+/**
+ * When each digit in the answer stops being a secret.
+ *
+ * Digits are the one thing in this game a player cannot reason about. A letter
+ * tile tells you something every round — it is in the name, or it is not, or it
+ * is somewhere else. A digit tells you nothing until you happen to type it, and
+ * 342 of the 5,678 handles have one, so those rounds were a lottery rather than
+ * a puzzle: TH0MASHD is unreachable if you never think to try a zero.
+ *
+ * So they are given, but slowly. Digit `k` of `n` is revealed once
+ * `floor(6k / (n + 1))` guesses have been made — the six guesses split into
+ * `n + 1` even stretches. One digit surfaces after the third guess, two after
+ * the second and fourth, three after the first, third and fourth. You still
+ * get half the round to find it yourself.
+ *
+ * Five handles carry four digits or more (`LEO2004`, `preston4321`,
+ * `Stef2317`, `Stuart0000`, `Ym78267282`); there the formula hands the first
+ * one over immediately, which is right — those are not words with a digit in
+ * them, they are numbers with a name attached.
+ *
+ * Returns position in the answer -> guesses required.
+ */
+export function revealSchedule(answer: string): Map<number, number> {
+  const positions: number[] = [];
+  for (let i = 0; i < answer.length; i++) {
+    if (answer[i] >= '0' && answer[i] <= '9') positions.push(i);
+  }
+  const schedule = new Map<number, number>();
+  positions.forEach((position, index) => {
+    schedule.set(position, Math.floor((MAX_GUESSES * (index + 1)) / (positions.length + 1)));
+  });
+  return schedule;
+}
+
+/**
+ * The digits the player can see right now, as position -> character.
+ *
+ * Empty for the great majority of rounds, whose answers are all letters.
+ */
+export function revealedDigits(state: GameState): Map<number, string> {
+  const shown = new Map<number, string>();
+  const done = state.status !== 'playing';
+  for (const [position, after] of revealSchedule(state.answer)) {
+    if (done || state.guesses.length >= after) shown.set(position, state.answer[position]);
+  }
+  return shown;
+}
+
+/** True when this answer has any digit at all — the hint strip is hidden otherwise. */
+export function hasDigits(answer: string): boolean {
+  return /[0-9]/.test(answer);
+}
+
 /**
  * Standard two-pass Wordle scoring: exact hits first, then misplaced ones
  * against whatever letters are left over, so duplicates behave correctly.

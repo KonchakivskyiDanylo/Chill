@@ -1,55 +1,130 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
-import { CountryBadge } from '@/components/CountryBadge';
-import { PlayerAvatar } from '@/components/PlayerAvatar';
-import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
-import { useDataset } from '@/data/DataProvider';
-import type { Player } from '@/data/types';
-import { playerMoneyShort } from '@/lib/format';
+import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
+import { PoolSetup } from '@/components/PoolSetup';
+import { Banner, OptionCard, OptionGrid } from '@/components/ui';
+import { useFacts } from '@/data/liquipedia/useFacts';
+import { useOrgs } from '@/data/liquipedia/useOrgs';
+import { usePools } from '@/data/liquipedia/usePools';
+import { useRoster } from '@/data/liquipedia/useRoster';
+import type { Facts } from '@/data/liquipedia/facts';
+import type { Orgs } from '@/data/liquipedia/orgs';
+import type { Pools } from '@/data/liquipedia/pools';
+import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
+import { resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { getGame } from '@/games/registry';
-import { check, createGame, createRound, giveUp, impostorsLeft, pick, toggle, type GameState, type Mode } from './engine';
+import {
+  check,
+  createGame,
+  createRound,
+  giveUp,
+  membersLeft,
+  pick,
+  toggle,
+  type GameState,
+  type Mode,
+} from './engine';
 import './impostor.css';
 
 const meta = getGame('impostor')!;
 
+const MODES: { id: Mode; label: string; hint: string }[] = [
+  {
+    id: 'all-at-once',
+    label: 'All at once',
+    hint: 'Select everyone who fits, then check. The selection has to be exactly right.',
+  },
+  {
+    id: 'one-by-one',
+    label: 'One by one',
+    hint: 'Pick them one at a time, confirming each. One griefer ends the round.',
+  },
+];
+
 export default function ImpostorGame() {
-  const dataset = useDataset();
+  const { roster, error: rosterError } = useRoster();
+  const { facts, error: factsError } = useFacts();
+  const { orgs, error: orgsError } = useOrgs();
+  const { pools } = usePools();
+
+  return (
+    <LiquipediaGate
+      error={rosterError ?? factsError ?? orgsError}
+      ready={Boolean(roster && facts && orgs)}
+    >
+      {roster && facts && orgs ? (
+        <Game roster={roster} facts={facts} orgs={orgs} pools={pools} />
+      ) : null}
+    </LiquipediaGate>
+  );
+}
+
+function Game({
+  roster,
+  facts,
+  orgs,
+  pools,
+}: {
+  roster: Roster;
+  facts: Facts;
+  orgs: Orgs;
+  pools: Pools | null;
+}) {
+  const [choice, setChoice] = usePoolChoice();
+  const [mode, setMode] = useState<Mode>('all-at-once');
   const [game, setGame] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** One-by-one only: the card awaiting confirmation. */
+  const [pending, setPending] = useState<RosterPlayer | null>(null);
 
-  const start = useCallback(
-    (mode: Mode) => {
-      const round = createRound(dataset);
-      if (!round) {
-        setError('The dataset cannot build a fair board right now.');
-        return;
-      }
-      setError(null);
-      setGame(createGame(round, mode));
-    },
-    [dataset],
+  // A board needs players with enough recorded career to satisfy a rule.
+  const eligible = useMemo(() => facts.eligible(3), [facts]);
+  const players = useMemo(
+    () => resolvePool(roster, pools, choice, eligible, 40),
+    [roster, pools, choice, eligible],
   );
+
+  const start = useCallback(() => {
+    const round = createRound({ players, facts, orgs });
+    if (!round) {
+      setError('Not enough players in this pool to build a fair board. Try a wider one.');
+      return;
+    }
+    setError(null);
+    setPending(null);
+    setGame(createGame(round, mode));
+  }, [players, facts, orgs, mode]);
 
   if (!game) {
     return (
-      <GameShell game={meta}>
+      <GameShell game={meta} dataNote={<RosterNote what="Players" generated={facts.generated} />}>
         <div className="stack">
-          <section className="card stack">
-            <div className="card__title">Pick a mode</div>
-            <OptionGrid>
-              <OptionCard
-                label="All at once"
-                hint="Select every griefer you can see, then check. One mistake loses the round."
-                onClick={() => start('all-at-once')}
-              />
-              <OptionCard
-                label="One by one"
-                hint="Click griefers one at a time. A wrong pick ends the round instantly."
-                onClick={() => start('one-by-one')}
-              />
-            </OptionGrid>
-          </section>
+          <PoolSetup
+            roster={roster}
+            pools={pools}
+            value={choice}
+            onChange={setChoice}
+            eligible={eligible}
+            onStart={start}
+            startLabel="Start round"
+            extra={
+              <section className="card stack">
+                <div className="card__title">Mode</div>
+                <OptionGrid>
+                  {MODES.map((option) => (
+                    <OptionCard
+                      key={option.id}
+                      label={option.label}
+                      hint={option.hint}
+                      selected={mode === option.id}
+                      onClick={() => setMode(option.id)}
+                    />
+                  ))}
+                </OptionGrid>
+              </section>
+            }
+          />
           {error ? (
             <Banner tone="danger" title="Cannot start">
               {error}
@@ -62,58 +137,55 @@ export default function ImpostorGame() {
 
   const { round } = game;
   const finished = game.status !== 'playing';
+  const left = membersLeft(game);
 
-  const onCardClick = (player: Player) => {
-    setGame((prev) => {
-      if (!prev) return prev;
-      return prev.mode === 'all-at-once' ? toggle(prev, player) : pick(prev, player);
-    });
+  const onCardClick = (player: RosterPlayer) => {
+    if (finished) return;
+    if (game.mode === 'all-at-once') {
+      setGame((prev) => (prev ? toggle(prev, player) : prev));
+    } else {
+      // Confirmed below rather than acted on here: a stray tap used to end the
+      // round outright.
+      setPending((current) => (current?.id === player.id ? null : player));
+    }
   };
 
   return (
     <GameShell
       game={meta}
+      dataNote={<RosterNote what="Players" generated={facts.generated} />}
       toolbar={
-        <>
-          {game.status === 'playing' ? (
-            <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />
-          ) : null}
-          <button type="button" className="icon-btn" onClick={() => start(game.mode)}>
-            ↺ New round
-          </button>
-        </>
+        <button type="button" className="icon-btn" onClick={() => setGame(null)}>
+          ↺ New round
+        </button>
       }
     >
       <div className="stack">
-        <div className="stats">
-          <Stat label="Griefers" value={round.impostorIds.size} />
-          <Stat label="Left to find" value={finished ? 0 : impostorsLeft(game)} />
-          <Stat label="Mode" value={game.mode === 'all-at-once' ? 'All at once' : 'One by one'} />
-        </div>
-
         <section className="card">
           <div className="card__title">The rule</div>
           <h2>
-            Every player here <span style={{ color: 'var(--primary)' }}>{round.criterion.label}</span>
+            Find the players who <span style={{ color: 'var(--primary)' }}>{round.criterion.label}</span>
           </h2>
           <p className="small muted" style={{ marginTop: 6 }}>
-            …except {round.impostorIds.size === 1 ? 'one griefer' : `${round.impostorIds.size} griefers`}.
+            {round.memberIds.size} of these {round.board.length} do. The rest are griefers.
             {game.mode === 'all-at-once'
               ? ' Select them all, then hit Check.'
-              : ' Click them one at a time.'}
+              : ' Pick them one at a time — a griefer ends the round.'}
+            {finished ? '' : ` ${left} left to find.`}
           </p>
         </section>
 
         <div className="imp-grid">
           {round.board.map((player) => {
-            const isImpostor = round.impostorIds.has(player.id);
+            const isMember = round.memberIds.has(player.id);
             const isSelected = game.selected.has(player.id);
-            const reveal = finished;
+            const isPending = pending?.id === player.id;
             const classes = ['imp-card'];
-            if (isSelected && !reveal) classes.push('imp-card--selected');
-            if (reveal && isImpostor) classes.push('imp-card--impostor');
-            if (reveal && !isImpostor && isSelected) classes.push('imp-card--wrong');
-            if (game.mode === 'one-by-one' && isSelected && !reveal) classes.push('imp-card--caught');
+            if (isSelected && !finished) classes.push('imp-card--selected');
+            if (isPending) classes.push('imp-card--pending');
+            if (finished && isMember) classes.push('imp-card--member');
+            if (finished && !isMember && isSelected) classes.push('imp-card--wrong');
+            if (game.mode === 'one-by-one' && isSelected && !finished) classes.push('imp-card--caught');
 
             return (
               <button
@@ -121,21 +193,18 @@ export default function ImpostorGame() {
                 type="button"
                 className={classes.join(' ')}
                 disabled={finished || (game.mode === 'one-by-one' && isSelected)}
-                aria-pressed={isSelected}
+                aria-pressed={isSelected || isPending}
                 onClick={() => onCardClick(player)}
               >
-                <PlayerAvatar player={player} size={44} />
+                {/*
+                 * The handle and nothing else. A flag or an org badge here
+                 * answers half the rules on its own — "competes in Brazil" was
+                 * literally written on every card.
+                 */}
                 <span className="imp-card__name">{player.name}</span>
-                <span className="imp-card__meta">
-                  <CountryBadge code={player.country} name={player.countryName} />{' '}
-                  {player.team ?? 'Free agent'}
-                </span>
-                <span className="imp-card__meta tiny faint">
-                  {playerMoneyShort(player)} · {player.fncsWins} FNCS
-                </span>
-                {reveal ? (
-                  <span className={`imp-card__tag ${isImpostor ? 'imp-card__tag--impostor' : ''}`}>
-                    {isImpostor ? 'Griefer' : 'Fits the rule'}
+                {finished ? (
+                  <span className={`imp-card__tag ${isMember ? 'imp-card__tag--member' : ''}`}>
+                    {isMember ? 'Fits the rule' : 'Griefer'}
                   </span>
                 ) : null}
               </button>
@@ -147,28 +216,48 @@ export default function ImpostorGame() {
           <div className="stack">
             <Banner
               tone={game.status === 'won' ? 'success' : 'danger'}
-              title={game.status === 'won' ? 'All griefers caught!' : 'Round lost'}
+              title={game.status === 'won' ? 'All of them found!' : 'Round lost'}
             >
               {game.mistake
-                ? `${game.mistake.name} ${round.criterion.label} — not a griefer.`
+                ? `${game.mistake.name} does not fit — a griefer.`
                 : game.status === 'won'
                   ? 'Exactly the right selection.'
-                  : 'That selection did not match the griefers.'}
+                  : 'That selection was not the right set.'}
             </Banner>
-            <button type="button" className="btn btn--primary btn--lg btn--block" onClick={() => start(game.mode)}>
+            <button type="button" className="btn btn--primary btn--lg btn--block" onClick={start}>
               Next round
             </button>
           </div>
-        ) : game.mode === 'all-at-once' ? (
-          <button
-            type="button"
-            className="btn btn--primary btn--lg btn--block"
-            disabled={game.selected.size === 0}
-            onClick={() => setGame((prev) => (prev ? check(prev) : prev))}
-          >
-            Check {game.selected.size > 0 ? `(${game.selected.size} selected)` : ''}
-          </button>
-        ) : null}
+        ) : (
+          <div className="stack-sm">
+            {game.mode === 'all-at-once' ? (
+              <button
+                type="button"
+                className="btn btn--primary btn--lg btn--block"
+                disabled={game.selected.size === 0}
+                onClick={() => setGame((prev) => (prev ? check(prev) : prev))}
+              >
+                Check {game.selected.size > 0 ? `(${game.selected.size} selected)` : ''}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn--primary btn--lg btn--block"
+                disabled={!pending}
+                onClick={() => {
+                  if (!pending) return;
+                  setGame((prev) => (prev ? pick(prev, pending) : prev));
+                  setPending(null);
+                }}
+              >
+                {pending ? `Confirm ${pending.name}` : 'Tap a player, then confirm'}
+              </button>
+            )}
+            <div className="row" style={{ justifyContent: 'center' }}>
+              <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />
+            </div>
+          </div>
+        )}
       </div>
     </GameShell>
   );

@@ -1,27 +1,40 @@
-import type { Dataset } from '@/data/dataset';
-import type { Player } from '@/data/types';
+import type { RosterPlayer } from '@/data/liquipedia/roster';
 import { makeRng, sample, shuffle } from '@/lib/rng';
-import { buildCriteria, hasNestedPair, intersect, type PlayerCriterion } from '@/games/shared/criteria';
+import {
+  buildCriteria,
+  hasNestedPair,
+  intersect,
+  type CriteriaSource,
+  type PlayerCriterion,
+} from '@/games/shared/criteria';
 
 /** Pure logic for the 3x3 grid game. */
 
 export const SIZE = 3;
+/** Easy allows this many wrong answers. Hard allows none — see `Difficulty`. */
 export const MAX_MISTAKES = 3;
+/** Hard gives exactly one guess per cell, so every one has to land. */
+export const HARD_GUESSES = SIZE * SIZE;
 /** How many candidate boards to try per pass. */
 const GENERATION_ATTEMPTS = 600;
+
+export type Difficulty = 'easy' | 'hard';
 
 export interface Board {
   rows: PlayerCriterion[];
   cols: PlayerCriterion[];
   /** Valid players per cell, indexed [row][col]. */
-  candidates: Player[][][];
+  candidates: RosterPlayer[][][];
 }
 
 export interface GameState {
   board: Board;
+  difficulty: Difficulty;
   /** Filled cells keyed "row,col". */
-  filled: Map<string, Player>;
+  filled: Map<string, RosterPlayer>;
   mistakes: number;
+  /** Every player submitted, right or wrong. Hard is capped on this. */
+  guesses: number;
   status: 'playing' | 'won' | 'lost';
 }
 
@@ -32,8 +45,8 @@ export const cellKey = (row: number, col: number) => `${row},${col}`;
  * nine cells can be filled with nine *different* players — otherwise the
  * "each player once" rule could make a generated board unwinnable.
  */
-export function generateBoard(dataset: Dataset, seed: string = String(Date.now())): Board | null {
-  const pool = buildCriteria(dataset, { minMatches: 5, maxShare: 0.45 });
+export function generateBoard(source: CriteriaSource, seed: string = String(Date.now())): Board | null {
+  const pool = buildCriteria(source, { minMatches: 5, maxShare: 0.45 });
   if (pool.length < SIZE * 2) return null;
 
   // Prefer a varied, non-redundant board; fall back to any solvable one rather
@@ -58,10 +71,10 @@ function attemptBoards(pool: PlayerCriterion[], seed: string, strict: boolean): 
       if (hasNestedPair(picked)) continue;
     }
 
-    const candidates: Player[][][] = [];
+    const candidates: RosterPlayer[][][] = [];
     let viable = true;
     for (let r = 0; r < SIZE && viable; r++) {
-      const rowCandidates: Player[][] = [];
+      const rowCandidates: RosterPlayer[][] = [];
       for (let c = 0; c < SIZE; c++) {
         const cell = intersect(rows[r], cols[c]);
         if (cell.length === 0) {
@@ -96,7 +109,7 @@ function isVaried(criteria: PlayerCriterion[]): boolean {
  * Backtracking over the most constrained cells first — the grid is tiny, so
  * this is instant.
  */
-function hasDistinctSolution(candidates: Player[][][]): boolean {
+function hasDistinctSolution(candidates: RosterPlayer[][][]): boolean {
   return canComplete(candidates, new Map());
 }
 
@@ -105,7 +118,7 @@ function hasDistinctSolution(candidates: Player[][][]): boolean {
  * used yet? Used both to vet a fresh board and to keep a board winnable while
  * it is being played.
  */
-function canComplete(candidates: Player[][][], filled: Map<string, Player>): boolean {
+function canComplete(candidates: RosterPlayer[][][], filled: Map<string, RosterPlayer>): boolean {
   const used = new Set([...filled.values()].map((player) => player.id));
   const cells: string[][] = [];
   for (let r = 0; r < SIZE; r++) {
@@ -131,58 +144,142 @@ function canComplete(candidates: Player[][][], filled: Map<string, Player>): boo
   return solve(0);
 }
 
-export function createGame(board: Board): GameState {
-  return { board, filled: new Map(), mistakes: 0, status: 'playing' };
+export function createGame(board: Board, difficulty: Difficulty): GameState {
+  return { board, difficulty, filled: new Map(), mistakes: 0, guesses: 0, status: 'playing' };
 }
 
-export type PlaceOutcome = 'placed' | 'wrong' | 'already-used' | 'occupied' | 'deadlock';
+export function guessesLeft(state: GameState): number {
+  return state.difficulty === 'hard' ? HARD_GUESSES - state.guesses : Number.POSITIVE_INFINITY;
+}
 
+export interface Cell {
+  row: number;
+  col: number;
+}
+
+/**
+ * What submitting a player did.
+ *
+ * `choose` is the only outcome that needs the user again — everything else
+ * either landed or did not.
+ */
+export type Submission =
+  | { kind: 'placed'; cell: Cell }
+  | { kind: 'choose'; cells: Cell[] }
+  | { kind: 'rejected' }
+  | { kind: 'already-used' }
+  | { kind: 'deadlock'; cell: Cell };
+
+/** Empty cells this player satisfies, ignoring who else could go there. */
+function fittingCells(state: GameState, player: RosterPlayer): Cell[] {
+  const cells: Cell[] = [];
+  for (let row = 0; row < SIZE; row++) {
+    for (let col = 0; col < SIZE; col++) {
+      if (state.filled.has(cellKey(row, col))) continue;
+      if (state.board.rows[row].test(player) && state.board.cols[col].test(player)) {
+        cells.push({ row, col });
+      }
+    }
+  }
+  return cells;
+}
+
+/**
+ * Cells where this player is the *only* remaining valid answer.
+ *
+ * This is what makes typing a name feel like it reads your mind. Put "World
+ * Cup winner × United States" and "North America × FNCS winner" on the same
+ * board and type Bugha: he fits both, but he is the only person alive who fits
+ * the first, so that is obviously where he is meant to go. Sending him there
+ * without asking is right, and asking would be faintly insulting.
+ */
+function soleCells(state: GameState, player: RosterPlayer, fits: Cell[]): Cell[] {
+  const used = new Set([...state.filled.values()].map((entry) => entry.id));
+  return fits.filter(({ row, col }) => {
+    const options = state.board.candidates[row][col].filter((entry) => !used.has(entry.id));
+    return options.length === 1 && options[0].id === player.id;
+  });
+}
+
+/**
+ * Submits a typed player and resolves where they go.
+ *
+ * The board no longer asks you to pick a cell first. You name a player and the
+ * grid works out where they belong, because in all but a handful of cases
+ * there is only one answer to that and making someone click it was busywork.
+ */
+export function submit(
+  state: GameState,
+  player: RosterPlayer,
+): { state: GameState; outcome: Submission } {
+  if (state.status !== 'playing') return { state, outcome: { kind: 'rejected' } };
+
+  for (const used of state.filled.values()) {
+    if (used.id === player.id) return { state, outcome: { kind: 'already-used' } };
+  }
+
+  const fits = fittingCells(state, player);
+  if (fits.length === 0) return { state: charge(state, false), outcome: { kind: 'rejected' } };
+
+  const sole = soleCells(state, player, fits);
+  const target = sole.length > 0 ? sole[0] : fits.length === 1 ? fits[0] : null;
+  if (!target) return { state, outcome: { kind: 'choose', cells: fits } };
+
+  return place(state, target, player);
+}
+
+/**
+ * Commits a player to a cell they are known to fit.
+ *
+ * Exported for the ambiguous case, where the user picked the cell themselves.
+ */
 export function place(
   state: GameState,
-  row: number,
-  col: number,
-  player: Player,
-): { state: GameState; outcome: PlaceOutcome } {
-  if (state.status !== 'playing') return { state, outcome: 'occupied' };
-  const key = cellKey(row, col);
-  if (state.filled.has(key)) return { state, outcome: 'occupied' };
+  cell: Cell,
+  player: RosterPlayer,
+): { state: GameState; outcome: Submission } {
+  const filled = new Map(state.filled).set(cellKey(cell.row, cell.col), player);
 
-  // Each player may only appear once on the board.
-  for (const used of state.filled.values()) {
-    if (used.id === player.id) return { state, outcome: 'already-used' };
-  }
-
-  const valid = state.board.rows[row].test(player) && state.board.cols[col].test(player);
-  if (!valid) {
-    const mistakes = state.mistakes + 1;
-    return {
-      state: { ...state, mistakes, status: mistakes >= MAX_MISTAKES ? 'lost' : 'playing' },
-      outcome: 'wrong',
-    };
-  }
-
-  const filled = new Map(state.filled).set(key, player);
-
-  // The player is valid for this cell, but spending them here can leave another
-  // cell with nobody left. Refuse the move rather than soft-locking a board that
-  // was generated as winnable — and do not charge a mistake for it.
+  // The player is valid here, but spending them here can leave another cell
+  // with nobody left. Refuse the move rather than soft-locking a board that was
+  // generated as winnable — and do not charge a guess for it.
   if (filled.size < SIZE * SIZE && !canComplete(state.board.candidates, filled)) {
-    return { state, outcome: 'deadlock' };
+    return { state, outcome: { kind: 'deadlock', cell } };
   }
 
+  const next = charge({ ...state, filled }, true);
   return {
-    state: { ...state, filled, status: filled.size === SIZE * SIZE ? 'won' : 'playing' },
-    outcome: 'placed',
+    state: { ...next, status: filled.size === SIZE * SIZE ? 'won' : next.status },
+    outcome: { kind: 'placed', cell },
   };
 }
 
-/** One valid answer per empty cell, for the reveal after a loss. */
+/**
+ * Books a guess and ends the round if it was the last one available.
+ *
+ * Easy counts mistakes and forgives three. Hard counts guesses and gives
+ * exactly nine — one per cell — so a wrong answer is not punished separately,
+ * it simply costs a cell you can no longer fill.
+ */
+function charge(state: GameState, correct: boolean): GameState {
+  const guesses = state.guesses + 1;
+  const mistakes = state.mistakes + (correct ? 0 : 1);
+  const out = { ...state, guesses, mistakes };
+  if (state.difficulty === 'easy') {
+    return mistakes >= MAX_MISTAKES ? { ...out, status: 'lost' } : out;
+  }
+  // Hard: nine guesses total, and every unfilled cell needs one of them.
+  const remaining = SIZE * SIZE - out.filled.size;
+  return HARD_GUESSES - guesses < remaining ? { ...out, status: 'lost' } : out;
+}
+
 /** Ends the round unsolved, so the remaining cells can be revealed. */
 export function giveUp(state: GameState): GameState {
   return state.status === 'playing' ? { ...state, status: 'lost' } : state;
 }
 
-export function solutionFor(state: GameState, row: number, col: number): Player[] {
+/** A few valid answers per empty cell, for the reveal after a loss. */
+export function solutionFor(state: GameState, row: number, col: number): RosterPlayer[] {
   const usedIds = new Set([...state.filled.values()].map((player) => player.id));
   const options = state.board.candidates[row][col].filter((player) => !usedIds.has(player.id));
   return shuffle(makeRng(`${row}:${col}`), options).slice(0, 3);

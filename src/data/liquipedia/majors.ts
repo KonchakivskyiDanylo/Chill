@@ -1,3 +1,4 @@
+import { loadJson } from './files';
 import type { RosterPlayer } from './roster';
 
 /**
@@ -130,9 +131,7 @@ let cached: Promise<Majors> | null = null;
  */
 export function loadMajors(): Promise<Majors> {
   if (!cached) {
-    cached = import('@data/career_path.json').then(
-      (module) => new Majors(module.default as unknown as RawPayload),
-    );
+    cached = loadJson('career_path').then((payload) => new Majors(payload as RawPayload));
   }
   return cached;
 }

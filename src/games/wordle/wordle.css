@@ -116,3 +116,39 @@
 .wordle-grid--example .wordle-tile {
   font-size: clamp(0.72rem, 3.2vw, 1.05rem);
 }
+
+/*
+ * The digit hint strip.
+ *
+ * A skeleton of the answer with the revealed digits sitting in their real
+ * slots — the same information as "character 3 is a 0", minus the counting.
+ */
+.wordle-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.wordle-hint__row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.wordle-hint__cell {
+  width: 22px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-bottom: 2px solid var(--border-strong);
+  font-weight: 800;
+  font-size: 0.9rem;
+  color: var(--text-faint);
+}
+
+.wordle-hint__cell--shown {
+  border-bottom-color: var(--primary);
+  color: var(--primary);
+}

@@ -35,6 +35,21 @@
   background: var(--primary-soft);
 }
 
+/*
+ * The Liquipedia parenthetical, shown only for a handle two players share.
+ * Deliberately quiet: it is there to tell two identical rows apart, not to
+ * tell you anything about the player.
+ */
+.player-search__tag {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
 .player-search__empty {
   padding: 12px;
   color: var(--text-muted);

@@ -1,448 +1,627 @@
 # Notebook cells to run
 
-Four cells. Paste each into a Jupyter cell and run from the repo root.
+Four cells. Paste each into a Jupyter cell and run **in order, from the repo
+root** — Cell 1 loads the dump and defines the helpers the other three use.
 
-Cells 1-3 are needed before the app builds. **Cell 4 is not** — nothing reads
-`orgs.json` yet; it is there so the data exists when the game logic for it does.
+The previous four cells (`region_tier`, `career_path.json`, `teammates.json`,
+`orgs.json`) are done and have been removed from this file. Their outputs are
+still read by the app and nothing here touches them.
 
-Neither of the two new files carries a `tier` column — the app joins them to
-`players.json` by `pagename` and reads `tier` from there, so re-tiering stays a
-one-column edit and these files never go stale.
+These three new files are what let every game move onto the Liquipedia export.
+Six games (Tenaball, List, Griefer, Tic Tac Toe, Connections, Guess the Player)
+still read the 316-player Wikipedia import; none of them can be migrated until
+the facts below exist.
 
----
+Same contract as the existing derived files: **no `tier` column**. Difficulty
+always joins back to `players.json` by `pagename`, so re-tiering stays a
+one-column edit and these never go stale against it.
 
-## Cell 1 — `region_tier` on `players.json`
+| cell | writes | why |
+| --- | --- | --- |
+| 1 | — | shared load + tournament classification |
+| 2 | `facts.json` | per-player career facts — Griefer, Tic Tac Toe, Connections, List, Who Are Ya |
+| 3 | `rankings.json` | every Tenaball board, precomputed |
+| 4 | `pools.json` | Globals 2026 and EWC 2026 qualified fields |
 
-Your global `tier` is a pure earnings rank across all 5,678 rows, so the
-non-Western regions have no Easy band at all:
-
-| region | easy | medium | hard |
-| --- | ---: | ---: | ---: |
-| North America | 53 | 344 | 1403 |
-| Europe | 57 | 355 | 1208 |
-| Asia | **0** | 82 | 566 |
-| Oceania | **0** | 72 | 544 |
-| South America | 3 | 104 | 351 |
-| Middle East | **0** | 51 | 370 |
-| Africa | 0 | 1 | 21 |
-
-This adds `region_tier`: the same 2% / 18% / 80% cut, ranked inside each region.
-Drop it into the notebook right after the cell that writes `tier` (the one with
-`EASY_PCT, MEDIUM_PCT = 0.02, 0.20`), before the cell that saves.
-
-```python
-# region_tier — the same cut as `tier`, ranked within each region.
-#
-# Fortnitedle lets you pick a region first. Global `tier` cannot serve that:
-# it ranks all 5,678 rows on earnings, so Asia, Oceania and the Middle East
-# have zero Easy players between them and "Asia + Easy" would quietly hand
-# back Medium instead. Ranked inside the region, every region has all three.
-#
-# `unused` carries over unchanged — one rule for who is playable, not two.
-from collections import Counter, defaultdict
-
-by_region = defaultdict(list)
-for r in rows:
-    if r['tier'] != 'unused':
-        by_region[r.get('region') or 'Unknown'].append(r)
-
-for r in rows:
-    r['region_tier'] = 'unused'
-
-for region, members in by_region.items():
-    members.sort(key=lambda r: (-(r.get('earnings') or 0), r['id'].lower()))
-    easy_cut, med_cut = len(members) * EASY_PCT, len(members) * MEDIUM_PCT
-    for i, r in enumerate(members, start=1):
-        r['region_tier'] = 'easy' if i <= easy_cut else 'medium' if i <= med_cut else 'hard'
-
-for region, members in sorted(by_region.items(), key=lambda kv: -len(kv[1])):
-    c = Counter(r['region_tier'] for r in members)
-    print(f"{region:<16} easy {c['easy']:>4}  medium {c['medium']:>4}  hard {c['hard']:>5}")
-```
-
-Then re-run your existing save cell. Add `region_tier` to its assertion if you
-want the same guard `tier` has:
-
-```python
-assert all(r['region_tier'] in {'easy', 'medium', 'hard', 'unused'} for r in check)
-```
-
-Output on the current export:
-
-```
-North America    easy   36  medium  332  hard  1473
-Europe           easy   32  medium  295  hard  1311
-Asia             easy   13  medium  118  hard   526
-Oceania          easy   12  medium  112  hard   500
-South America    easy    9  medium   83  hard   370
-Middle East      easy    8  medium   78  hard   348
-Africa           easy    0  medium    4  hard    18
-```
-
-Africa is the one hole: 22 rows, so 2% rounds to nobody. The app greys out a
-difficulty with no players in the chosen region rather than quietly widening,
-and prints the count on every card, so that is visible before you start.
+Cell 1 loads `placements.json` once (154 MB, ~4 s) and the rest reuse it, so
+run them in the same kernel session.
 
 ---
 
-## Cell 2 — `career_path.json`
+## Cell 1 — shared setup
 
-Your filter, unchanged, joined to `placements.json`.
+Loads everything and classifies the 14,645 tournaments. Every rule the other
+cells depend on is defined here and nowhere else, so if a classification is
+wrong there is exactly one place to fix it.
 
-```python
-import json, re
-from datetime import date
-import pandas as pd
-
-OUT = 'liquipedia_data/clean_data/fortnite/career_path.json'
-MIN_APPEARANCES = 5          # a path is only worth guessing from this many majors
-
-df_tournaments = pd.read_json('liquipedia_data/clean_data/fortnite/tournaments.json')
-
-def has_epic_games(val):
-    if isinstance(val, list):
-        return any(
-            "epic games" in str(item).lower()
-            or (isinstance(item, dict) and "epic games" in str(item.values()).lower())
-            for item in val
-        )
-    elif isinstance(val, str):
-        return "epic games" in val.lower()
-    return False
-
-exclude_pattern = r"console|mobile|twitch"
-
-filtered_df = df_tournaments[
-    (df_tournaments["liquipediatier"] == 1)
-    & (df_tournaments["liquipediatiertype"].isna())
-    & (df_tournaments["organizers"].apply(has_epic_games))
-    & (pd.to_datetime(df_tournaments["startdate"], errors="coerce") >= "2019-07-26")
-    & (~df_tournaments["name"].str.contains(exclude_pattern, case=False, na=False))
-].sort_values("startdate")
-
-print(len(filtered_df), 'tournaments')
-
-# ---------------------------------------------------------------- tournaments
-tournaments, index_of = [], {}
-for _, t in filtered_df.iterrows():
-    index_of[t['name']] = len(tournaments)
-    tournaments.append({
-        'name': t['name'],
-        'date': str(t['startdate'])[:10],
-        'mode': t['mode'],
-        'region': t['region'],
-        'prizePool': None if pd.isna(t['prizepool']) else round(float(t['prizepool'])),
-    })
-
-# ------------------------------------------------------------------ placements
-players_rows = json.load(open('liquipedia_data/clean_data/fortnite/players.json', encoding='utf-8'))
-by_page = {p['pagename'].replace('_', ' '): p['pagename'] for p in players_rows}
-by_id = {}
-for p in players_rows:
-    by_id.setdefault(p['id'], p['pagename'])
-
-def resolve(name):
-    """A placement's participant name -> a players.json pagename, or None."""
-    return by_page.get(name) or by_id.get(name)
-
-placements = json.load(open('liquipedia_data/clean_data/fortnite/placements.json', encoding='utf-8'))
-
-results = {}
-for row in placements:
-    idx = index_of.get(row.get('tournament'))
-    if idx is None:
-        continue
-    # '', 'DNP' and 'DQ' are not a finish anyone can be identified by; a range
-    # like '35-36' is, and reads as its best end.
-    m = re.match(r'^(\d+)', str(row.get('placement') or ''))
-    if not m:
-        continue
-    placement = int(m.group(1))
-    for part in (row.get('participants') or []):
-        page = resolve(part.get('player') or '')
-        if page:
-            results.setdefault(page, {})[idx] = placement
-
-players = [
-    {'id': page, 'results': sorted([i, p] for i, p in hits.items())}
-    for page, hits in results.items()
-    if len(hits) >= MIN_APPEARANCES
-]
-players.sort(key=lambda p: p['id'])
-
-payload = {
-    'generated': date.today().isoformat(),
-    'minAppearances': MIN_APPEARANCES,
-    'tournaments': tournaments,
-    'players': players,
-}
-with open(OUT, 'w', encoding='utf-8') as f:
-    json.dump(payload, f, ensure_ascii=False, separators=(',', ':'))
-
-tier = {p['pagename']: p['tier'] for p in players_rows}
-from collections import Counter
-print(len(players), 'players with', MIN_APPEARANCES, '+ appearances')
-print(Counter(tier.get(p['id']) for p in players))
-print('longest path:', max(len(p['results']) for p in players))
-```
-
-Expected, on the current export: 188 tournaments, **1,175 players**, `easy 92 /
-medium 567 / hard 516`, longest path 34 (EpikWhale). 1,175 rather than 1,208
-because `''`, `DNP` and `DQ` rows are dropped — 352 of them — and a few players
-fall under five once they are.
-
----
-
-## Cell 3 — `teammates.json`
-
-Every tournament in the dump, not just the ones somebody won. A pair counts once
-per placement row they share, which is what "played together" means — two solo
-players at the same event are not teammates.
+The majors filter is **your existing `career_path.json` filter, unchanged** —
+Epic-organised, tier 1, no tier type, from the 2019 World Cup onwards, minus
+console/mobile/Twitch. Reused rather than restated so Career Path and the new
+files can never disagree about what a major is.
 
 ```python
-import json, itertools
+import json, re, itertools
 from collections import Counter, defaultdict
 from datetime import date
-
-OUT = 'liquipedia_data/clean_data/fortnite/teammates.json'
-TOP = 10          # Who Are Ya reveals at most this many clues
-
-players_rows = json.load(open('liquipedia_data/clean_data/fortnite/players.json', encoding='utf-8'))
-by_page = {p['pagename'].replace('_', ' '): p['pagename'] for p in players_rows}
-by_id = {}
-for p in players_rows:
-    by_id.setdefault(p['id'], p['pagename'])
-
-def resolve(name):
-    return by_page.get(name) or by_id.get(name)
-
-placements = json.load(open('liquipedia_data/clean_data/fortnite/placements.json', encoding='utf-8'))
-
-pair = Counter()
-for row in placements:
-    parts = row.get('participants') or []
-    if len(parts) < 2:
-        continue
-    pages = sorted({resolve(p.get('player') or '') for p in parts} - {None})
-    for a, b in itertools.combinations(pages, 2):
-        pair[(a, b)] += 1
-
-mates = defaultdict(list)
-for (a, b), n in pair.items():
-    mates[a].append([b, n])
-    mates[b].append([a, n])
-
-players = []
-for page, entries in mates.items():
-    entries.sort(key=lambda e: (-e[1], e[0]))
-    players.append({'id': page, 'mates': entries[:TOP]})
-players.sort(key=lambda p: p['id'])
-
-payload = {'generated': date.today().isoformat(), 'top': TOP, 'players': players}
-with open(OUT, 'w', encoding='utf-8') as f:
-    json.dump(payload, f, ensure_ascii=False, separators=(',', ':'))
-
-tier = {p['pagename']: p['tier'] for p in players_rows}
-print(len(pair), 'distinct pairs;', len(players), 'players with a teammate')
-print('>=3 teammates:', Counter(tier.get(p['id']) for p in players if len(p['mates']) >= 3))
-print('Peterbot:', next(p for p in players if p['id'] == 'Peterbot')['mates'])
-```
-
-Expected: 39,038 pairs, 5,496 players, `>=3 teammates` = `easy 113 / medium 1000
-/ hard 3692`, and Peterbot's list starting `Pollo 126, Cold 54, Ritual 49`.
-
-61,016 participant names never resolve to a `players.json` row (205,641
-occurrences) — people Liquipedia has placements for but no player page. They are
-skipped, so a pair count is "tournaments together that Liquipedia can name both
-of you in", not an absolute.
-
----
-
-## Cell 4 — `orgs.json` *(not wired up yet)*
-
-Nothing reads this file. It exists because the four criteria games are starved
-of everything except country and region, and the org data that would fix it is
-already in the dump.
-
-Where they stand today, on the 316-player Wikipedia import:
-
-| | usable criteria | of which country/region |
-| --- | ---: | ---: |
-| Griefer | 21 | 16 |
-| Connections | 28 | 22 |
-| Piece Control | 46 | 18 |
-| List | 47 categories | 14 (plus 23 FNCS-season ones) |
-
-Team criteria are written into all four and **none of them ever fire**: the
-Wikipedia import has 17 orgs with 1-2 players each, under every threshold.
-Griefer's own rules say `a rule, for example "plays for NRG"` and that rule
-cannot currently be generated.
-
-`transfers.json` is 40,119 roster moves and is otherwise unused. Reduced, it
-gives 979 orgs with four or more players.
-
-```python
-import json
-from collections import defaultdict
-from datetime import date
-
-OUT = 'liquipedia_data/clean_data/fortnite/orgs.json'
-MIN_PLAYERS = 4          # a criterion nobody can fill is not a criterion
 
 BASE = 'liquipedia_data/clean_data/fortnite'
-players_rows = json.load(open(f'{BASE}/players.json', encoding='utf-8'))
-teams_rows = json.load(open(f'{BASE}/teams.json', encoding='utf-8'))
-transfers = json.load(open(f'{BASE}/transfers.json', encoding='utf-8'))
+TODAY = date.today().isoformat()
 
+players_rows = json.load(open(f'{BASE}/players.json', encoding='utf-8'))
+tournaments  = json.load(open(f'{BASE}/tournaments.json', encoding='utf-8'))
+placements   = json.load(open(f'{BASE}/placements.json', encoding='utf-8'))
+orgs_payload = json.load(open(f'{BASE}/orgs.json', encoding='utf-8'))
+
+# ------------------------------------------------------------------ resolve --
+# Identical to the helper in the career_path and teammates cells: a placement's
+# participant name -> a *playable* players.json pagename, or None.
 by_page = {p['pagename'].replace('_', ' '): p['pagename'] for p in players_rows}
 by_id = {}
 for p in players_rows:
     by_id.setdefault(p['id'], p['pagename'])
 tier = {p['pagename']: p['tier'] for p in players_rows}
+player_of = {p['pagename']: p for p in players_rows}
 
 def resolve(name):
-    """A transfer's player name -> a playable players.json pagename, or None."""
     page = by_page.get(name) or by_id.get(name)
     return page if page and tier.get(page) != 'unused' else None
 
-page_of = {t['name']: t['pagename'] for t in teams_rows}
-team_meta = {t['pagename']: t for t in teams_rows}
+PLAYABLE = [p for p in players_rows if p['tier'] != 'unused']
+print(f'{len(PLAYABLE):,} playable players, {len(placements):,} placement rows')
 
-NOT_A_TEAM = {'free agent', 'retired', 'retirement', 'inactive', 'none', 'unknown', ''}
+# -------------------------------------------------------------- classifiers --
+def is_epic(t):
+    return any('epic games' in str(o).lower() for o in (t.get('organizers') or []))
 
-def org_key(name):
-    """Transfers spell orgs by display name; teams.json and players.json use the
-    page name. Falls back to the raw string for the ~2,100 grassroots orgs with
-    no Liquipedia team page — `hasPage` below says which is which."""
-    if not name or name.strip().lower() in NOT_A_TEAM:
-        return None
-    return page_of.get(name, name)
+def is_lan(t):
+    """A LAN worth asking about: offline (or hybrid) and top two tiers."""
+    return t['type'] in ('Offline', 'Hybrid') and t['liquipediatier'] in (1, 2)
 
-ever = defaultdict(set)
-for row in transfers:
-    page = resolve(row.get('player') or '')
-    if not page:
+def is_major(t):
+    """Your career_path filter, verbatim."""
+    return (
+        t['liquipediatier'] == 1
+        and t['liquipediatiertype'] is None
+        and is_epic(t)
+        and (t['startdate'] or '') >= '2019-07-26'
+        and not re.search(r'console|mobile|twitch', t['name'], re.I)
+    )
+
+def is_fncs_final(t):
+    return is_major(t) and 'FNCS' in t['name']
+
+def is_world_cup(t):
+    return t['name'].startswith('Fortnite World Cup')
+
+def is_global(t):
+    return is_world_cup(t) and 'Finals' in t['name'] or 'Global Championship' in t['name']
+
+# Region label: tournaments.json says "Brazil", players.json says "South
+# America". One word for one place, or the per-region boards split in two.
+REGION_FIX = {'Brazil': 'South America', 'Japan': 'Asia', 'MENA': 'Middle East',
+              'India': 'Asia', 'China': 'Asia', 'Latin America': 'South America',
+              'CIS': 'Europe', 'Benelux': 'Europe', 'Turkey': 'Europe',
+              'Pakistan': 'Asia'}
+
+def region_of(t):
+    r = t.get('region')
+    return REGION_FIX.get(r, r)
+
+def year_of(t):
+    """Calendar year, or None when the export's date is not one.
+
+    A few rows carry a malformed `startdate` — the one that bit was `0-01-...`
+    — so `str(startdate)[:4]` is not safe to hand to `int()`. Those results
+    still count towards career and LAN totals; they are only left out of the
+    per-year buckets, because there is no year to put them in.
+    """
+    m = re.match(r'^(\d{4})-', str(t.get('startdate') or ''))
+    return int(m.group(1)) if m else None
+
+bad_dates = [t['name'] for t in tournaments if year_of(t) is None]
+if bad_dates:
+    print(f'{len(bad_dates)} tournaments have an unusable startdate, e.g. {bad_dates[:3]}')
+
+tour_of = {}
+for t in tournaments:
+    tour_of.setdefault(t['name'], t)
+
+MAJORS = {t['name'] for t in tournaments if is_major(t)}
+LANS   = {t['name'] for t in tournaments if is_lan(t)}
+FNCS   = {t['name'] for t in tournaments if is_fncs_final(t)}
+WCUP   = {t['name'] for t in tournaments if is_world_cup(t)}
+GLOBAL = {t['name'] for t in tournaments if is_global(t)}
+
+print(f'majors {len(MAJORS)}  LANs {len(LANS)}  FNCS finals {len(FNCS)} '
+      f'  World Cup {len(WCUP)}  globals {len(GLOBAL)}')
+
+# ------------------------------------------------------------- placed rows --
+# One pass, reused by every cell below. `rank` is None for '', 'DNP' and 'DQ';
+# a range like '35-36' reads as its best end, same rule as career_path.
+def rank_of(raw):
+    m = re.match(r'^(\d+)', str(raw or ''))
+    return int(m.group(1)) if m else None
+
+PLACED = []
+for row in placements:
+    t = tour_of.get(row.get('tournament'))
+    if not t:
         continue
-    # Per side, not per row: `role_from` is what they were at `fromteam` and
-    # `role_to` what they became at `toteam`, so someone who left as a player
-    # and joined as a streamer counts for the first org and not the second.
-    for side, role in (('fromteam', 'role_from'), ('toteam', 'role_to')):
-        if row.get(role) != 'Player':
-            continue
-        key = org_key(row.get(side))
-        if key:
-            ever[key].add(page)
-
-# players.json is the authority on who is there now, and catches recent
-# signings that have no transfer row yet.
-current = defaultdict(set)
-for p in players_rows:
-    if p['tier'] != 'unused' and p.get('teampagename'):
-        current[p['teampagename']].add(p['pagename'])
-for key, members in current.items():
-    ever[key] |= members
-
-orgs = []
-for key, members in ever.items():
-    if len(members) < MIN_PLAYERS:
+    r = rank_of(row.get('placement'))
+    money = float(row.get('individualprizemoney') or 0)
+    pages = [(resolve(p.get('player') or ''), p.get('team')) for p in (row.get('participants') or [])]
+    pages = [(pg, tm) for pg, tm in pages if pg]
+    if not pages:
         continue
-    meta = team_meta.get(key)
-    orgs.append({
-        'id': key,
-        'name': meta['name'] if meta else key,
-        'hasPage': meta is not None,
-        'region': (meta or {}).get('region'),
-        'status': (meta or {}).get('status'),
-        'earnings': round(float((meta or {}).get('earnings') or 0)),
-        'current': sorted(current.get(key, ())),
-        'ever': sorted(members),
+    PLACED.append((t, r, money, pages))
+
+print(f'{len(PLACED):,} placement rows with at least one nameable player')
+```
+
+Expected: `5,678 playable players`, `442,736 placement rows`, and roughly
+`majors 188  LANs 80  FNCS finals ~170`.
+
+---
+
+## Cell 2 — `facts.json`
+
+What the criteria games need and `players.json` cannot answer: where a player
+actually *won*, how many LANs they turned up to, which headline events they
+played. Today Griefer and Tic Tac Toe generate 16 of 21 criteria from country
+and region alone, which is why a Griefer board about "competes in Brazil" is
+solvable from the flags on the cards.
+
+`events` is the headline list — majors plus LANs, ~250 tournaments. Player rows
+index into it rather than repeating names, which is most of why this file is
+about a megabyte instead of ten.
+
+```python
+OUT = f'{BASE}/facts.json'
+
+# ------------------------------------------------------------------ events --
+headline = sorted(
+    {n for n in (MAJORS | LANS)},
+    key=lambda n: (tour_of[n]['startdate'] or '', n),
+)
+index_of = {n: i for i, n in enumerate(headline)}
+
+def short_name(t):
+    """'FNCS 2025 - Major 3: Europe - Grand Finals' -> 'FNCS 2025 - Major 3: Europe'."""
+    s = re.sub(r'\s*-?\s*Grand Finals?\s*:?\s*', ' ', t['name'], flags=re.I)
+    return re.sub(r'\s{2,}', ' ', s).strip()
+
+events = []
+for n in headline:
+    t = tour_of[n]
+    events.append({
+        'name': t['name'],
+        'short': short_name(t),
+        'date': str(t['startdate'])[:10],
+        'kind': ('global' if n in GLOBAL else 'fncs' if n in FNCS
+                 else 'lan' if n in LANS else 'major'),
+        'lan': n in LANS,
+        'region': region_of(t),
+        'mode': t['mode'],
+        'prizePool': None if t['prizepool'] is None else round(float(t['prizepool'])),
     })
-# Richest first, so "take the top N" is a one-liner later.
-orgs.sort(key=lambda o: (-o['earnings'], o['name'].lower()))
 
-payload = {'generated': date.today().isoformat(), 'minPlayers': MIN_PLAYERS, 'orgs': orgs}
-with open(OUT, 'w', encoding='utf-8') as f:
-    json.dump(payload, f, ensure_ascii=False, separators=(',', ':'))
+# ----------------------------------------------------------------- players --
+blank = lambda: {'played': set(), 'won': set(), 'apps': 0, 'lanApps': 0,
+                 'fncsApps': 0, 'winRegions': set(), 'winYears': set()}
+facts = defaultdict(blank)
 
-paged = [o for o in orgs if o['hasPage']]
-print(f'{len(orgs)} orgs with {MIN_PLAYERS}+ players, {len(paged)} with a Liquipedia team page')
-print('  with page and $100k+ org earnings:', sum(1 for o in paged if o['earnings'] >= 100_000))
-print('  with page and $1M+ org earnings:  ', sum(1 for o in paged if o['earnings'] >= 1_000_000))
-print('  with a current roster of 4+:      ', sum(1 for o in orgs if len(o['current']) >= MIN_PLAYERS))
-for o in orgs[:10]:
-    print(f"  {o['name']:<24} ever {len(o['ever']):>3}  now {len(o['current']):>2}  ${o['earnings']:,}")
+for t, r, money, pages in PLACED:
+    name, idx = t['name'], index_of.get(t['name'])
+    for page, _team in pages:
+        f = facts[page]
+        f['apps'] += 1
+        if name in LANS:
+            f['lanApps'] += 1
+        if name in FNCS:
+            f['fncsApps'] += 1
+        if idx is not None:
+            f['played'].add(idx)
+            if r == 1:
+                f['won'].add(idx)
+                reg = region_of(t)
+                if reg:
+                    f['winRegions'].add(reg)
+                won_year = year_of(t)
+                if won_year is not None:
+                    f['winYears'].add(won_year)
+
+players_out = []
+for page in sorted(facts):
+    if tier.get(page) == 'unused':
+        continue
+    f = facts[page]
+    won_kinds = Counter(events[i]['kind'] for i in f['won'])
+    players_out.append({
+        'id': page,
+        'played': sorted(f['played']),
+        'won': sorted(f['won']),
+        'apps': f['apps'],
+        'lanApps': f['lanApps'],
+        'fncsApps': f['fncsApps'],
+        'wins': {
+            'global': won_kinds['global'],
+            'fncs': won_kinds['fncs'],
+            'lan': sum(1 for i in f['won'] if events[i]['lan']),
+            'major': len(f['won']),
+        },
+        'winRegions': sorted(f['winRegions']),
+        'winYears': sorted(f['winYears']),
+    })
+
+payload = {'generated': TODAY, 'events': events, 'players': players_out}
+with open(OUT, 'w', encoding='utf-8') as fh:
+    json.dump(payload, fh, ensure_ascii=False, separators=(',', ':'))
+
+import os
+print(f'{len(events)} headline events, {len(players_out):,} players, '
+      f'{os.path.getsize(OUT)/1e6:.1f} MB')
+print('  LAN winners:      ', sum(1 for p in players_out if p['wins']['lan']))
+print('  global winners:   ', sum(1 for p in players_out if p['wins']['global']))
+print('  5+ tournaments:   ', sum(1 for p in players_out if p['apps'] >= 5))
+print('  most LAN apps:    ', sorted(players_out, key=lambda p: -p['lanApps'])[:3])
 ```
 
-Expected, on the current export — 236 KB, 59 KB gzipped:
+Check against what I measured on this export: **90 LAN winners** with a player
+page, and the LAN-appearance leaders should come out `Vic0try0na 35`, then
+`Khanada / MrSavage / Kami / Malibuca` on 33.
 
-```
-979 orgs with 4+ players, 414 with a Liquipedia team page
-  with page and $100k+ org earnings: 174
-  with page and $1M+ org earnings:   30
-  with a current roster of 4+:       69
-
-  FaZe Clan                ever  21  now  0  $4,635,700
-  NRG                      ever  12  now  1  $4,592,147
-  Sentinels                ever   8  now  0  $4,114,758
-  Team Falcons             ever  23  now  7  $3,764,580
-  Lazarus                  ever   9  now  0  $3,714,968
-  100 Thieves              ever  21  now  7  $3,713,116
-  Guild Esports            ever  14  now  0  $3,206,091
-  Ghost Gaming             ever  20  now  1  $3,068,598
-  Team Liquid              ever  20  now  4  $2,644,750
-  XSET                     ever  22  now 13  $2,393,596
-```
+My count used a slightly looser name resolver than yours (it also matched
+`alternateid_list`), so expect these to land a little **lower**, not higher. If
+LAN winners comes out far from 90, the `is_lan` rule is the thing to look at.
 
 ### Shape
 
 ```jsonc
-{ "generated": "...", "minPlayers": 4, "orgs": [
-  { "id": "FaZe_Clan",          // teams.json pagename, or the raw name when hasPage is false
-    "name": "FaZe Clan",
-    "hasPage": true,
-    "region": "North America",  // null without a page
-    "status": "disbanded",      // teams.json's own word for it
-    "earnings": 4635700,        // the org's, not a player's
-    "current": ["..."],         // pagenames on the roster today
-    "ever":    ["..."] }        // pagenames who were ever there, current included
-]}
+{ "generated": "...",
+  "events": [
+    { "name": "Fortnite World Cup Finals - Solo",
+      "short": "Fortnite World Cup Finals - Solo",
+      "date": "2019-07-28",
+      "kind": "global",          // global | fncs | lan | major
+      "lan": true,
+      "region": "North America", // normalised — never "Brazil"
+      "mode": "Solo",
+      "prizePool": 15287500 }
+  ],
+  "players": [
+    { "id": "Bugha",             // pagename
+      "played": [0, 4, 17],      // indices into events
+      "won": [0],
+      "apps": 214,               // every tournament in the export
+      "lanApps": 18,
+      "fncsApps": 22,
+      "wins": { "global": 1, "fncs": 0, "lan": 3, "major": 5 },
+      "winRegions": ["North America"],
+      "winYears": [2019, 2021] }
+  ]}
 ```
 
-`current` and `ever` are two different questions and both are worth asking:
-"plays for FaZe" is a Griefer rule, "has played for FaZe" is a Piece Control
-axis. No `tier` column, same as the other two files — difficulty always joins
-back to `players.json` by pagename.
-
-### The filter to think about later
-
-979 is too many and the tail is not what you want. Headcount is a bad sort:
-the biggest org in the file is **2AM Esports at 142 players**, a grassroots org
-with no Liquipedia page that nobody watching the scene would name. Org earnings
-sort far better — `hasPage and earnings >= 100_000` leaves **174**, which is
-roughly the number of orgs a Fortnite viewer could actually recognise.
-
-That is the decision I would leave to you rather than bake in, which is why the
-cell writes all 979 and sorts by earnings instead of cutting.
+`played` / `won` cover the headline events only. `apps` counts *everything*,
+because Who Are Ya's "at least 5 tournaments" restriction is about whether we
+know the player at all, not about majors.
 
 ---
 
-## After running
+## Cell 3 — `rankings.json`
 
-```bash
-npm run check:games
+Every Tenaball board, precomputed. 442,736 placement rows cannot be aggregated
+in the browser, and the boards never change between exports, so they are built
+once here.
+
+Three kinds of answer, which is new for Tenaball: some boards are answered with
+**player** names, some with **org** names, some with **country** names. `entity`
+says which, and the app picks the matching resolver.
+
+`next` is the 11th place. Tenaball uses it to spot a guess that ties the
+cut-off and treat it as a near miss rather than a mistake — the rule the board
+already states.
+
+```python
+OUT = f'{BASE}/rankings.json'
+YEARS = list(range(2018, 2027))
+SLOTS = 10
+
+boards = []
+def board(bid, group, title, entity, tie, ranked, fmt):
+    """`ranked` is [(key, label, value)] already sorted best-first."""
+    if len(ranked) < SLOTS + 1:
+        return
+    rows = [{'key': k, 'label': l, 'value': round(v, 2), 'display': fmt(v)}
+            for k, l, v in ranked[:SLOTS]]
+    k, l, v = ranked[SLOTS]
+    boards.append({'id': bid, 'group': group, 'title': title, 'entity': entity,
+                   'tieRule': tie, 'rows': rows,
+                   'next': {'key': k, 'label': l, 'value': round(v, 2)}})
+
+money = lambda v: '${:,.0f}'.format(v)
+count = lambda word: (lambda v: f'{v:,.0f} {word}' + ('' if v == 1 else 's'))
+
+def rank(d, label_of):
+    return sorted(((k, label_of(k), v) for k, v in d.items() if v > 0),
+                  key=lambda e: (-e[2], e[1].lower()))
+
+NAME = lambda page: player_of[page]['id'] if page in player_of else page
+TIE_MONEY = 'Straight prize-money order. Exact ties are split by name.'
+TIE_COUNT = 'Players level on the count are ranked by career earnings.'
+
+# ---------------------------------------------------------- player: totals --
+earn      = Counter()   # from placements, so it can be sliced
+lan_earn  = Counter(); fncs_earn = Counter(); wc_earn = Counter()
+lan_apps  = Counter(); fncs_apps = Counter()
+year_earn = defaultdict(Counter)
+org_earn  = Counter(); org_year  = defaultdict(Counter); org_majors = Counter()
+
+for t, r, m, pages in PLACED:
+    # `yr` is None for the handful of rows with a malformed date. They still
+    # count towards career totals — the money was won — and are simply left out
+    # of the per-year boards, because there is no year to file them under.
+    n, yr = t['name'], year_of(t)
+    for page, team in pages:
+        earn[page] += m
+        if yr is not None:
+            year_earn[yr][page] += m
+        if n in LANS:
+            lan_earn[page] += m; lan_apps[page] += 1
+        if n in FNCS:
+            fncs_earn[page] += m; fncs_apps[page] += 1
+        if n in WCUP:
+            wc_earn[page] += m
+        if team and team.lower() not in ('free agent', '', 'none'):
+            org_earn[team] += m
+            if yr is not None:
+                org_year[yr][team] += m
+            if n in MAJORS and r == 1:
+                org_majors[team] += 1
+
+# Career earnings uses the published column, not the sum of placements — it is
+# the number Liquipedia shows on the player page and the one people remember.
+career = Counter({p['pagename']: float(p['earnings'] or 0) for p in PLAYABLE})
+
+board('career-earnings', 'Players', 'Top 10 by career earnings', 'player',
+      TIE_MONEY, rank(career, NAME), money)
+board('lan-earnings', 'Players', 'Top 10 by LAN earnings', 'player',
+      TIE_MONEY, rank(lan_earn, NAME), money)
+board('fncs-earnings', 'Players', 'Top 10 by FNCS earnings', 'player',
+      TIE_MONEY, rank(fncs_earn, NAME), money)
+board('earnings-no-wc', 'Players', 'Top 10 by earnings excluding the World Cup',
+      'player', TIE_MONEY,
+      rank(Counter({k: v - wc_earn[k] for k, v in earn.items()}), NAME), money)
+board('lan-apps', 'Players', 'Top 10 by LAN appearances', 'player', TIE_COUNT,
+      rank(lan_apps, NAME), count('LAN'))
+board('fncs-apps', 'Players', 'Top 10 by FNCS Finals appearances', 'player',
+      TIE_COUNT, rank(fncs_apps, NAME), count('final'))
+board('fncs-wins', 'Players', 'Top 10 by FNCS wins', 'player', TIE_COUNT,
+      rank(Counter({p['pagename']: p['fncs_wins'] for p in PLAYABLE}), NAME),
+      count('title'))
+
+major_wins = Counter()
+for t, r, m, pages in PLACED:
+    if t['name'] in MAJORS and r == 1:
+        for page, _ in pages:
+            major_wins[page] += 1
+board('major-wins', 'Players', 'Top 10 by major tournament wins', 'player',
+      TIE_COUNT, rank(major_wins, NAME), count('win'))
+
+for y in YEARS:
+    board(f'year-earnings:{y}', 'Players', f'Top 10 earners in {y}', 'player',
+          TIE_MONEY, rank(year_earn[y], NAME), money)
+
+# ------------------------------------------------- player: region / country --
+region_of_page  = {p['pagename']: p.get('region') for p in PLAYABLE}
+country_of_page = {p['pagename']: (p.get('nationalities') or [None])[0] for p in PLAYABLE}
+REGIONS = sorted({r for r in region_of_page.values() if r})
+
+for reg in REGIONS:
+    sub = Counter({k: v for k, v in career.items() if region_of_page.get(k) == reg})
+    board(f'region-earnings:{reg}', 'By region',
+          f'Top 10 career earnings — {reg}', 'player', TIE_MONEY, rank(sub, NAME), money)
+    for y in YEARS:
+        sub = Counter({k: v for k, v in year_earn[y].items() if region_of_page.get(k) == reg})
+        board(f'region-year-earnings:{reg}:{y}', 'By region',
+              f'Top 10 earners in {y} — {reg}', 'player', TIE_MONEY, rank(sub, NAME), money)
+
+# Only countries deep enough to field a real top ten.
+by_country = defaultdict(Counter)
+for page, v in career.items():
+    c = country_of_page.get(page)
+    if c:
+        by_country[c][page] = v
+for c, sub in by_country.items():
+    board(f'country-earnings:{c}', 'By country',
+          f'Top 10 career earnings — {c}', 'player', TIE_MONEY, rank(sub, NAME), money)
+
+# --------------------------------------------------------------- teammates --
+# Anchors people would actually recognise: the biggest earners.
+mates = defaultdict(Counter)
+for t, r, m, pages in PLACED:
+    ids = sorted({pg for pg, _ in pages})
+    if len(ids) > 1:
+        for a, b in itertools.combinations(ids, 2):
+            mates[a][b] += 1; mates[b][a] += 1
+anchors = [p for p, _ in career.most_common(60)]
+for a in anchors:
+    board(f'teammates:{a}', 'Teammates',
+          f'Top 10 most frequent teammates of {NAME(a)}', 'player',
+          'Ranked by tournaments entered together.',
+          rank(mates[a], NAME), count('tournament'))
+
+# ----------------------------------------------------------- one tournament --
+# Offline events only, per your note: globals, World Cup, DreamHack, EWC.
+for n in sorted(LANS):
+    t = tour_of[n]
+    finishers = {}
+    for tt, r, m, pages in PLACED:
+        if tt['name'] != n or r is None:
+            continue
+        for page, _ in pages:
+            finishers[page] = min(finishers.get(page, 10**9), r)
+    ranked = sorted(((k, NAME(k), v) for k, v in finishers.items()),
+                    key=lambda e: (e[2], e[1].lower()))
+    if len(ranked) < SLOTS + 1 or ranked[SLOTS - 1][2] == ranked[SLOTS][2]:
+        continue                      # 10th and 11th tied — no single right answer
+    boards.append({
+        'id': f'tournament:{n}', 'group': 'Tournaments',
+        'title': f'Top 10 at {n}', 'entity': 'player',
+        'tieRule': 'Ranked by finishing position at this event.',
+        'rows': [{'key': k, 'label': l, 'value': v, 'display': f'{v}'}
+                 for k, l, v in ranked[:SLOTS]],
+        'next': {'key': ranked[SLOTS][0], 'label': ranked[SLOTS][1], 'value': ranked[SLOTS][2]},
+        'lowerIsBetter': True,
+    })
+
+# ---------------------------------------------------------------- orgs --
+org_name = {o['id']: o['name'] for o in orgs_payload['orgs']}
+ORG = lambda k: org_name.get(k, k)
+board('org-earnings', 'Organisations', 'Top 10 organisations by total earnings',
+      'org', TIE_MONEY, rank(org_earn, ORG), money)
+board('org-majors', 'Organisations', 'Top 10 organisations by major wins',
+      'org', 'Ranked by wins at Epic-run majors.', rank(org_majors, ORG), count('win'))
+for y in YEARS:
+    board(f'org-year-earnings:{y}', 'Organisations',
+          f'Top 10 organisations by earnings in {y}', 'org', TIE_MONEY,
+          rank(org_year[y], ORG), money)
+
+# ------------------------------------------------------------- countries --
+CT = lambda c: c
+country_total = Counter()
+country_year  = defaultdict(Counter)
+country_fncs  = Counter()
+for p in PLAYABLE:
+    c = (p.get('nationalities') or [None])[0]
+    if not c:
+        continue
+    country_total[c] += float(p['earnings'] or 0)
+    country_fncs[c]  += p['fncs_wins']
+    for y in YEARS:
+        country_year[y][c] += float(p.get(f'earnings_{y}') or 0)
+
+board('country-total-earnings', 'Countries', 'Top 10 countries by player earnings',
+      'country', TIE_MONEY, rank(country_total, CT), money)
+board('country-fncs-wins', 'Countries', 'Top 10 countries by FNCS wins',
+      'country', 'Every FNCS title won by a player of that nationality.',
+      rank(country_fncs, CT), count('title'))
+for y in YEARS:
+    board(f'country-year-earnings:{y}', 'Countries',
+          f'Top 10 countries by earnings in {y}', 'country', TIE_MONEY,
+          rank(country_year[y], CT), money)
+for reg in REGIONS:
+    sub = Counter()
+    for p in PLAYABLE:
+        c = (p.get('nationalities') or [None])[0]
+        if c and p.get('region') == reg:
+            sub[c] += float(p['earnings'] or 0)
+    board(f'region-country-earnings:{reg}', 'Countries',
+          f'Top 10 countries by earnings — {reg}', 'country', TIE_MONEY,
+          rank(sub, CT), money)
+
+payload = {'generated': TODAY, 'slots': SLOTS, 'boards': boards}
+with open(OUT, 'w', encoding='utf-8') as fh:
+    json.dump(payload, fh, ensure_ascii=False, separators=(',', ':'))
+
+print(f'{len(boards)} boards, {os.path.getsize(OUT)/1e6:.2f} MB')
+print(Counter(b['group'] for b in boards))
+for bid in ('career-earnings', 'lan-earnings', 'fncs-apps', 'org-earnings',
+            'country-total-earnings'):
+    b = next((x for x in boards if x['id'] == bid), None)
+    print(f"\n{bid}:" if b else f"\n{bid}: MISSING")
+    if b:
+        for row in b['rows'][:5]:
+            print(f"   {row['label']:<22} {row['display']}")
 ```
 
-While `career_path.json` or `teammates.json` is missing, `check:games` prints a
-SKIP line naming the cell and still exits 0; `npm run dev` and `npm run build`
-fail on the missing import, because those two games have nothing to run on.
-`orgs.json` is not in that set — nothing imports it, so its absence changes
-nothing.
+Check against what I measured: `lan-earnings` should open
+`Bugha $3,064,367 / EpikWhale $1,505,505 / Rojo $1,169,333`, and `fncs-apps`
+should open `EpikWhale 36 / Khanada 35`. Same caveat as Cell 2 — my resolver was
+looser, so small downward differences are expected and fine.
 
-`liquipedia_data/` is gitignored apart from `players.json`. The new files are
-small enough to commit — career_path 152 KB, teammates 681 KB, orgs 236 KB —
-and `.gitignore` already un-ignores the first two so the site builds from a
-fresh clone. Add the third when something reads it:
+If a board comes out missing it simply had fewer than 11 entries and was
+skipped; that is the intended behaviour and the app never offers it.
+
+---
+
+## Cell 4 — `pools.json`
+
+The event-scoped game mode. A pool is a fixed list of players and nothing else:
+pick it in any game and you get those players only, no region and no difficulty.
+
+Two to start. **EWC 2026 is `Reload Elite Series 2026 - Championship`** — your
+call, and the numbers back it: exactly 80 distinct participants.
+
+Adding a third later is one entry in `WANTED`, no code change anywhere.
+
+```python
+OUT = f'{BASE}/pools.json'
+
+WANTED = [
+    ('globals-2026', 'FNCS 2026 Globals', 'FNCS 2026  Global Championship',
+     'The field for the Global Championship in Europe, 26–27 September 2026.'),
+    ('ewc-2026', 'EWC 2026', 'Reload Elite Series 2026 - Championship',
+     'The field for the Esports World Cup Fortnite event, August 2026.'),
+]
+
+pools = []
+for pid, label, event, blurb in WANTED:
+    t = tour_of.get(event)
+    if not t:
+        print(f'!! {event!r} not in tournaments.json — skipped')
+        continue
+    raw, named = set(), set()
+    for row in placements:
+        if row.get('tournament') != event:
+            continue
+        for part in (row.get('participants') or []):
+            name = part.get('player') or ''
+            if not name:
+                continue
+            raw.add(name)
+            page = resolve(name)
+            if page:
+                named.add(page)
+    pools.append({'id': pid, 'label': label, 'blurb': blurb,
+                  'event': event, 'date': str(t['startdate'])[:10],
+                  'players': sorted(named)})
+    print(f'{label:<20} {len(raw):>3} entrants, {len(named):>3} playable')
+
+payload = {'generated': TODAY, 'pools': pools}
+with open(OUT, 'w', encoding='utf-8') as fh:
+    json.dump(payload, fh, ensure_ascii=False, separators=(',', ':'))
+print('\nwrote', OUT)
+```
+
+Expected, and this one I am confident about — I counted both directly:
 
 ```
-!liquipedia_data/clean_data/fortnite/orgs.json
+FNCS 2026 Globals    101 entrants,  82 playable
+EWC 2026              80 entrants,  66 playable
 ```
+
+`82` and `66` are what the games will actually use. The gap is entrants with a
+placement but no Liquipedia player page, so there is no name to guess and no
+row to render.
+
+### Shape
+
+```jsonc
+{ "generated": "...", "pools": [
+  { "id": "globals-2026",
+    "label": "FNCS 2026 Globals",
+    "blurb": "The field for the Global Championship ...",
+    "event": "FNCS 2026  Global Championship",
+    "date": "2026-09-26",
+    "players": ["Acorn", "Ajerss", "..."] }   // pagenames
+]}
+```
+
+---
+
+## When all four have run
+
+`liquipedia_data/clean_data/fortnite/` should gain `facts.json`,
+`rankings.json` and `pools.json`. Paste the printed output back to me — the
+counts are what I will assert against while wiring the games up, and if a
+classifier is off I would rather fix it before ten games are built on it.

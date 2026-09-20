@@ -1,7 +1,16 @@
 /**
- * Name handling for the typing games (List, Tenaball, Wordle, Guess the
- * Player). Players type fast and on phones, so matching is deliberately
- * forgiving: case, spaces, punctuation and accents are ignored.
+ * Name handling for every game that takes a typed player name.
+ *
+ * Players type fast, on phones, and from memory — so matching is deliberately
+ * forgiving in three separate ways, each of which fixes a real failure:
+ *
+ *   case / spacing / accents   `th0mas hd` finds Th0masHD
+ *   alternate handles          `Shark` finds shxrk, who used to be Shark
+ *   digits that read as letters `king` finds K1nG
+ *   one or two typos           `shxrk` finds Shark, `peterbo` finds Peterbot
+ *
+ * The last one is bounded: a typo is only accepted when exactly one player is
+ * that close, so a vague stub never silently resolves to the wrong person.
  */
 
 /**
@@ -31,6 +40,50 @@ export function normalizeName(input: string): string {
     .replace(/[^A-Z0-9]/g, '');
 }
 
+/**
+ * Digits folded to the letters they stand in for, and the reverse.
+ *
+ * 342 of the 5,678 handles carry a digit, and almost all of them are a letter
+ * wearing a hat: K1nG, Th0masHD, T3enyy, 5aald. Nobody types the digit when
+ * they are searching from memory, so both sides of a comparison get folded to
+ * one form — `1` and `L` both become `I`, so K1nG, KING and KLNG agree.
+ *
+ * Only used for *finding* a player. Fortnitedle still scores the real
+ * characters, because there the digit is the puzzle.
+ */
+const LEET: Record<string, string> = { '0': 'O', '1': 'I', L: 'I', '3': 'E', '4': 'A', '5': 'S', '7': 'T' };
+
+export function foldLeet(key: string): string {
+  return key.replace(/[013457L]/g, (char) => LEET[char] ?? char);
+}
+
+/**
+ * The minimum a row needs to be found by name.
+ *
+ * Structural rather than any one row type, because the roster and the derived
+ * leaderboards are different shapes and both are searched.
+ */
+export interface Nameable {
+  id: string;
+  name: string;
+}
+
+/** A row that also answers to former or alternate spellings. */
+export interface Searchable extends Nameable {
+  /** `alternateid_list` — e.g. `Shark` for the player now called shxrk. */
+  aliases?: readonly string[];
+}
+
+/** Every spelling a row answers to, normalised. Name first. */
+function keysOf(player: Searchable): string[] {
+  const keys = [normalizeName(player.name)];
+  for (const alias of player.aliases ?? []) {
+    const key = normalizeName(alias);
+    if (key && !keys.includes(key)) keys.push(key);
+  }
+  return keys.filter(Boolean);
+}
+
 function levenshtein(a: string, b: string, max: number): number {
   if (Math.abs(a.length - b.length) > max) return max + 1;
   let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
@@ -49,53 +102,106 @@ function levenshtein(a: string, b: string, max: number): number {
 }
 
 /**
- * The minimum a row needs to be found by name.
+ * How many typos to forgive at a given length.
  *
- * Structural rather than `Player`, because the two data sources are two
- * different shapes and both are searched: the Wikipedia import's `Player` and
- * the Liquipedia roster's `RosterPlayer`.
+ * Short handles get none: at four characters a single edit reaches dozens of
+ * other players, and "Ark" resolving to "Ace" is worse than not resolving.
  */
-export interface Nameable {
-  id: string;
-  name: string;
+function tolerance(length: number): number {
+  if (length < 5) return 0;
+  if (length < 8) return 1;
+  return 2;
 }
 
 /**
- * Resolves typed text to a player.
+ * Resolves typed text to a player, or null when nothing is close enough.
  *
- * Exact (normalised) matches win. Otherwise a single one-character typo is
- * accepted for inputs of 5+ characters, but only when exactly one player is
- * that close — so "peterbo" finds Peterbot while an ambiguous stub does not
- * silently pick the wrong player.
+ * Tried in order, most confident first: an exact spelling, then the same
+ * spelling with digits folded, then a bounded typo. The typo pass only returns
+ * a result when a *single* player is that close.
  */
-export function matchPlayer<T extends Nameable>(input: string, players: readonly T[]): T | null {
+export function matchPlayer<T extends Searchable>(input: string, players: readonly T[]): T | null {
   const needle = normalizeName(input);
   if (needle.length < 2) return null;
 
-  const exact = players.filter((p) => normalizeName(p.name) === needle);
-  if (exact.length === 1) return exact[0];
-  if (exact.length > 1) return exact[0];
+  const exact = players.filter((player) => keysOf(player).includes(needle));
+  if (exact.length > 0) return exact[0];
 
-  if (needle.length >= 5) {
-    const near = players.filter((p) => levenshtein(normalizeName(p.name), needle, 1) <= 1);
-    if (near.length === 1) return near[0];
-  }
-  return null;
+  const folded = foldLeet(needle);
+  const leet = players.filter((player) => keysOf(player).some((key) => foldLeet(key) === folded));
+  if (leet.length > 0) return leet[0];
+
+  const max = tolerance(needle.length);
+  if (max === 0) return null;
+  const near = players.filter((player) =>
+    keysOf(player).some((key) => levenshtein(foldLeet(key), folded, max) <= max),
+  );
+  return near.length === 1 ? near[0] : null;
 }
 
-/** Autocomplete suggestions: prefix matches first, then substring matches. */
-export function suggestPlayers<T extends Nameable>(input: string, players: readonly T[], limit = 8): T[] {
+/**
+ * Autocomplete suggestions, best match first.
+ *
+ * Four bands, in descending confidence: the name starts with what you typed,
+ * an alias does, the name contains it, or it is within a typo of it. Two
+ * characters is enough to start — `en` already narrows to a handful, which is
+ * the point of suggesting at all.
+ */
+export function suggestPlayers<T extends Searchable>(
+  input: string,
+  players: readonly T[],
+  limit = 8,
+): T[] {
   const needle = normalizeName(input);
   if (!needle) return [];
-  const prefix: T[] = [];
-  const contains: T[] = [];
+  const folded = foldLeet(needle);
+  const max = tolerance(needle.length);
+
+  const bands: T[][] = [[], [], [], []];
   for (const player of players) {
-    const name = normalizeName(player.name);
-    if (name.startsWith(needle)) prefix.push(player);
-    else if (name.includes(needle)) contains.push(player);
+    const keys = keysOf(player).map(foldLeet);
+    const [name, ...aliases] = keys;
+    if (name.startsWith(folded)) bands[0].push(player);
+    else if (aliases.some((key) => key.startsWith(folded))) bands[1].push(player);
+    else if (keys.some((key) => key.includes(folded))) bands[2].push(player);
+    else if (max > 0 && keys.some((key) => levenshtein(key, folded, max) <= max)) bands[3].push(player);
   }
-  const byName = (a: T, b: T) => (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1);
-  return [...prefix.sort(byName), ...contains.sort(byName)].slice(0, limit);
+
+  // Inside a band, the shortest name is the closest thing to what was typed:
+  // "ace" should offer Ace before Acorn before AceOfSpades.
+  const byName = (a: T, b: T) =>
+    a.name.length - b.name.length || (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1);
+  return bands.flatMap((band) => band.sort(byName)).slice(0, limit);
+}
+
+/**
+ * The parenthetical Liquipedia uses to tell two identical handles apart.
+ *
+ * `Aqua_(Japanese_player)` -> "Japanese player"; `Aqua` -> null. Shown in the
+ * suggestion list *only* for a handle that more than one player answers to —
+ * 121 of 5,678 — because everywhere else it is page bookkeeping that gives
+ * away a player's nationality for free.
+ */
+export function disambiguator(id: string): string | null {
+  const match = /\(([^)]+)\)\s*$/.exec(id.replace(/_/g, ' '));
+  return match ? match[1] : null;
+}
+
+/**
+ * Normalised handles that more than one row in this pool shares.
+ *
+ * Built per pool rather than globally: whether "Aqua" is ambiguous depends on
+ * who is actually in the list you are searching.
+ */
+export function ambiguousNames(players: readonly Nameable[]): Set<string> {
+  const seen = new Map<string, number>();
+  for (const player of players) {
+    const key = normalizeName(player.name);
+    seen.set(key, (seen.get(key) ?? 0) + 1);
+  }
+  const out = new Set<string>();
+  for (const [key, count] of seen) if (count > 1) out.add(key);
+  return out;
 }
 
 /** Deterministic avatar colour from a player id. */

@@ -1,17 +1,24 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { CountryBadge } from '@/components/CountryBadge';
+import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { PlayerSearch } from '@/components/PlayerSearch';
+import { PoolSetup } from '@/components/PoolSetup';
 import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
-import { useDataset } from '@/data/DataProvider';
-import type { Player } from '@/data/types';
-import { REGION_LABEL } from '@/data/types';
+import type { Pools } from '@/data/liquipedia/pools';
+import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
+import { usePools } from '@/data/liquipedia/usePools';
+import { useRoster } from '@/data/liquipedia/useRoster';
+import { deal, rotationKey } from '@/games/shared/rotation';
+import { poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { playerMoney } from '@/lib/format';
+import { readLocal, writeLocal } from '@/lib/storage';
 import { getGame } from '@/games/registry';
 import {
-  createGame,
+  answerable,
+  gameFor,
   giveUp,
   guessesLeft,
   MAX_GUESSES,
@@ -28,48 +35,90 @@ const COLUMNS: { key: string; label: string }[] = [
   { key: 'player', label: 'Guess' },
   { key: 'region', label: 'Region' },
   { key: 'country', label: 'Country' },
+  { key: 'status', label: 'Status' },
   { key: 'age', label: 'Age' },
   { key: 'earnings', label: 'Earnings' },
   { key: 'fncsWins', label: 'FNCS' },
 ];
 
+const MODES: { id: FeedbackMode; label: string; hint: string }[] = [
+  {
+    id: 'exact',
+    label: 'Exact',
+    hint: 'Age and FNCS wins are right or wrong, nothing in between. Earnings still use direction.',
+  },
+  {
+    id: 'direction',
+    label: 'Direction',
+    hint: 'Arrows show whether the secret player is higher or lower, with a warm band when you are close.',
+  },
+];
+
 export default function GuessThePlayerGame() {
-  const dataset = useDataset();
+  const { roster, error } = useRoster();
+  const { pools } = usePools();
+
+  return (
+    <LiquipediaGate error={error} ready={Boolean(roster)}>
+      {roster ? <Game roster={roster} pools={pools} /> : null}
+    </LiquipediaGate>
+  );
+}
+
+function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
+  const [choice, setChoice] = usePoolChoice();
+  const [mode, setMode] = useState<FeedbackMode>('direction');
   const [game, setGame] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const start = useCallback(
-    (mode: FeedbackMode) => {
-      const created = createGame(dataset.players, mode);
-      if (!created) {
-        setError('No player in the dataset has the attributes this game needs.');
-        return;
-      }
-      setError(null);
-      setGame(created);
-    },
-    [dataset],
+  const players = useMemo(
+    () => resolvePool(roster, pools, choice, answerable, 20),
+    [roster, pools, choice],
   );
+
+  const start = useCallback(() => {
+    // A no-repeat cycle per pool, so the same secret does not come round twice
+    // in an evening. See `games/shared/rotation.ts`.
+    const key = rotationKey(meta.id, ...poolScope(choice));
+    const drawn = deal(players, readLocal<string[]>(key, []));
+    if (!drawn) {
+      setError('No player in this pool has a published birthday and earnings figure.');
+      return;
+    }
+    writeLocal(key, drawn.seen);
+    setError(null);
+    setGame(gameFor(drawn.pick, mode));
+  }, [players, choice, mode]);
 
   if (!game) {
     return (
-      <GameShell game={meta}>
+      <GameShell game={meta} dataNote={<RosterNote what="Secret players" />}>
         <div className="stack">
-          <section className="card stack">
-            <div className="card__title">Pick a feedback style</div>
-            <OptionGrid>
-              <OptionCard
-                label="Exact"
-                hint="Age and FNCS wins are right or wrong, nothing in between. Earnings still use direction."
-                onClick={() => start('exact')}
-              />
-              <OptionCard
-                label="Direction"
-                hint="Arrows show whether the secret player is higher or lower, with a warm band when you are close."
-                onClick={() => start('direction')}
-              />
-            </OptionGrid>
-          </section>
+          <PoolSetup
+            roster={roster}
+            pools={pools}
+            value={choice}
+            onChange={setChoice}
+            eligible={answerable}
+            onStart={start}
+            startLabel="Start"
+            extra={
+              <section className="card stack">
+                <div className="card__title">Feedback style</div>
+                <OptionGrid>
+                  {MODES.map((option) => (
+                    <OptionCard
+                      key={option.id}
+                      label={option.label}
+                      hint={option.hint}
+                      selected={mode === option.id}
+                      onClick={() => setMode(option.id)}
+                    />
+                  ))}
+                </OptionGrid>
+              </section>
+            }
+          />
           {error ? (
             <Banner tone="danger" title="Cannot start">
               {error}
@@ -86,15 +135,11 @@ export default function GuessThePlayerGame() {
   return (
     <GameShell
       game={meta}
+      dataNote={<RosterNote what="Secret players" />}
       toolbar={
-        <>
-          {game.status === 'playing' ? (
-            <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />
-          ) : null}
-          <button type="button" className="icon-btn" onClick={() => start(game.mode)}>
-            ↺ New player
-          </button>
-        </>
+        <button type="button" className="icon-btn" onClick={() => setGame(null)}>
+          ↺ New player
+        </button>
       }
     >
       <div className="stack">
@@ -105,7 +150,17 @@ export default function GuessThePlayerGame() {
         </div>
 
         {!finished ? (
-          <PlayerSearch players={dataset.roster} onPick={(player) => setGame(submitGuess(game, player))} exclude={guessedIds} />
+          <div className="stack-sm">
+            <PlayerSearch
+              players={players}
+              onPick={(player) => setGame(submitGuess(game, player))}
+              exclude={guessedIds}
+              autoFocus
+            />
+            <div className="row" style={{ justifyContent: 'center' }}>
+              <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />
+            </div>
+          </div>
         ) : null}
 
         {game.rows.length > 0 ? (
@@ -123,7 +178,7 @@ export default function GuessThePlayerGame() {
           </div>
         ) : (
           <p className="center muted small">
-            Guess any player to get comparisons on region, country, age, earnings and FNCS wins.
+            Guess any player to get comparisons on region, country, status, age, earnings and FNCS wins.
           </p>
         )}
 
@@ -141,12 +196,12 @@ export default function GuessThePlayerGame() {
                 <div className="bold">{game.secret.name}</div>
                 <div className="small muted">
                   <CountryBadge code={game.secret.country} name={game.secret.countryName} />{' '}
-                  {game.secret.countryName} · {REGION_LABEL[game.secret.region]} · {game.secret.age} yrs ·{' '}
+                  {game.secret.countryName} · {game.secret.region} · {game.secret.age} yrs ·{' '}
                   {playerMoney(game.secret)} · {game.secret.fncsWins} FNCS
                 </div>
               </div>
             </div>
-            <button type="button" className="btn btn--primary btn--lg btn--block" onClick={() => start(game.mode)}>
+            <button type="button" className="btn btn--primary btn--lg btn--block" onClick={start}>
               Next player
             </button>
           </div>
@@ -170,7 +225,7 @@ export default function GuessThePlayerGame() {
   );
 }
 
-function Row({ player, attributes }: { player: Player; attributes: AttributeResult[] }) {
+function Row({ player, attributes }: { player: RosterPlayer; attributes: AttributeResult[] }) {
   return (
     <>
       <div className="gp-cell gp-cell--player">

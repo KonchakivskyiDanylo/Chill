@@ -1,6 +1,4 @@
-import type { Player } from '@/data/types';
-import { REGION_LABEL } from '@/data/types';
-import { makeRng } from '@/lib/rng';
+import type { RosterPlayer } from '@/data/liquipedia/roster';
 import { moneyShort } from '@/lib/format';
 
 /** Pure logic for Guess the Player. */
@@ -14,7 +12,7 @@ export type FeedbackMode = 'exact' | 'direction';
 
 export const MAX_GUESSES = 8;
 
-export type AttributeKey = 'region' | 'country' | 'age' | 'earnings' | 'fncsWins';
+export type AttributeKey = 'region' | 'country' | 'status' | 'age' | 'earnings' | 'fncsWins';
 export type CellState = 'hit' | 'close' | 'miss';
 
 export interface AttributeResult {
@@ -28,27 +26,36 @@ export interface AttributeResult {
 }
 
 export interface GuessRow {
-  player: Player;
+  player: RosterPlayer;
   attributes: AttributeResult[];
   correct: boolean;
 }
 
 export interface GameState {
   mode: FeedbackMode;
-  secret: Player;
+  secret: RosterPlayer;
   rows: GuessRow[];
   status: 'playing' | 'won' | 'lost';
 }
 
-export function createGame(
-  players: readonly Player[],
-  mode: FeedbackMode,
-  seed: string = String(Date.now()),
-): GameState | null {
-  const pool = players.filter((player) => player.age !== null);
-  if (pool.length === 0) return null;
-  const rng = makeRng(seed);
-  return { mode, secret: pool[Math.floor(rng() * pool.length)], rows: [], status: 'playing' };
+/**
+ * A round on a secret player the caller has already chosen.
+ *
+ * The caller picks, because who comes up next is a rotation question (see
+ * `games/shared/rotation.ts`) and the rules of the round are not.
+ */
+export function gameFor(secret: RosterPlayer, mode: FeedbackMode): GameState {
+  return { mode, secret, rows: [], status: 'playing' };
+}
+
+/**
+ * Players who can be the answer.
+ *
+ * Every column has to say something, so a player with no published birthday or
+ * no earnings figure would hand back two blank cells and a shrug.
+ */
+export function answerable(players: readonly RosterPlayer[]): RosterPlayer[] {
+  return players.filter((player) => player.age !== null && player.earningsKnown);
 }
 
 function numericResult(
@@ -71,7 +78,11 @@ function numericResult(
   };
 }
 
-export function compare(guess: Player, secret: Player, mode: FeedbackMode): AttributeResult[] {
+export function compare(
+  guess: RosterPlayer,
+  secret: RosterPlayer,
+  mode: FeedbackMode,
+): AttributeResult[] {
   const guessAge = guess.age ?? 0;
   const secretAge = secret.age ?? 0;
 
@@ -93,16 +104,22 @@ export function compare(guess: Player, secret: Player, mode: FeedbackMode): Attr
     {
       key: 'region',
       label: 'Region',
-      display: REGION_LABEL[guess.region],
+      display: guess.region ?? '—',
       state: guess.region === secret.region ? 'hit' : 'miss',
     },
     {
       key: 'country',
       label: 'Country',
-      display: guess.countryName,
+      display: guess.countryName ?? '—',
       // Right region, wrong country is a genuine partial hit.
       state:
         guess.country === secret.country ? 'hit' : guess.region === secret.region ? 'close' : 'miss',
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      display: guess.status === 'active' ? 'Active' : 'Retired',
+      state: (guess.status === 'active') === (secret.status === 'active') ? 'hit' : 'miss',
     },
     numericResult('age', 'Age', String(guessAge), guessAge, secretAge, mode, 2),
     earnings,
@@ -110,7 +127,7 @@ export function compare(guess: Player, secret: Player, mode: FeedbackMode): Attr
   ];
 }
 
-export function submitGuess(state: GameState, guess: Player): GameState {
+export function submitGuess(state: GameState, guess: RosterPlayer): GameState {
   if (state.status !== 'playing') return state;
   if (state.rows.some((row) => row.player.id === guess.id)) return state;
 

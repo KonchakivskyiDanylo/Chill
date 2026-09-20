@@ -94,8 +94,7 @@ export function Credits() {
       <section className="card stack">
         <div className="card__title">Wikipedia</div>
         <p className="small">
-          FNCS title counts, and the tournament results behind Career Path, Who Are Ya, Connections and
-          Tenaball, come from the English Wikipedia article{' '}
+          The FNCS title counts carried on every player row come from the English Wikipedia article{' '}
           <a
             className="link"
             href="https://en.wikipedia.org/wiki/Competitive_Fortnite_records_and_statistics"

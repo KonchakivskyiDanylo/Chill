@@ -1,5 +1,6 @@
 import type { FameTier } from '@/data/types';
 import { COUNTRY_CODES } from './countries';
+import { loadJson } from './files';
 
 /**
  * The Liquipedia roster.
@@ -269,9 +270,7 @@ let cached: Promise<Roster> | null = null;
  */
 export function loadRoster(): Promise<Roster> {
   if (!cached) {
-    cached = import('@data/players.json').then(
-      (module) => new Roster(module.default as unknown as LiquipediaRow[]),
-    );
+    cached = loadJson('players').then((rows) => new Roster(rows as LiquipediaRow[]));
   }
   return cached;
 }

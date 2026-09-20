@@ -3,11 +3,13 @@ import { Link } from 'react-router-dom';
 import { formatDate, GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
+import { PoolSetup } from '@/components/PoolSetup';
 import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
-import { DifficultyCards, DifficultyChip, useDifficulty } from '@/components/DifficultyPicker';
-import { DIFFICULTIES } from '@/games/shared/difficulty';
+import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
+import type { Pools } from '@/data/liquipedia/pools';
 import { EXPORT_DATE, SOURCE, type Roster, type RosterPlayer } from '@/data/liquipedia/roster';
+import { poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { playerMoney, plural } from '@/lib/format';
 import { CountryBadge } from '@/components/CountryBadge';
 import { useBestScore } from '@/lib/storage';
@@ -46,6 +48,7 @@ function secondaryFact(player: RosterPlayer, category: Category): string {
 
 export default function HigherLowerGame() {
   const { roster, error: loadError } = useRoster();
+  const { pools } = usePools();
 
   if (loadError) {
     return (
@@ -58,51 +61,50 @@ export default function HigherLowerGame() {
     );
   }
   if (!roster) return <div className="card center muted">Loading players…</div>;
-  return <Game roster={roster} />;
+  return <Game roster={roster} pools={pools} />;
 }
 
-function Game({ roster }: { roster: Roster }) {
-  const [category, setCategory] = useState<Category | null>(null);
-  const [difficulty, setDifficulty] = useDifficulty();
+function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
+  const [choice, setChoice] = usePoolChoice();
+  const [category, setCategory] = useState<Category>('earnings');
   const [game, setGame] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const scope = `higher-lower:${category ?? 'none'}:${difficulty}`;
+  const scope = `higher-lower:${category}:${poolScope(choice).join(':')}`;
   const { best, submit: submitBest } = useBestScore(scope);
 
   /**
-   * The pool one level offers, which is the fame tier minus anyone missing the
-   * value this category compares — a player with no birth date cannot be part
-   * of an Age run. Undefined until a category is picked, because until then
-   * there is no eligibility rule to count against.
+   * The pool minus anyone missing the value this category compares — a player
+   * with no birth date cannot be part of an Age run.
    */
-  const poolFor = useCallback(
-    (tier: Difficulty, forCategory: Category) =>
-      roster.playersFor(tier, {
-        minimum: 2, // a pair is the smallest run that can be dealt
-        eligible: (players) => eligible(players, forCategory),
-      }),
-    [roster],
+  const forCategory = useCallback(
+    (players: RosterPlayer[]) => eligible(players, category),
+    [category],
   );
 
-  const counts = useMemo(() => {
-    if (!category) return undefined;
-    const entries = DIFFICULTIES.map((tier) => [tier, poolFor(tier, category).length] as const);
-    return Object.fromEntries(entries) as Record<Difficulty, number>;
-  }, [poolFor, category]);
-
-  const start = useCallback(
-    (nextCategory: Category, nextDifficulty: Difficulty) => {
-      const created = createGame(poolFor(nextDifficulty, nextCategory), nextCategory, nextDifficulty);
-      if (!created) {
-        setError('Not enough players at this difficulty have that value on record.');
-        return;
-      }
-      setError(null);
-      setGame(created);
-    },
-    [poolFor],
+  const players = useMemo(
+    // A pair is the smallest run that can be dealt.
+    () => resolvePool(roster, pools, choice, forCategory, 2),
+    [roster, pools, choice, forCategory],
   );
+
+  /**
+   * The band the pairing aims for.
+   *
+   * `any` has no band of its own — it is the absence of a difficulty — so it
+   * takes Medium's, which is the one that makes neither promise.
+   */
+  const pairing: Difficulty = choice.difficulty === 'any' ? 'medium' : choice.difficulty;
+
+  const start = useCallback(() => {
+    const created = createGame(players, category, pairing);
+    if (!created) {
+      setError('Not enough players in this pool have that value on record.');
+      return;
+    }
+    setError(null);
+    setGame(created);
+  }, [players, category, pairing]);
 
   // Reveal the answer for a beat, then slide to the next pair.
   useEffect(() => {
@@ -115,38 +117,61 @@ function Game({ roster }: { roster: Roster }) {
     if (game && (game.status === 'gameover' || game.status === 'cleared')) submitBest(game.score);
   }, [game, submitBest]);
 
-  const answer = (choice: Answer) => setGame((prev) => (prev ? submitAnswer(prev, choice) : prev));
-
-  const reset = () => {
-    setGame(null);
-    setCategory(null);
-  };
-
-  const toolbar = game ? (
-    <>
-      {game.status === 'playing' ? (
-        <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />
-      ) : null}
-      <button type="button" className="icon-btn" onClick={reset}>
-        ↺ Change mode
-      </button>
-    </>
-  ) : null;
+  const answer = (choiceMade: Answer) =>
+    setGame((prev) => (prev ? submitAnswer(prev, choiceMade) : prev));
 
   return (
-    <GameShell game={meta} toolbar={toolbar} dataNote={<RosterNote />}>
+    <GameShell
+      game={meta}
+      dataNote={<RosterNote />}
+      toolbar={
+        game ? (
+          <button type="button" className="icon-btn" onClick={() => setGame(null)}>
+            ⚙ Setup
+          </button>
+        ) : null
+      }
+    >
       {!game ? (
-        <Setup
-          category={category}
-          difficulty={difficulty}
-          counts={counts}
-          onCategory={setCategory}
-          onDifficulty={setDifficulty}
-          onStart={start}
-          error={error}
-        />
+        <div className="stack">
+          <PoolSetup
+            roster={roster}
+            pools={pools}
+            value={choice}
+            onChange={setChoice}
+            eligible={forCategory}
+            onStart={start}
+            startLabel="Start endless run"
+            extra={
+              <section className="card stack">
+                <div className="card__title">Category</div>
+                <OptionGrid>
+                  {CATEGORIES.map((item) => (
+                    <OptionCard
+                      key={item.id}
+                      label={item.label}
+                      hint={item.hint}
+                      selected={category === item.id}
+                      onClick={() => setCategory(item.id)}
+                    />
+                  ))}
+                </OptionGrid>
+                <p className="tiny faint">
+                  Hard also adds the Equal button — and expects you to use it when two players match
+                  exactly.
+                </p>
+              </section>
+            }
+          />
+          {error ? (
+            <Banner tone="danger" title="Cannot start">
+              {error}
+            </Banner>
+          ) : null}
+          <p className="tiny faint center">Endless mode · one mistake ends the run</p>
+        </div>
       ) : (
-        <Board game={game} best={best} onAnswer={answer} onRestart={() => start(game.category, game.difficulty)} />
+        <Board game={game} best={best} onAnswer={answer} onRestart={start} onGiveUp={() => setGame(giveUp(game))} />
       )}
     </GameShell>
   );
@@ -175,76 +200,18 @@ function RosterNote() {
   );
 }
 
-function Setup({
-  category,
-  difficulty,
-  counts,
-  onCategory,
-  onDifficulty,
-  onStart,
-  error,
-}: {
-  category: Category | null;
-  difficulty: Difficulty;
-  counts?: Record<Difficulty, number>;
-  onCategory: (value: Category) => void;
-  onDifficulty: (value: Difficulty) => void;
-  onStart: (category: Category, difficulty: Difficulty) => void;
-  error: string | null;
-}) {
-  return (
-    <div className="stack">
-      <section className="card stack">
-        <div className="card__title">1 · Pick a category</div>
-        <OptionGrid>
-          {CATEGORIES.map((item) => (
-            <OptionCard
-              key={item.id}
-              label={item.label}
-              hint={item.hint}
-              selected={category === item.id}
-              onClick={() => onCategory(item.id)}
-            />
-          ))}
-        </OptionGrid>
-      </section>
-
-      <section className="card stack">
-        <div className="card__title">2 · Pick a difficulty</div>
-        <DifficultyCards value={difficulty} onChange={onDifficulty} counts={counts} />
-        <p className="tiny faint">
-          Hard also adds the Equal button — and expects you to use it when two players match exactly.
-        </p>
-      </section>
-
-      {error ? <Banner tone="danger" title="Cannot start">{error}</Banner> : null}
-
-      <button
-        type="button"
-        className="btn btn--primary btn--lg btn--block"
-        disabled={!category}
-        onClick={() => category && onStart(category, difficulty)}
-      >
-        {category ? 'Start endless run' : 'Choose a category'}
-      </button>
-      <p className="tiny faint center">
-        Endless mode · one mistake ends the run
-        {counts ? ` · ${plural(counts[difficulty], 'player')} in the pool` : ''}
-      </p>
-    </div>
-  );
-}
-
 function Board({
   game,
   best,
   onAnswer,
   onRestart,
+  onGiveUp,
 }: {
   game: GameState;
   best: number;
   onAnswer: (answer: Answer) => void;
   onRestart: () => void;
+  onGiveUp: () => void;
 }) {
   const categoryMeta = CATEGORIES.find((c) => c.id === game.category)!;
   const revealed = game.status !== 'playing';
@@ -260,7 +227,6 @@ function Board({
 
       <div className="hl-prompt">
         <span className="chip chip--primary">{categoryMeta.title}</span>
-        <DifficultyChip difficulty={game.difficulty} />
       </div>
 
       <div className="hl-board">
@@ -277,11 +243,7 @@ function Board({
           category={game.category}
           value={revealed ? displayValue(game.challenger, game.category) : null}
           tone={
-            revealed && game.lastAnswer
-              ? game.status === 'gameover'
-                ? 'wrong'
-                : 'right'
-              : undefined
+            revealed && game.lastAnswer ? (game.status === 'gameover' ? 'wrong' : 'right') : undefined
           }
         />
       </div>
@@ -289,8 +251,11 @@ function Board({
       {finished ? (
         <div className="stack">
           {game.status === 'cleared' ? (
-            <Banner tone="success" title="🎉 You used every player! You won!">
-              You made it through all {game.poolSize} players in the pool with a score of {game.score}.
+            <Banner tone="success" title="🎉 You ran out of players! You won!">
+              {/* Not necessarily the whole pool: FNCS Wins stops once there is
+                  no title-holder left to pair against, because a round where
+                  neither player has won one is not a question. */}
+              You scored {game.score} and exhausted every pair this category had left.
             </Banner>
           ) : (
             <Banner tone="danger" title={game.lastAnswer ? 'Run over' : 'Gave up'}>
@@ -303,38 +268,44 @@ function Board({
           </button>
         </div>
       ) : (
-        <div className="hl-answers">
-          <button
-            type="button"
-            className="btn btn--lg hl-answer"
-            disabled={revealed}
-            onClick={() => onAnswer('higher')}
-          >
-            ▲ Higher
-          </button>
-          {hasEqualButton(game.difficulty) ? (
+        <div className="stack-sm">
+          <div className="hl-answers">
             <button
               type="button"
               className="btn btn--lg hl-answer"
               disabled={revealed}
-              onClick={() => onAnswer('equal')}
+              onClick={() => onAnswer('higher')}
             >
-              = Equal
+              ▲ Higher
             </button>
-          ) : null}
-          <button
-            type="button"
-            className="btn btn--lg hl-answer"
-            disabled={revealed}
-            onClick={() => onAnswer('lower')}
-          >
-            ▼ Lower
-          </button>
+            {hasEqualButton(game.difficulty) ? (
+              <button
+                type="button"
+                className="btn btn--lg hl-answer"
+                disabled={revealed}
+                onClick={() => onAnswer('equal')}
+              >
+                = Equal
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="btn btn--lg hl-answer"
+              disabled={revealed}
+              onClick={() => onAnswer('lower')}
+            >
+              ▼ Lower
+            </button>
+          </div>
+          <div className="row" style={{ justifyContent: 'center' }}>
+            <GiveUpButton onGiveUp={onGiveUp} />
+          </div>
         </div>
       )}
 
       <p className="tiny faint center">
-        Is {game.challenger.name}’s {categoryMeta.title.toLowerCase()} higher or lower than {game.current.name}’s?
+        Is {game.challenger.name}’s {categoryMeta.title.toLowerCase()} higher or lower than{' '}
+        {game.current.name}’s?
         {hasEqualButton(game.difficulty) ? '' : ' Equal values accept either answer.'}
       </p>
     </div>

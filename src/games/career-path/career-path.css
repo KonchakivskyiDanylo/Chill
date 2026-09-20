@@ -65,3 +65,18 @@
   text-transform: uppercase;
   color: var(--primary);
 }
+
+/*
+ * The full career, shown once the round is over.
+ *
+ * Results that were never clues are dimmed, so you can see at a glance which
+ * tenth of the career you were actually working from.
+ */
+.cp-path--full {
+  max-height: 460px;
+  overflow-y: auto;
+}
+
+.cp-clue--dim {
+  opacity: 0.55;
+}

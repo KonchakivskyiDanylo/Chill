@@ -1,5 +1,3 @@
-import { plural } from '@/lib/format';
-import { useLocalState } from '@/lib/storage';
 import { OptionCard, OptionGrid } from './ui';
 
 /**
@@ -10,6 +8,9 @@ import { OptionCard, OptionGrid } from './ui';
  * Anything else is a Liquipedia region label exactly as the export spells it
  * (`'North America'`, `'Middle East'`), taken from `roster.regions` rather than
  * listed here, so a new region in the data shows up without a code change.
+ *
+ * The choice itself now lives in `games/shared/pool.ts` alongside difficulty,
+ * status and the event pools, because those four are one decision.
  */
 
 export type RegionChoice = string | null;
@@ -33,47 +34,31 @@ export function regionIcon(region: RegionChoice): string {
   return region === null ? '🌐' : (ICONS[region] ?? '📍');
 }
 
-/** The chosen region, remembered across games and reloads. */
-export function useRegion(): [RegionChoice, (next: RegionChoice) => void] {
-  return useLocalState<RegionChoice>('region', null);
-}
-
 export function RegionCards({
   regions,
   value,
   onChange,
-  counts,
 }: {
   /** Region labels, in the order they should appear. `roster.regions`. */
   regions: readonly string[];
   value: RegionChoice;
   onChange: (value: RegionChoice) => void;
-  /** Players this game can use per region, plus `null` for the whole roster. */
-  counts?: Map<RegionChoice, number>;
 }) {
   const options: RegionChoice[] = [null, ...regions];
   return (
     <OptionGrid>
-      {options.map((region) => {
-        const count = counts?.get(region);
-        return (
-          <OptionCard
-            key={region ?? 'all'}
-            label={
-              <>
-                <span aria-hidden="true">{regionIcon(region)}</span> {regionLabel(region)}
-              </>
-            }
-            hint={
-              count === undefined ? undefined : (
-                <span className="tiny faint">{plural(count, 'player')}</span>
-              )
-            }
-            selected={value === region}
-            onClick={() => onChange(region)}
-          />
-        );
-      })}
+      {options.map((region) => (
+        <OptionCard
+          key={region ?? 'all'}
+          label={
+            <>
+              <span aria-hidden="true">{regionIcon(region)}</span> {regionLabel(region)}
+            </>
+          }
+          selected={value === region}
+          onClick={() => onChange(region)}
+        />
+      ))}
     </OptionGrid>
   );
 }

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { DATA_SOURCE_LABEL, DATA_UPDATED_AT } from '@/data/types';
+import { EXPORT_DATE, SOURCE } from '@/data/liquipedia/roster';
 import { readLocal, writeLocal } from '@/lib/storage';
 import type { GameMeta } from '@/games/registry';
 import { Modal } from './ui';
@@ -155,11 +155,19 @@ export function RulesCard({
   );
 }
 
+/**
+ * The attribution shown when a game does not supply its own.
+ *
+ * Every game does supply one, so this is a backstop rather than a default —
+ * but CC-BY-SA asks for attribution wherever the work appears, so the backstop
+ * has to be correct rather than absent.
+ */
 export function DataNote() {
   return (
     <p className="tiny faint">
-      Player values come from {DATA_SOURCE_LABEL}, last updated {formatDate(DATA_UPDATED_AT)}. Where a source
-      publishes no figure the field is left blank rather than estimated.
+      Player values come from {SOURCE.name}, last updated {formatDate(EXPORT_DATE)}, reused under{' '}
+      {SOURCE.license}. Where a source publishes no figure the field is left blank rather than
+      estimated.
     </p>
   );
 }

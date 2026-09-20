@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
-import { GuessInput } from '@/components/GuessInput';
-import { Banner, OptionCard, OptionGrid, PlayerLine, Stat } from '@/components/ui';
-import { useDataset } from '@/data/DataProvider';
-import type { Player } from '@/data/types';
+import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
+import { PlayerSearch } from '@/components/PlayerSearch';
+import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
+import type { Facts } from '@/data/liquipedia/facts';
+import type { Pools } from '@/data/liquipedia/pools';
+import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
+import { useFacts } from '@/data/liquipedia/useFacts';
+import { usePools } from '@/data/liquipedia/usePools';
+import { useRoster } from '@/data/liquipedia/useRoster';
 import { formatClock } from '@/lib/format';
-import { makeRng } from '@/lib/rng';
 import { useBestScore } from '@/lib/storage';
-import { matchPlayer } from '@/lib/text';
 import { getGame } from '@/games/registry';
-import { buildCriteria, drawCriterion, type Criterion } from './criteria';
+import { buildCriteria, type Criterion } from './criteria';
 import './list.css';
 
 const meta = getGame('list')!;
@@ -22,23 +25,32 @@ const PENALTY_SECONDS = 3;
 type Difficulty = 'easy' | 'hard';
 
 export default function ListGame() {
-  const dataset = useDataset();
-  const criteria = useMemo(() => buildCriteria(dataset), [dataset]);
+  const { roster, error: rosterError } = useRoster();
+  const { facts, error: factsError } = useFacts();
+  const { pools } = usePools();
+
+  return (
+    <LiquipediaGate error={rosterError ?? factsError} ready={Boolean(roster && facts)}>
+      {roster && facts ? <Game roster={roster} facts={facts} pools={pools} /> : null}
+    </LiquipediaGate>
+  );
+}
+
+function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: Pools | null }) {
+  const criteria = useMemo(() => buildCriteria(roster, facts, pools), [roster, facts, pools]);
 
   const [difficulty, setDifficulty] = useState<Difficulty>('easy');
-  const [criterion, setCriterion] = useState<Criterion | null>(() =>
-    drawCriterion(criteria, makeRng(String(Date.now()))),
-  );
+  const [criterion, setCriterion] = useState<Criterion | null>(null);
   const [running, setRunning] = useState(false);
   const [finished, setFinished] = useState(false);
   /** Ended by the give-up button rather than by the clock. */
   const [gaveUp, setGaveUp] = useState(false);
-  const [found, setFound] = useState<Player[]>([]);
+  const [found, setFound] = useState<RosterPlayer[]>([]);
   const [timeLeft, setTimeLeft] = useState(START_SECONDS);
   const [feedback, setFeedback] = useState<{ tone: string; message: string } | null>(null);
   const deadlineRef = useRef<number>(0);
 
-  const { best, submit: submitBest } = useBestScore(`list:${difficulty}`);
+  const { best, submit: submitBest } = useBestScore(`list:${criterion?.id ?? 'none'}:${difficulty}`);
 
   // Timer: a deadline plus a tick, so bonuses and penalties simply move the
   // deadline and the display stays accurate even if a tick is late.
@@ -73,35 +85,14 @@ export default function ListGame() {
     setRunning(true);
   }, [criterion]);
 
-  const shuffleCriterion = () => {
-    setCriterion(drawCriterion(criteria, makeRng(String(Date.now())), criterion?.id));
-    setFound([]);
-    setFinished(false);
-    setGaveUp(false);
-    setFeedback(null);
-    setTimeLeft(START_SECONDS);
-  };
-
   const adjustTime = (seconds: number) => {
     deadlineRef.current += seconds * 1000;
     setTimeLeft(Math.max(0, (deadlineRef.current - Date.now()) / 1000));
   };
 
-  const guess = (text: string) => {
+  const guess = (player: RosterPlayer) => {
     if (!running || !criterion) return;
-    const player = matchPlayer(text, dataset.roster);
 
-    if (!player) {
-      if (difficulty === 'hard') adjustTime(-PENALTY_SECONDS);
-      setFeedback({
-        tone: 'var(--text-muted)',
-        message:
-          difficulty === 'hard'
-            ? `No player called “${text}” — ${PENALTY_SECONDS}s`
-            : `No player called “${text}”.`,
-      });
-      return;
-    }
     if (found.some((entry) => entry.id === player.id)) {
       setFeedback({ tone: 'var(--warning)', message: `${player.name} is already on your list.` });
       return;
@@ -123,12 +114,60 @@ export default function ListGame() {
     setFeedback({ tone: 'var(--success)', message: `${player.name} +${BONUS_SECONDS}s` });
   };
 
-  if (!criterion) {
+  if (criteria.length === 0) {
     return (
       <GameShell game={meta}>
-        <Banner tone="danger" title="No criterion available">
-          The dataset does not currently support any List criterion.
+        <Banner tone="danger" title="No categories available">
+          The export does not currently support any List category.
         </Banner>
+      </GameShell>
+    );
+  }
+
+  // ------------------------------------------------------------- setup --
+  if (!criterion) {
+    return (
+      <GameShell game={meta} dataNote={<RosterNote what="Answers" generated={facts.generated} />}>
+        <div className="stack">
+          <section className="card stack">
+            <div className="card__title">Difficulty</div>
+            <OptionGrid>
+              <OptionCard
+                label="🟢 Easy"
+                hint="90 seconds. Wrong answers cost nothing."
+                selected={difficulty === 'easy'}
+                onClick={() => setDifficulty('easy')}
+              />
+              <OptionCard
+                label="🔴 Hard"
+                hint={`90 seconds. Every wrong answer costs ${PENALTY_SECONDS}s.`}
+                selected={difficulty === 'hard'}
+                onClick={() => setDifficulty('hard')}
+              />
+            </OptionGrid>
+          </section>
+
+          <section className="card stack">
+            <div className="card__title">Pick a list</div>
+            <OptionGrid>
+              {criteria.map((option) => (
+                <OptionCard
+                  key={option.id}
+                  label={option.title}
+                  hint={
+                    <>
+                      {option.subtitle}
+                      <span className="tiny faint" style={{ display: 'block', marginTop: 4 }}>
+                        {option.answers.length} to find
+                      </span>
+                    </>
+                  }
+                  onClick={() => setCriterion(option)}
+                />
+              ))}
+            </OptionGrid>
+          </section>
+        </div>
       </GameShell>
     );
   }
@@ -140,25 +179,11 @@ export default function ListGame() {
   return (
     <GameShell
       game={meta}
+      dataNote={<RosterNote what="Answers" generated={facts.generated} />}
       toolbar={
-        <>
-          {running ? (
-            <GiveUpButton
-              onGiveUp={() => {
-                setRunning(false);
-                setFinished(true);
-                setGaveUp(true);
-                setTimeLeft(0);
-                setFeedback(null);
-              }}
-            />
-          ) : null}
-          {idle || finished ? (
-            <button type="button" className="icon-btn" onClick={shuffleCriterion}>
-              ↺ New criterion
-            </button>
-          ) : null}
-        </>
+        <button type="button" className="icon-btn" onClick={() => setCriterion(null)}>
+          ↺ New list
+        </button>
       }
     >
       <div className="stack">
@@ -167,64 +192,68 @@ export default function ListGame() {
           <Stat label="Best" value={Math.max(best, found.length)} />
           <Stat
             label="Time"
-            value={<span className={timeLeft <= 10 && running ? 'list-clock--low' : ''}>{formatClock(timeLeft)}</span>}
+            value={
+              <span className={timeLeft <= 10 && running ? 'list-clock--low' : ''}>
+                {formatClock(timeLeft)}
+              </span>
+            }
           />
         </div>
 
         <section className="card stack">
-          <div className="card__title">Criterion</div>
+          <div className="card__title">Your list</div>
           <h2>{criterion.title}</h2>
           {criterion.subtitle ? <p className="small muted">{criterion.subtitle}</p> : null}
-          {!running ? (
-            <p className="tiny faint">
-              {criterion.answers.length} players fit this criterion.
-            </p>
-          ) : null}
+          <p className="tiny faint">{criterion.answers.length} players fit.</p>
         </section>
 
         {idle ? (
-          <div className="stack">
-            <section className="card stack">
-              <div className="card__title">Difficulty</div>
-              <OptionGrid>
-                <OptionCard
-                  label="Easy"
-                  hint="90 seconds. Wrong answers cost nothing."
-                  selected={difficulty === 'easy'}
-                  onClick={() => setDifficulty('easy')}
-                />
-                <OptionCard
-                  label="Hard"
-                  hint={`90 seconds. Every wrong answer costs ${PENALTY_SECONDS}s.`}
-                  selected={difficulty === 'hard'}
-                  onClick={() => setDifficulty('hard')}
-                />
-              </OptionGrid>
-            </section>
-            <button type="button" className="btn btn--primary btn--lg btn--block" onClick={start}>
-              Start the clock
-            </button>
-          </div>
+          <button type="button" className="btn btn--primary btn--lg btn--block" onClick={start}>
+            Start the clock
+          </button>
         ) : null}
 
         {running ? (
           <div className="stack-sm">
-            <GuessInput onSubmit={guess} autoFocus placeholder="Name a player…" />
+            {/*
+             * Suggestions are safe here now the row is a bare handle: it helps
+             * you spell a name you already thought of, and tells you nothing
+             * about whether that name is on the list.
+             */}
+            <PlayerSearch
+              players={roster.players}
+              onPick={guess}
+              exclude={foundIds}
+              placeholder="Name a player…"
+              buttonLabel="Add"
+              autoFocus
+            />
             {feedback ? (
               <p className="small center" style={{ color: feedback.tone }}>
                 {feedback.message}
               </p>
             ) : null}
+            <div className="row" style={{ justifyContent: 'center' }}>
+              <GiveUpButton
+                onGiveUp={() => {
+                  setRunning(false);
+                  setFinished(true);
+                  setGaveUp(true);
+                  setTimeLeft(0);
+                  setFeedback(null);
+                }}
+              />
+            </div>
           </div>
         ) : null}
 
         {found.length > 0 ? (
           <section className="card stack-sm">
-            <div className="card__title">Your list ({found.length})</div>
+            <div className="card__title">Found ({found.length})</div>
             <div className="list-grid">
               {found.map((player) => (
                 <div key={player.id} className="list-chip list-chip--found">
-                  <PlayerLine player={player} size={26} showFlag={false} />
+                  {player.name}
                 </div>
               ))}
             </div>
@@ -250,7 +279,7 @@ export default function ListGame() {
                 <div className="list-grid">
                   {missed.map((player) => (
                     <div key={player.id} className="list-chip">
-                      <PlayerLine player={player} size={26} showFlag={false} />
+                      {player.name}
                     </div>
                   ))}
                 </div>
@@ -261,8 +290,13 @@ export default function ListGame() {
               <button type="button" className="btn btn--primary btn--lg" style={{ flex: 1 }} onClick={start}>
                 Play again
               </button>
-              <button type="button" className="btn btn--lg" style={{ flex: 1 }} onClick={shuffleCriterion}>
-                New criterion
+              <button
+                type="button"
+                className="btn btn--lg"
+                style={{ flex: 1 }}
+                onClick={() => setCriterion(null)}
+              >
+                New list
               </button>
             </div>
           </div>

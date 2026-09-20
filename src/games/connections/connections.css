@@ -72,3 +72,15 @@
     gap: 6px;
   }
 }
+
+/* Lives as hearts rather than a "2/4" counter — readable at a glance. */
+.cx-hearts {
+  display: inline-flex;
+  gap: 3px;
+  font-size: 1.05rem;
+  line-height: 1;
+  color: var(--danger);
+}
+.cx-heart--spent {
+  color: var(--text-faint);
+}

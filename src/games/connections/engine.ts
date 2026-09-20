@@ -1,7 +1,12 @@
-import type { Dataset } from '@/data/dataset';
-import type { Player } from '@/data/types';
+import type { RosterPlayer } from '@/data/liquipedia/roster';
+import type { Teammates } from '@/data/liquipedia/teammates';
 import { makeRng, sample, shuffle, type Rng } from '@/lib/rng';
-import { buildCriteria, hasNestedPair, type PlayerCriterion } from '@/games/shared/criteria';
+import {
+  buildCriteria,
+  hasNestedPair,
+  type CriteriaSource,
+  type PlayerCriterion,
+} from '@/games/shared/criteria';
 
 /** Pure logic for Connections. */
 
@@ -14,13 +19,13 @@ export interface Group {
   id: string;
   /** The connection, revealed when the group is solved. */
   label: string;
-  players: Player[];
+  players: RosterPlayer[];
 }
 
 export interface Puzzle {
   groups: Group[];
   /** All 16 players in display order. */
-  board: Player[];
+  board: RosterPlayer[];
 }
 
 export interface GameState {
@@ -29,31 +34,37 @@ export interface GameState {
   selected: string[];
   mistakes: number;
   status: 'playing' | 'won' | 'lost';
-  message: string | null;
+  /** How many of the last four belonged to one group, when it was not four. */
+  near: number | null;
 }
 
 /** Criteria usable as a Connections group, including teammate links. */
-function groupCandidates(dataset: Dataset, rng: Rng): PlayerCriterion[] {
-  const base = buildCriteria(dataset, { minMatches: GROUP_SIZE, maxShare: 0.35 }).filter((criterion) =>
-    ['country', 'region', 'team', 'fncs-winner', 'lan-winner', 'earnings', 'fncs-wins', 'played-event'].includes(
-      criterion.kind,
-    ),
-  );
+function groupCandidates(
+  source: CriteriaSource,
+  teammates: Teammates | null,
+  rng: Rng,
+): PlayerCriterion[] {
+  const base = buildCriteria(source, { minMatches: GROUP_SIZE, maxShare: 0.35 });
 
-  // Teammate groups: "played 2+ tournaments alongside X".
+  // Teammate groups: "has played alongside X".
   const teammateGroups: PlayerCriterion[] = [];
-  for (const anchor of sample(rng, dataset.players, 40)) {
-    const links = dataset.teammatesOf(anchor).filter((entry) => entry.events >= 2);
-    if (links.length < GROUP_SIZE) continue;
-    const ids = new Set(links.map((entry) => entry.player.id));
-    teammateGroups.push({
-      id: `teammates:${anchor.id}`,
-      kind: 'teammates',
-      label: `played 2+ tournaments alongside ${anchor.name}`,
-      short: `2+ events with ${anchor.name}`,
-      test: (player) => ids.has(player.id),
-      matches: links.map((entry) => entry.player),
-    });
+  if (teammates) {
+    const byId = new Map(source.players.map((player) => [player.id, player]));
+    for (const anchor of sample(rng, source.players, 40)) {
+      const links = teammates
+        .cluesFor(anchor.id, byId)
+        .filter((entry) => entry.events >= 2 && entry.player.id !== anchor.id);
+      if (links.length < GROUP_SIZE) continue;
+      const ids = new Set(links.map((entry) => entry.player.id));
+      teammateGroups.push({
+        id: `teammates:${anchor.id}`,
+        kind: 'played-event',
+        label: `has played 2+ tournaments alongside ${anchor.name}`,
+        short: `2+ events with ${anchor.name}`,
+        test: (player) => ids.has(player.id),
+        matches: links.map((entry) => entry.player),
+      });
+    }
   }
 
   return shuffle(rng, [...base, ...teammateGroups]);
@@ -66,9 +77,13 @@ function groupCandidates(dataset: Dataset, rng: Rng): PlayerCriterion[] {
  * that connection and none of the other three. That guarantees the groups are
  * disjoint and that every intended group has exactly one right answer.
  */
-export function generatePuzzle(dataset: Dataset, seed: string = String(Date.now())): Puzzle | null {
+export function generatePuzzle(
+  source: CriteriaSource,
+  teammates: Teammates | null,
+  seed: string = String(Date.now()),
+): Puzzle | null {
   const rng = makeRng(seed);
-  const candidates = groupCandidates(dataset, rng);
+  const candidates = groupCandidates(source, teammates, rng);
   if (candidates.length < GROUP_COUNT) return null;
 
   for (let attempt = 0; attempt < GENERATION_ATTEMPTS; attempt++) {
@@ -107,10 +122,10 @@ export function generatePuzzle(dataset: Dataset, seed: string = String(Date.now(
 }
 
 export function createGame(puzzle: Puzzle): GameState {
-  return { puzzle, solved: [], selected: [], mistakes: 0, status: 'playing', message: null };
+  return { puzzle, solved: [], selected: [], mistakes: 0, status: 'playing', near: null };
 }
 
-export function toggle(state: GameState, player: Player): GameState {
+export function toggle(state: GameState, player: RosterPlayer): GameState {
   if (state.status !== 'playing') return state;
   if (state.solved.some((group) => group.players.some((p) => p.id === player.id))) return state;
 
@@ -119,7 +134,7 @@ export function toggle(state: GameState, player: Player): GameState {
     : state.selected.length >= GROUP_SIZE
       ? state.selected
       : [...state.selected, player.id];
-  return { ...state, selected, message: null };
+  return { ...state, selected, near: null };
 }
 
 export function submit(state: GameState): GameState {
@@ -138,11 +153,19 @@ export function submit(state: GameState): GameState {
       solved,
       selected: [],
       status: solved.length === GROUP_COUNT ? 'won' : 'playing',
-      message: null,
+      near: null,
     };
   }
 
-  // "One away" is the standard nudge and makes the game far less frustrating.
+  /*
+   * How close the guess was, as a number rather than the traditional "One
+   * away…".
+   *
+   * "One away" only ever fires on three-of-four, so it says nothing on a guess
+   * that was two-and-two — which is the guess a player most needs telling
+   * about, because it means they have merged two different groups. Reporting
+   * the best overlap covers both and is a stronger hint besides.
+   */
   const best = Math.max(
     ...unsolved.map((group) => group.players.filter((player) => selectedIds.has(player.id)).length),
   );
@@ -152,11 +175,10 @@ export function submit(state: GameState): GameState {
     mistakes,
     selected: [],
     status: mistakes >= MAX_MISTAKES ? 'lost' : 'playing',
-    message: best === GROUP_SIZE - 1 ? 'One away…' : 'Not a group.',
+    near: best,
   };
 }
 
-/** Groups still hidden — revealed when the board is lost. */
 /** Ends the round unsolved, so the remaining groups can be revealed. */
 export function giveUp(state: GameState): GameState {
   return state.status === 'playing' ? { ...state, selected: [], status: 'lost' } : state;
@@ -164,4 +186,9 @@ export function giveUp(state: GameState): GameState {
 
 export function unsolvedGroups(state: GameState): Group[] {
   return state.puzzle.groups.filter((group) => !state.solved.some((solved) => solved.id === group.id));
+}
+
+/** Lives remaining, for the hearts row. */
+export function livesLeft(state: GameState): number {
+  return Math.max(0, MAX_MISTAKES - state.mistakes);
 }

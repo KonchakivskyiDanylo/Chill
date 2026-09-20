@@ -2,17 +2,21 @@ import { useCallback, useMemo, useState } from 'react';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { CountryBadge } from '@/components/CountryBadge';
-import { DifficultyCards, DifficultyChip, useDifficulty } from '@/components/DifficultyPicker';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { PlayerSearch } from '@/components/PlayerSearch';
+import { PoolSetup } from '@/components/PoolSetup';
 import { Banner, OptionCard, OptionGrid, PlayerLine, Stat } from '@/components/ui';
+import type { Facts } from '@/data/liquipedia/facts';
+import type { Pools } from '@/data/liquipedia/pools';
 import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
 import type { Teammates } from '@/data/liquipedia/teammates';
+import { useFacts } from '@/data/liquipedia/useFacts';
+import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import { useTeammates } from '@/data/liquipedia/useTeammates';
-import { DIFFICULTIES, type Difficulty } from '@/games/shared/difficulty';
 import { deal, rotationKey } from '@/games/shared/rotation';
+import { poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { playerMoney, plural } from '@/lib/format';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { getGame } from '@/games/registry';
@@ -21,6 +25,7 @@ import {
   createGame,
   giveUp,
   MIN_CLUES,
+  MIN_TOURNAMENTS,
   revealNext,
   showsMatches,
   submitGuess,
@@ -46,17 +51,36 @@ const MODES: { id: Mode; label: string; hint: string }[] = [
 export default function WhoAreYaGame() {
   const { roster, error: rosterError } = useRoster();
   const { teammates, error: teammatesError } = useTeammates();
+  const { facts, error: factsError } = useFacts();
+  const { pools } = usePools();
 
   return (
-    <LiquipediaGate error={rosterError ?? teammatesError} ready={Boolean(roster && teammates)}>
-      {roster && teammates ? <Game roster={roster} teammates={teammates} /> : null}
+    <LiquipediaGate
+      error={rosterError ?? teammatesError ?? factsError}
+      ready={Boolean(roster && teammates && facts)}
+    >
+      {roster && teammates && facts ? (
+        <Game roster={roster} teammates={teammates} facts={facts} pools={pools} />
+      ) : null}
     </LiquipediaGate>
   );
 }
 
-function Game({ roster, teammates }: { roster: Roster; teammates: Teammates }) {
-  const [difficulty, setDifficulty] = useDifficulty();
+function Game({
+  roster,
+  teammates,
+  facts,
+  pools,
+}: {
+  roster: Roster;
+  teammates: Teammates;
+  facts: Facts;
+  pools: Pools | null;
+}) {
+  const [choice, setChoice] = usePoolChoice();
+  const [mode, setMode] = useState<Mode>('easy');
   const [game, setGame] = useState<GameState | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const byId = useMemo(() => new Map(roster.players.map((player) => [player.id, player])), [roster]);
   const cluesFor = useCallback(
@@ -65,34 +89,38 @@ function Game({ roster, teammates }: { roster: Roster; teammates: Teammates }) {
   );
 
   /**
-   * A player can only be the answer once there are enough teammates left after
-   * resolving — an `unused` teammate has no row to show and no name to guess.
+   * A player can only be the answer with enough teammates *and* enough
+   * tournaments — an `unused` teammate has no row to show and no name to
+   * guess, and a three-tournament career is not something anyone can recognise.
    */
   const eligible = useCallback(
-    (players: RosterPlayer[]) => players.filter((player) => cluesFor(player.id).length >= MIN_CLUES),
-    [cluesFor],
+    (players: RosterPlayer[]) =>
+      players.filter(
+        (player) =>
+          cluesFor(player.id).length >= MIN_CLUES && facts.of(player.id).apps >= MIN_TOURNAMENTS,
+      ),
+    [cluesFor, facts],
   );
 
   const answerable = useMemo(() => eligible(roster.players), [eligible, roster]);
-
-  const counts = useMemo(
-    () =>
-      Object.fromEntries(
-        DIFFICULTIES.map((level) => [level, roster.exactly(level, { eligible }).length]),
-      ) as Record<Difficulty, number>,
-    [roster, eligible],
+  const players = useMemo(
+    () => resolvePool(roster, pools, choice, eligible, 10),
+    [roster, pools, choice, eligible],
   );
 
-  const start = useCallback(
-    (mode: Mode, level: Difficulty) => {
-      const key = rotationKey(meta.id, level);
-      const drawn = deal(roster.playersFor(level, { minimum: 1, eligible }), readLocal<string[]>(key, []));
-      if (!drawn) return;
-      writeLocal(key, drawn.seen);
-      setGame(createGame(drawn.pick, cluesFor(drawn.pick.id), mode));
-    },
-    [roster, eligible, cluesFor],
-  );
+  const start = useCallback(() => {
+    const key = rotationKey(meta.id, ...poolScope(choice));
+    const drawn = deal(players, readLocal<string[]>(key, []));
+    if (!drawn) {
+      setError(
+        `No player in this pool has ${MIN_CLUES} recorded teammates and ${MIN_TOURNAMENTS} tournaments.`,
+      );
+      return;
+    }
+    writeLocal(key, drawn.seen);
+    setError(null);
+    setGame(createGame(drawn.pick, cluesFor(drawn.pick.id), mode));
+  }, [players, choice, cluesFor, mode]);
 
   const note = <RosterNote what="Teammates" generated={teammates.generated} />;
 
@@ -100,31 +128,39 @@ function Game({ roster, teammates }: { roster: Roster; teammates: Teammates }) {
     return (
       <GameShell game={meta} dataNote={note}>
         <div className="stack">
-          <section className="card stack">
-            <div className="card__title">Pick a difficulty</div>
-            <DifficultyCards value={difficulty} onChange={setDifficulty} counts={counts} />
-            <p className="tiny faint">
-              How well known the secret player is. The teammates are the same either way.
-            </p>
-          </section>
-
-          <section className="card stack">
-            <div className="card__title">Pick a clue order</div>
-            <OptionGrid>
-              {MODES.map((mode) => (
-                <OptionCard
-                  key={mode.id}
-                  label={mode.label}
-                  hint={mode.hint}
-                  onClick={() => start(mode.id, difficulty)}
-                />
-              ))}
-            </OptionGrid>
-          </section>
-
+          <PoolSetup
+            roster={roster}
+            pools={pools}
+            value={choice}
+            onChange={setChoice}
+            eligible={eligible}
+            onStart={start}
+            startLabel="Start"
+            extra={
+              <section className="card stack">
+                <div className="card__title">Clue order</div>
+                <OptionGrid>
+                  {MODES.map((option) => (
+                    <OptionCard
+                      key={option.id}
+                      label={option.label}
+                      hint={option.hint}
+                      selected={mode === option.id}
+                      onClick={() => setMode(option.id)}
+                    />
+                  ))}
+                </OptionGrid>
+              </section>
+            }
+          />
+          {error ? (
+            <Banner tone="danger" title="Cannot start">
+              {error}
+            </Banner>
+          ) : null}
           <p className="tiny faint center">
-            {plural(answerable.length, 'player')} with at least {MIN_CLUES} recorded teammates · every player
-            comes up once before any of them comes round again
+            {plural(answerable.length, 'player')} with at least {MIN_CLUES} recorded teammates and{' '}
+            {MIN_TOURNAMENTS} tournaments
           </p>
         </div>
       </GameShell>
@@ -135,6 +171,7 @@ function Game({ roster, teammates }: { roster: Roster; teammates: Teammates }) {
   const visible = game.clues.slice(0, game.revealed);
   const guessedIds = new Set(game.guesses.map((p) => p.id));
   const withMatches = showsMatches(game.mode);
+  const shownIds = new Set(visible.map((clue) => clue.player.id));
 
   return (
     <GameShell
@@ -142,12 +179,11 @@ function Game({ roster, teammates }: { roster: Roster; teammates: Teammates }) {
       dataNote={note}
       toolbar={
         <>
-          {game.status === 'playing' ? <GiveUpButton onGiveUp={() => setGame(giveUp(game))} /> : null}
-          <button type="button" className="icon-btn" onClick={() => start(game.mode, difficulty)}>
+          <button type="button" className="icon-btn" onClick={start}>
             ↺ New player
           </button>
           <button type="button" className="icon-btn" onClick={() => setGame(null)}>
-            ↺ Change setup
+            ⚙ Setup
           </button>
         </>
       }
@@ -157,7 +193,6 @@ function Game({ roster, teammates }: { roster: Roster; teammates: Teammates }) {
           <Stat label="Teammates" value={`${game.revealed}/${game.clues.length}`} />
           <Stat label="Guesses" value={game.guesses.length} />
           <Stat label="Order" value={MODES.find((m) => m.id === game.mode)!.label} />
-          <Stat label="Level" value={<DifficultyChip difficulty={difficulty} />} />
         </div>
 
         <section className="card stack">
@@ -211,20 +246,43 @@ function Game({ roster, teammates }: { roster: Roster; teammates: Teammates }) {
                 </div>
               </div>
             </div>
-            <button
-              type="button"
-              className="btn btn--primary btn--lg btn--block"
-              onClick={() => start(game.mode, difficulty)}
-            >
+
+            {/* Everyone on record, with the counts — including the clues the
+                round never got as far as showing. */}
+            <section className="card stack-sm">
+              <div className="card__title">
+                Every teammate on record — {plural(game.all.length, 'player')}
+              </div>
+              <ul className="stack-sm list-reset">
+                {game.all.map((clue) => (
+                  <li
+                    key={clue.player.id}
+                    className="row-between"
+                    style={{
+                      padding: '6px 0',
+                      borderBottom: '1px solid var(--border)',
+                      flexWrap: 'nowrap',
+                      opacity: shownIds.has(clue.player.id) ? 1 : 0.6,
+                    }}
+                  >
+                    <PlayerLine player={clue.player} size={30} meta={clue.player.countryName} />
+                    <span className="chip nums">{plural(clue.events, 'tournament')}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            <button type="button" className="btn btn--primary btn--lg btn--block" onClick={start}>
               Next player
             </button>
           </div>
         ) : (
-          <div className="stack">
+          <div className="stack-sm">
             <PlayerSearch
               players={answerable}
               onPick={(player) => setGame(submitGuess(game, player))}
               exclude={guessedIds}
+              autoFocus
             />
             <button
               type="button"
@@ -236,6 +294,9 @@ function Game({ roster, teammates }: { roster: Roster; teammates: Teammates }) {
                 ? 'All teammates revealed — last guess!'
                 : `Reveal next teammate (${cluesLeft(game)} left)`}
             </button>
+            <div className="row" style={{ justifyContent: 'center' }}>
+              <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />
+            </div>
           </div>
         )}
 

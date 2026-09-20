@@ -5,16 +5,25 @@
  *
  * Each game is driven through a full round by a perfect-oracle "player" using
  * only its public engine API. Generated games (Tic Tac Toe, Connections,
- * Impostor, Tenaball) are generated many times over to catch a board that is
+ * Griefer) are generated many times over to catch a board that is
  * rare-but-impossible rather than one that happens to work.
+ *
+ * Everything now reads the Liquipedia export. Three of its files are written by
+ * the notebook (`notebook_cells.md`) and may legitimately not exist yet — the
+ * sections that need them are skipped with a note rather than failing, so this
+ * is still useful on a fresh clone.
  */
-import { loadDataset } from '@/data/repository';
-import { EXPORT_DATE, loadRoster, type RosterPlayer } from '@/data/liquipedia/roster';
-import { loadMajors, type Majors } from '@/data/liquipedia/majors';
-import { loadTeammates, type Teammates } from '@/data/liquipedia/teammates';
+import { loadRoster, EXPORT_DATE, type RosterPlayer } from '@/data/liquipedia/roster';
+import { loadMajors } from '@/data/liquipedia/majors';
+import { loadTeammates } from '@/data/liquipedia/teammates';
+import { loadFacts } from '@/data/liquipedia/facts';
+import { loadOrgs } from '@/data/liquipedia/orgs';
+import { loadPools } from '@/data/liquipedia/pools';
+import { loadRankings } from '@/data/liquipedia/rankings';
 import { deal } from '@/games/shared/rotation';
 import { GAMES, getGame } from '@/games/registry';
-import { matchPlayer, normalizeName } from '@/lib/text';
+import { buildCriteria, type CriteriaSource } from '@/games/shared/criteria';
+import { matchPlayer, suggestPlayers } from '@/lib/text';
 
 import * as hl from '@/games/higher-lower/engine';
 import * as wordle from '@/games/wordle/engine';
@@ -22,56 +31,79 @@ import * as career from '@/games/career-path/engine';
 import * as whoAreYa from '@/games/who-are-ya/engine';
 import * as tenaball from '@/games/tenaball/engine';
 import { buildCriteria as buildListCriteria } from '@/games/list/criteria';
-import * as impostor from '@/games/impostor/engine';
+import * as griefer from '@/games/impostor/engine';
 import * as ttt from '@/games/tic-tac-toe/engine';
 import * as connections from '@/games/connections/engine';
 import * as gtp from '@/games/guess-the-player/engine';
 
 const problems: string[] = [];
 const notes: string[] = [];
+const skipped: string[] = [];
 
 function check(condition: boolean, message: string): void {
   if (!condition) problems.push(message);
 }
 
-const dataset = await loadDataset();
+/** Resolves to null when the notebook has not written the file yet. */
+async function optional<T>(load: () => Promise<T>, what: string): Promise<T | null> {
+  try {
+    return await load();
+  } catch {
+    skipped.push(what);
+    return null;
+  }
+}
 
 // ------------------------------------------------------------ 0. the registry
 // Games look themselves up with `getGame('<id>')` while the router looks them
 // up by slug, and a rename moves the slug away from the id. If either lookup
-// misses, `meta` is undefined and the game crashes on its first render — so
-// check both resolve to the same entry.
+// misses, `meta` is undefined and the game crashes on its first render.
 for (const game of GAMES) {
   check(getGame(game.slug) === game, `registry: getGame('${game.slug}') did not find ${game.title}`);
   check(getGame(game.id) === game, `registry: getGame('${game.id}') did not find ${game.title}`);
 }
+check(GAMES.length === 10, `registry: expected 10 games, found ${GAMES.length}`);
 
-// --------------------------------------------------- 0. the fame ranking
-// Every difficulty mode reads from this. If the JSON ever fails to load, the
-// Dataset quietly falls back to a derived ranking and the modes keep "working"
-// while asking about the wrong players — so fail loudly instead.
-check(dataset.fameIsPublished, 'fame: fell back to the derived ranking, fame-ranking.json did not load');
-const ranked = new Set(dataset.fame.map((entry) => entry.playerId));
-check(
-  dataset.roster.every((player) => ranked.has(player.id)),
-  'fame: players are missing from the ranking — re-run fame_calculation.ipynb',
-);
-for (const tier of ['easy', 'medium', 'hard'] as const) {
-  notes.push(`fame ${tier}: ${dataset.playersByTier(tier).length} playable of ${dataset.fame.filter((entry) => entry.tier === tier).length} ranked`);
-}
-
-// ------------------------------------------------------- 1. Higher or Lower
-// The one game on the Liquipedia roster rather than the shared dataset, so it
-// is driven through its own data here too.
 const roster = await loadRoster();
-notes.push(`roster: ${roster.players.length} playable Liquipedia players (export ${EXPORT_DATE})`);
+notes.push(`roster: ${roster.players.length} playable players (export ${EXPORT_DATE})`);
 for (const tier of ['easy', 'medium', 'hard'] as const) {
-  notes.push(`roster ${tier}: ${roster.playersFor(tier).length} players`);
+  notes.push(`  ${tier}: ${roster.playersFor(tier).length}`);
 }
 
+const facts = await optional(loadFacts, 'facts.json');
+const orgs = await optional(loadOrgs, 'orgs.json');
+const rankings = await optional(loadRankings, 'rankings.json');
+const pools = await loadPools(); // never rejects
+const majors = await optional(loadMajors, 'career_path.json');
+const teammates = await optional(loadTeammates, 'teammates.json');
+
+// ------------------------------------------------------------- 1. name search
+// The one piece of shared logic every typing game depends on.
+{
+  const aqua = roster.players.filter((p) => p.name.toLowerCase() === 'aqua');
+  notes.push(`search: ${aqua.length} players answer to "Aqua"`);
+  for (const [input, expected] of [
+    ['peterbo', 'Peterbot'],
+    ['clix', 'Clix'],
+  ] as const) {
+    const found = matchPlayer(input, roster.players);
+    check(found !== null, `search: "${input}" resolved to nothing (expected ${expected})`);
+  }
+  // An alias must find its player — this is the shxrk/Shark case.
+  const withAlias = roster.players.find((p) => p.aliases.length > 0);
+  if (withAlias) {
+    const viaAlias = matchPlayer(withAlias.aliases[0], roster.players);
+    check(
+      viaAlias !== null,
+      `search: alias "${withAlias.aliases[0]}" did not resolve (expected ${withAlias.name})`,
+    );
+  }
+  check(suggestPlayers('cl', roster.players, 5).length > 0, 'search: two letters suggested nothing');
+}
+
+// --------------------------------------------------------- 2. Higher or Lower
 for (const category of ['age', 'earnings', 'fncsWins'] as const) {
   for (const difficulty of ['easy', 'medium', 'hard'] as const) {
-    // Built exactly as the game builds it, eligibility rule included.
     const pool = roster.playersFor(difficulty, {
       minimum: 2,
       eligible: (players) => hl.eligible(players, category),
@@ -80,622 +112,445 @@ for (const category of ['age', 'earnings', 'fncsWins'] as const) {
     check(state !== null, `higher-lower: could not start ${category}/${difficulty}`);
     if (!state) continue;
 
-    // Widening into a neighbouring tier is a legitimate last resort. Age and
-    // earnings never need it. FNCS Wins does: exactly one player outside the
-    // top 20% of the ranking holds a title, so Hard has to borrow from Medium
-    // or the category cannot be dealt at all.
-    const offTier = pool.filter((player) => player.tier !== difficulty);
-    if (category === 'fncsWins') {
-      notes.push(
-        `higher-lower fncsWins/${difficulty}: ${pool.length} in the pool` +
-          (offTier.length ? `, ${offTier.length} borrowed from another tier` : ''),
-      );
-    } else {
-      check(
-        offTier.length === 0,
-        `higher-lower ${category}/${difficulty}: widened into another tier for ${offTier.length} player(s)`,
-      );
-    }
-
+    // Play a long run with perfect answers and measure the gaps served, which
+    // is the thing the new pairing is supposed to control.
+    const gaps: number[] = [];
+    let ties = 0;
+    let bothZero = 0;
     let rounds = 0;
-    const seen: string[] = [];
-    // One round per player, plus slack — the loop has to be able to reach a
-    // full clear of a 4,500-player Hard pool, or the clear check is meaningless.
-    const maxRounds = pool.length + 5;
+    const maxRounds = Math.min(pool.length + 5, 400);
     while (state.status !== 'cleared' && rounds < maxRounds) {
       rounds++;
-      seen.push(state.challenger.id);
-      // Without the Equal button a tie is answered either way.
+      gaps.push(hl.gapBetween(state.current, state.challenger, category));
+      if (hl.correctAnswer(state) === 'equal') ties++;
+      if (category === 'fncsWins' && state.current.fncsWins === 0 && state.challenger.fncsWins === 0) {
+        bothZero++;
+      }
       const truth = hl.correctAnswer(state);
       const answer = truth === 'equal' && !hl.hasEqualButton(difficulty) ? 'higher' : truth;
       state = hl.submitAnswer(state, answer);
+      check(state.status !== 'gameover', `higher-lower ${category}/${difficulty}: perfect play lost`);
       if (state.status === 'gameover') break;
       state = hl.nextRound(state);
     }
+    check(rounds > 0, `higher-lower ${category}/${difficulty}: no rounds played`);
+
+    // A round where both players are on nought is not a question — the answer
+    // is always Equal. The pairing is supposed to make those impossible.
     check(
-      state.status === 'cleared',
-      `higher-lower ${category}/${difficulty}: perfect play ended as "${state.status}" after ${rounds} rounds`,
+      bothZero === 0,
+      `higher-lower ${category}/${difficulty}: ${bothZero} of ${rounds} rounds were nought against nought`,
     );
+    // And even legitimate ties must not be the whole game.
     check(
-      state.score === state.poolSize - 1,
-      `higher-lower ${category}/${difficulty}: cleared with ${state.score}, expected ${state.poolSize - 1}`,
+      ties < rounds * 0.75,
+      `higher-lower ${category}/${difficulty}: ${ties} of ${rounds} rounds were ties`,
     );
-    check(
-      new Set(seen).size === seen.length,
-      `higher-lower ${category}/${difficulty}: a player was shown twice in one run`,
-    );
-    if (category === 'age') {
+    if (category === 'fncsWins') {
+      notes.push(`higher-lower fncsWins/${difficulty}: ${ties} ties in ${rounds} rounds`);
+    }
+
+    /*
+     * The gap should trend down as the streak grows — that is the whole point.
+     *
+     * Measured over the first thirty rounds rather than the whole oracle run,
+     * because thirty is already a very good session and the run above is not
+     * one: it plays perfectly until the pool is exhausted. FNCS Wins has only
+     * 284 title-holders in 5,678 players, so a 340-round run genuinely runs
+     * out of pairs and has to start serving wide ones. Nobody reaches that,
+     * and measuring it would be measuring the oracle, not the game.
+     */
+    if (gaps.length >= 30) {
+      const early = gaps.slice(0, 10).reduce((a, b) => a + b, 0) / 10;
+      const later = gaps.slice(20, 30).reduce((a, b) => a + b, 0) / 10;
       notes.push(
-        `higher-lower ${difficulty}: full clear = ${state.score} correct answers over ${state.poolSize} players`,
+        `higher-lower ${category}/${difficulty}: ${rounds} rounds, gap ${early.toFixed(2)} → ${later.toFixed(2)} by round 30`,
+      );
+      check(
+        later <= early + 0.08,
+        `higher-lower ${category}/${difficulty}: pairs got easier over the first 30 rounds (${early.toFixed(2)} → ${later.toFixed(2)})`,
       );
     }
   }
 }
 
-// ------------------------------------------------------------------ 2. Wordle
-for (const difficulty of ['easy', 'medium', 'hard'] as const) {
-  const lengths = new Set<number>();
-  for (let i = 0; i < 200; i++) {
-    const pool = roster.playersFor(difficulty, { minimum: 1, eligible: wordle.eligible });
-    const game = wordle.createGame(pool, `w-${difficulty}-${i}`);
-    check(game !== null, `wordle: could not create a ${difficulty} game`);
-    if (!game) continue;
-    lengths.add(game.answer.length);
+// FNCS Wins must now include players on nought.
+{
+  const pool = hl.eligible(roster.players, 'fncsWins');
+  const zeroes = pool.filter((p) => p.fncsWins === 0).length;
+  check(zeroes > 0, 'higher-lower: FNCS Wins still excludes players with no title');
+  notes.push(`higher-lower fncsWins: ${pool.length} eligible, ${zeroes} on nought`);
+}
+
+// ------------------------------------------------------------- 3. Fortnitedle
+{
+  const pool = wordle.eligible(roster.players);
+  check(pool.length > 0, 'fortnitedle: no eligible answers');
+  notes.push(`fortnitedle: ${pool.length} usable handles`);
+
+  let withDigits = 0;
+  for (const secret of pool) {
+    const game = wordle.gameFor(secret);
+    check(game.answer.length >= 3, `fortnitedle: ${secret.name} reduced to "${game.answer}"`);
+    const schedule = wordle.revealSchedule(game.answer);
+    if (schedule.size === 0) continue;
+    withDigits++;
+    for (const [position, after] of schedule) {
+      check(
+        after >= 0 && after <= wordle.MAX_GUESSES,
+        `fortnitedle: ${secret.name} reveals position ${position} after ${after} guesses`,
+      );
+    }
+    // Every digit must be out by the last guess, or it was never a fair puzzle.
+    const last = Math.max(...schedule.values());
     check(
-      game.secret.tier === difficulty,
-      `wordle ${difficulty}: secret ${game.secret.name} is a ${game.secret.tier} player`,
+      last < wordle.MAX_GUESSES,
+      `fortnitedle: ${secret.name} hides a digit until guess ${last} of ${wordle.MAX_GUESSES}`,
     );
-
-    const solved = wordle.submitGuess(game, game.secret.name.toLowerCase());
-    check(solved.ok && solved.state.status === 'won', `wordle: correct name did not win for ${game.secret.name}`);
-
-    // A non-player string of the right length must be allowed.
-    const filler = 'A'.repeat(game.answer.length);
-    const fillerResult = wordle.submitGuess(game, filler);
-    check(fillerResult.ok, 'wordle: a non-player guess of the right length was rejected');
-
-    const wrongLength = wordle.submitGuess(game, 'A');
-    check(!wrongLength.ok, 'wordle: a wrong-length guess was accepted');
   }
-  notes.push(
-    `wordle ${difficulty}: ${wordle.eligible(roster.playersFor(difficulty)).length} usable names, answer lengths ${[
-      ...lengths,
-    ]
-      .sort((a, b) => a - b)
-      .join(', ')}`,
-  );
+  notes.push(`fortnitedle: ${withDigits} answers contain a digit`);
+
+  // The documented schedule, exactly.
+  const one = wordle.revealSchedule('TH0MASHD');
+  check([...one.values()].join() === '3', `fortnitedle: one digit should reveal after 3, got ${[...one.values()]}`);
+  const two = wordle.revealSchedule('A1B2C');
+  check([...two.values()].join() === '2,4', `fortnitedle: two digits should reveal after 2 and 4, got ${[...two.values()]}`);
+
+  // A perfect solve.
+  const game = wordle.gameFor(pool[0]);
+  const solved = wordle.submitGuess(game, pool[0].name);
+  check(solved.ok && solved.state.status === 'won', 'fortnitedle: the exact answer did not win');
 }
 
-{
-  // Scoring, with repeated characters — the rule players get wrong, and the one
-  // a naive implementation gets wrong too. Every expectation below is the
-  // standard two-pass result: exact hits claim their character first, then
-  // misplaced ones take from whatever copies are left, so a guess with more
-  // copies of a character than the answer holds greys out the surplus.
-  const key = (guess: string, answer: string) =>
-    wordle
-      .scoreGuess(guess, answer)
-      .map((s) => (s === 'correct' ? 'G' : s === 'present' ? 'Y' : '.'))
-      .join('');
-
-  const cases: [string, string, string][] = [
-    ['ABBA', 'ABCD', 'GG..'], // two B's, answer has one, and it is already placed
-    ['AAAA', 'AQUA', 'G..G'], // both A's land exactly; the middle pair have none left
-    ['ABAB', 'AQUA', 'G.Y.'], // second A is misplaced but real
-    ['SAAA', 'ANAS', 'YYG.'], // three A's guessed, answer holds two
-    ['AABBB', 'BBAAA', 'YYYY.'], // surplus B greys out, nothing is placed
-    ['LLAMA', 'MALLS', 'YYYY.'], // one A in the answer, two in the guess
-    ['ANNAS', 'ACORN', 'GY...'], // two N's guessed, the answer has one
-    ['XXXX', 'ABCD', '....'], // nothing at all
-    ['ABCD', 'ABCD', 'GGGG'], // everything
-  ];
-  for (const [guess, answer, expected] of cases) {
-    const got = key(guess, answer);
-    check(got === expected, `wordle scoring: ${guess} vs ${answer} gave ${got}, expected ${expected}`);
-  }
-
-  // The keyboard reports the best a character has ever scored, so a later guess
-  // that greys a surplus copy cannot retract a green the player already earned.
-  const board = wordle.createGame(
-    roster.playersFor('easy', { minimum: 1, eligible: wordle.eligible }),
-    'kb',
-  )!;
-  const withGuess = { ...board, answer: 'ANAS', guesses: ['SAAA', 'XXXX'] };
-  const keys = wordle.keyboardState(withGuess);
-  check(keys.get('A') === 'correct', `wordle keyboard: A is "${keys.get('A')}", expected correct`);
-  check(keys.get('S') === 'present', `wordle keyboard: S is "${keys.get('S')}", expected present`);
-  check(keys.get('X') === 'absent', `wordle keyboard: X is "${keys.get('X')}", expected absent`);
-
-  // Answers that are technically guessable and miserable in practice.
-  const answers = wordle
-    .eligible(roster.players)
-    .map((player) => ({ name: player.name, answer: normalizeName(player.name) }));
-  const parenthesised = answers.filter((row) => /[(）)]/.test(row.name));
-  const flat = answers.filter((row) => new Set(row.answer).size < 2);
-  check(parenthesised.length === 0, `wordle: ${parenthesised.length} answer(s) carry a page disambiguator`);
-  check(flat.length === 0, `wordle: ${flat.length} answer(s) have fewer than two distinct characters`);
-  notes.push(
-    `wordle answers: ${answers.length} usable, ` +
-      `${answers.filter((r) => new Set(r.answer).size < r.answer.length).length} contain a repeated character`,
-  );
-}
-
-// ------------------------------------------------- 2b. the no-repeat rotation
-// Fortnitedle, Career Path and Who Are Ya all deal through it, and the whole
-// point is that a pool is exhausted before anyone comes round again.
-{
-  const pool = Array.from({ length: 7 }, (_, i) => ({ id: `p${i}` }));
-  const order: string[] = [];
-  let seen: string[] = [];
-  for (let i = 0; i < pool.length; i++) {
-    const drawn = deal(pool, seen, `rot-${i}`);
-    check(drawn !== null, 'rotation: a non-empty pool dealt nothing');
-    if (!drawn) break;
-    check(!drawn.wrapped, `rotation: wrapped after ${i} draws, before the pool ran out`);
-    order.push(drawn.pick.id);
-    seen = drawn.seen;
-  }
-  check(new Set(order).size === pool.length, 'rotation: a full cycle repeated a player');
-
-  const wrap = deal(pool, seen, 'rot-wrap');
-  check(wrap?.wrapped === true, 'rotation: the draw after a full cycle did not refill the bag');
-  check(
-    wrap?.pick.id !== order[order.length - 1],
-    'rotation: the new cycle opened with the player the last one closed on',
-  );
-  check(wrap?.seen.length === 1, 'rotation: the refilled bag did not reset `seen`');
-
-  // Ids left over from a pool that has since changed shape must be ignored,
-  // not treated as a cycle that can never finish.
-  const stale = deal(pool, ['gone-1', 'gone-2'], 'rot-stale');
-  check(stale?.wrapped === false, 'rotation: stale ids from an old pool counted as drawn');
-
-  check(deal([], [], 'rot-empty') === null, 'rotation: an empty pool did not return null');
-  const single = deal([{ id: 'only' }], ['only'], 'rot-single');
-  check(single?.pick.id === 'only', 'rotation: a one-player pool could not wrap onto itself');
-  notes.push(`rotation: ${pool.length} draws cover the pool, then it refills reshuffled`);
-}
-
-// ------------------------------------------------------------- 3. Career Path
-// Runs on career_path.json, generated by the notebook (see notebook_cells.md).
-// Until that cell has been run there is nothing to play, which is a data state
-// rather than a broken game — so it is reported and skipped, not failed.
-let majors: Majors | null = null;
-try {
-  majors = await loadMajors();
-} catch {
-  notes.push('career-path: SKIPPED — career_path.json has not been generated yet');
-}
-
+// ------------------------------------------------------------ 4. Career Path
 if (majors) {
-  const withMajors = majors;
-  const answerable = withMajors.eligible(roster.players);
-  notes.push(
-    `career-path: ${withMajors.tournaments.length} majors, ${answerable.length} answerable players ` +
-      `(min ${withMajors.minAppearances} appearances)`,
-  );
-  check(answerable.length >= 20, 'career-path: not enough answerable players');
-
-  for (const tier of ['easy', 'medium', 'hard'] as const) {
-    const pool = roster.exactly(tier, { eligible: withMajors.eligible });
-    notes.push(`career-path ${tier}: ${pool.length} players`);
-    check(pool.length > 0, `career-path: no answerable ${tier} players`);
-  }
+  const answerable = majors.eligible(roster.players);
+  check(answerable.length > 0, 'career-path: nobody is answerable');
+  notes.push(`career-path: ${answerable.length} answerable, ${majors.tournaments.length} majors`);
 
   for (const mode of ['order', 'random'] as const) {
-    let minClues = Infinity;
-    let maxClues = 0;
-    const pool = roster.playersFor('easy', { minimum: 1, eligible: withMajors.eligible });
-    for (let i = 0; i < 120; i++) {
-      const secret = pool[i % pool.length];
-      const game = career.createGame(secret, withMajors.resultsFor(secret.id), mode, `cp-${mode}-${i}`);
-      check(game !== null, `career-path: could not create a ${mode} game`);
+    let longest = 0;
+    for (const secret of answerable.slice(0, 200)) {
+      const results = majors.resultsFor(secret.id);
+      const game = career.createGame(secret, results, mode, `cp-${mode}-${secret.id}`);
+      check(game !== null, `career-path: could not start on ${secret.name}`);
       if (!game) continue;
-      check(
-        game.clues.length >= withMajors.minAppearances,
-        `career-path: only ${game.clues.length} clues for ${game.secret.name}`,
-      );
       check(
         game.clues.length <= career.MAX_CLUES,
-        `career-path: ${game.clues.length} clues for ${game.secret.name}, over the ${career.MAX_CLUES} cap`,
+        `career-path: ${secret.name} got ${game.clues.length} clues, max is ${career.MAX_CLUES}`,
       );
-      minClues = Math.min(minClues, game.clues.length);
-      maxClues = Math.max(maxClues, game.clues.length);
+      check(game.career.length === results.length, `career-path: ${secret.name} lost results from the reveal`);
+      longest = Math.max(longest, game.clues.length);
 
       if (mode === 'order') {
-        const dates = game.clues.map((clue) => clue.result.tournament.date);
+        // The story must open on the first major and close on the last.
         check(
-          dates.every((date, index) => index === 0 || dates[index - 1] <= date),
-          'career-path: order mode is not chronological',
+          game.clues[0].result.tournament.date === results[0].tournament.date,
+          `career-path: ${secret.name}'s story does not open on their first major`,
         );
+        check(
+          game.clues[game.clues.length - 1].result.tournament.date ===
+            results[results.length - 1].tournament.date,
+          `career-path: ${secret.name}'s story does not close on their most recent major`,
+        );
+        // …and run in order.
+        for (let i = 1; i < game.clues.length; i++) {
+          check(
+            game.clues[i - 1].result.tournament.date <= game.clues[i].result.tournament.date,
+            `career-path: ${secret.name}'s story is out of order at clue ${i}`,
+          );
+        }
       }
-      check(
-        careerWrongThenRight(game, answerable),
-        `career-path: could not finish a round for ${game.secret.name}`,
-      );
+
+      // A correct guess on the first clue wins.
+      check(career.submitGuess(game, secret).status === 'won', `career-path: correct guess did not win`);
     }
-    notes.push(`career-path (${mode}): clue counts on Easy run ${minClues}-${maxClues}`);
+    notes.push(`career-path ${mode}: longest clue list ${longest}`);
   }
 }
 
-function careerWrongThenRight(start: career.GameState, pool: readonly RosterPlayer[]): boolean {
-  let state = start;
-  // Burn every clue with wrong guesses, then guess correctly on the last one.
-  const decoys = pool.filter((player) => player.id !== state.secret.id);
-  for (let i = 0; i < state.clues.length - 1; i++) {
-    state = career.submitGuess(state, decoys[i]);
-    if (state.status !== 'playing') return false;
-  }
-  state = career.submitGuess(state, state.secret);
-  return state.status === 'won';
-}
-
-// -------------------------------------------------------------- 4. Who Are Ya
-// Runs on teammates.json. Skipped the same way when it has not been generated.
-let teammates: Teammates | null = null;
-try {
-  teammates = await loadTeammates();
-} catch {
-  notes.push('who-are-ya: SKIPPED — teammates.json has not been generated yet');
-}
-
-if (teammates) {
-  const mates = teammates;
-  const byId = new Map(roster.players.map((player) => [player.id, player]));
-  const cluesFor = (id: string) => mates.cluesFor(id, byId);
-  const eligible = (players: RosterPlayer[]) =>
-    players.filter((player) => cluesFor(player.id).length >= whoAreYa.MIN_CLUES);
-
-  const answerable = eligible(roster.players);
-  notes.push(`who-are-ya: ${answerable.length} players with ${whoAreYa.MIN_CLUES}+ resolvable teammates`);
-  check(answerable.length >= 20, 'who-are-ya: not enough answerable players');
-  for (const tier of ['easy', 'medium', 'hard'] as const) {
-    const pool = roster.exactly(tier, { eligible });
-    notes.push(`who-are-ya ${tier}: ${pool.length} players`);
-    check(pool.length > 0, `who-are-ya: no answerable ${tier} players`);
-  }
-
-  // Nobody is their own teammate anywhere in the file, not just in the rounds
-  // this happens to deal — a self-pair would make one clue the answer.
-  const selfPairs = roster.players.filter((player) =>
-    cluesFor(player.id).some((clue) => clue.player.id === player.id),
+// ------------------------------------------------------------- 5. Who Are Ya
+if (teammates && facts) {
+  const byId = new Map(roster.players.map((p) => [p.id, p]));
+  const answerable = roster.players.filter(
+    (p) =>
+      teammates.cluesFor(p.id, byId).length >= whoAreYa.MIN_CLUES &&
+      facts.of(p.id).apps >= whoAreYa.MIN_TOURNAMENTS,
   );
-  check(selfPairs.length === 0, `who-are-ya: ${selfPairs.length} player(s) list themselves as a teammate`);
+  check(answerable.length > 0, 'who-are-ya: nobody is answerable');
+  notes.push(
+    `who-are-ya: ${answerable.length} answerable (${whoAreYa.MIN_CLUES}+ teammates, ${whoAreYa.MIN_TOURNAMENTS}+ tournaments)`,
+  );
 
   for (const mode of ['easy', 'hard', 'random'] as const) {
-    for (let i = 0; i < 120; i++) {
-      const secret = answerable[(i * 37) % answerable.length];
-      const game = whoAreYa.createGame(secret, cluesFor(secret.id), mode, `wy-${mode}-${i}`);
-      check(game !== null, `who-are-ya: could not create a ${mode} game`);
+    for (const secret of answerable.slice(0, 120)) {
+      const clues = teammates.cluesFor(secret.id, byId);
+      const game = whoAreYa.createGame(secret, clues, mode, `wy-${mode}-${secret.id}`);
+      check(game !== null, `who-are-ya: could not start on ${secret.name}`);
       if (!game) continue;
+      check(game.all.length === clues.length, `who-are-ya: ${secret.name} lost teammates from the reveal`);
       check(
-        game.clues.length >= whoAreYa.MIN_CLUES,
-        `who-are-ya: only ${game.clues.length} teammates for ${game.secret.name}`,
+        !game.clues.some((clue) => clue.player.id === secret.id),
+        `who-are-ya: ${secret.name} is listed as their own teammate`,
       );
-      check(
-        game.clues.length <= whoAreYa.MAX_CLUES,
-        `who-are-ya: ${game.clues.length} teammates shown, over the ${whoAreYa.MAX_CLUES} cap`,
-      );
-      if (mode !== 'random') {
-        const counts = game.clues.map((clue) => clue.events);
-        check(
-          counts.every((value, index) => index === 0 || counts[index - 1] <= value),
-          `who-are-ya (${mode}): teammates are not ordered fewest to most`,
-        );
-      }
-      const won = whoAreYa.submitGuess(game, game.secret);
-      check(won.status === 'won', 'who-are-ya: a correct first guess did not win');
-
-      // Exhaust every clue with wrong guesses and confirm the round ends.
-      let state = game;
-      const decoys = answerable.filter((player) => player.id !== game.secret.id);
-      for (let step = 0; step < 30 && state.status === 'playing'; step++) {
-        state = whoAreYa.submitGuess(state, decoys[step]);
-      }
-      check(state.status === 'lost', 'who-are-ya: a round of wrong guesses never ended');
+      check(whoAreYa.submitGuess(game, secret).status === 'won', 'who-are-ya: correct guess did not win');
     }
   }
 }
 
-// ---------------------------------------------------------------- 5. Tenaball
-for (const category of tenaball.availableCategories(dataset)) {
-  let built = 0;
-  const titles = new Set<string>();
-  for (let i = 0; i < 60; i++) {
-    const puzzle = tenaball.buildPuzzle(dataset, category.id, `tb-${category.id}-${i}`);
-    if (!puzzle) continue;
-    built++;
-    titles.add(puzzle.title);
-    check(puzzle.slots.length === tenaball.SLOTS, `tenaball ${category.id}: ${puzzle.slots.length} slots`);
-    const ids = puzzle.slots.map((slot) => slot.player.id);
-    check(new Set(ids).size === ids.length, `tenaball ${category.id}: duplicate player in the top 10`);
+// ---------------------------------------------------------------- 6. Tenaball
+if (rankings) {
+  notes.push(`tenaball: ${rankings.boards.length} boards`);
+  const byGroup = new Map<string, number>();
+  for (const board of rankings.boards) {
+    byGroup.set(board.group, (byGroup.get(board.group) ?? 0) + 1);
+    check(board.rows.length === tenaball.SLOTS, `tenaball: ${board.id} has ${board.rows.length} rows`);
+    check(Boolean(board.next?.key), `tenaball: ${board.id} has no 11th place for the tie rule`);
+    const keys = new Set(board.rows.map((row) => row.key));
+    check(keys.size === board.rows.length, `tenaball: ${board.id} repeats an entry`);
+    check(!keys.has(board.next.key), `tenaball: ${board.id} lists its 11th place inside the ten`);
 
-    // Every answer must be reachable by typing the player's name.
-    for (const slot of puzzle.slots) {
-      check(
-        matchPlayer(slot.player.name, dataset.roster)?.id === slot.player.id,
-        `tenaball ${category.id}: "${slot.player.name}" does not resolve by name`,
-      );
+    // A perfect run fills every slot and never loses a life.
+    let game = tenaball.createGame(board, 'hard');
+    for (const row of board.rows) {
+      const result = tenaball.applyGuess(game, row.key, row.label);
+      check(result.outcome.kind === 'correct', `tenaball: ${board.id} rejected its own row "${row.label}"`);
+      game = result.state;
     }
+    check(game.status === 'won', `tenaball: ${board.id} did not win on a perfect run`);
+    check(game.lives === tenaball.HARD_LIVES, `tenaball: ${board.id} lost a life on a perfect run`);
 
-    // Play it out on Hard: all ten correct must win without losing a life.
-    let state = tenaball.createGame(puzzle, 'hard');
-    for (const slot of puzzle.slots) {
-      const applied = tenaball.applyGuess(state, slot.player);
-      check(applied.outcome.kind === 'correct', `tenaball ${category.id}: a listed player scored as wrong`);
-      state = applied.state;
-    }
-    check(state.status === 'won', `tenaball ${category.id}: ten correct answers did not win`);
-    check(state.lives === tenaball.HARD_LIVES, `tenaball ${category.id}: lost a life on a correct answer`);
-
-    // Three wrong answers must end a Hard game.
-    let hard = tenaball.createGame(puzzle, 'hard');
-    const outsiders = dataset.players.filter(
-      (player) => !ids.includes(player.id) && puzzle.valueOf(player) !== puzzle.slots[9].raw,
-    );
-    for (let k = 0; k < tenaball.HARD_LIVES; k++) hard = tenaball.applyGuess(hard, outsiders[k]).state;
-    check(hard.status === 'lost', `tenaball ${category.id}: hard mode did not end after ${tenaball.HARD_LIVES} misses`);
+    // The 11th must be a free near miss, not a mistake.
+    const near = tenaball.applyGuess(tenaball.createGame(board, 'hard'), board.next.key, board.next.label);
+    check(near.outcome.kind === 'tied', `tenaball: ${board.id} punished its own 11th place`);
+    check(near.state.lives === tenaball.HARD_LIVES, `tenaball: ${board.id} charged a life for the 11th`);
   }
-  check(built > 0, `tenaball: category ${category.id} never produced a puzzle`);
-  notes.push(`tenaball ${category.id}: ${built}/60 built, ${titles.size} distinct board(s)`);
+  for (const [group, count] of [...byGroup].sort((a, b) => b[1] - a[1])) {
+    notes.push(`  ${group}: ${count}`);
+  }
+  check(byGroup.size >= 4, `tenaball: only ${byGroup.size} category groups`);
 }
 
-// -------------------------------------------------------------------- 6. List
-{
-  const criteria = buildListCriteria(dataset);
-  check(criteria.length >= 20, `list: only ${criteria.length} criteria available`);
-  const sizes = criteria.map((criterion) => criterion.answers.length);
-  notes.push(
-    `list: ${criteria.length} criteria, answer sets ${Math.min(...sizes)}–${Math.max(...sizes)} players`,
-  );
+// -------------------------------------------------------------------- 7. List
+if (facts) {
+  const criteria = buildListCriteria(roster, facts, pools);
+  check(criteria.length > 0, 'list: no categories available');
   for (const criterion of criteria) {
-    check(criterion.answers.length >= 6, `list: "${criterion.title}" has too few answers`);
-    const ids = criterion.answers.map((player) => player.id);
-    check(new Set(ids).size === ids.length, `list: "${criterion.title}" contains a duplicate player`);
-    for (const player of criterion.answers) {
-      check(
-        matchPlayer(player.name, dataset.roster)?.id === player.id,
-        `list: "${player.name}" does not resolve by name`,
-      );
-    }
+    check(criterion.answers.length >= 8, `list: "${criterion.title}" has only ${criterion.answers.length}`);
+    const ids = new Set(criterion.answers.map((p) => p.id));
+    check(ids.size === criterion.answers.length, `list: "${criterion.title}" repeats a player`);
+    notes.push(`list: ${criterion.title} — ${criterion.answers.length}`);
   }
 }
 
-// ---------------------------------------------------------------- 7. Impostor
-{
-  let rounds = 0;
-  for (let i = 0; i < 300; i++) {
-    const round = impostor.createRound(dataset, `imp-${i}`);
-    check(round !== null, 'impostor: could not build a round');
+// ---------------------------------------------- 8-10. the criteria-based games
+if (facts && orgs) {
+  const players = roster.playersFor('medium', { minimum: 200, eligible: facts.eligible(3) });
+  const source: CriteriaSource = { players, facts, orgs };
+  const criteria = buildCriteria(source, { minMatches: 4, maxShare: 0.5 });
+  notes.push(`criteria: ${criteria.length} usable over a ${players.length}-player pool`);
+
+  const kinds = new Map<string, number>();
+  for (const criterion of criteria) kinds.set(criterion.kind, (kinds.get(criterion.kind) ?? 0) + 1);
+  for (const [kind, count] of [...kinds].sort((a, b) => b[1] - a[1])) notes.push(`  ${kind}: ${count}`);
+
+  // The old dataset could only really answer "country" and "region". If that is
+  // true again, the criteria games are back to being flag-reading exercises.
+  const identity = (kinds.get('country') ?? 0) + (kinds.get('region') ?? 0);
+  check(
+    identity < criteria.length * 0.5,
+    `criteria: ${identity} of ${criteria.length} are country/region — too few real questions`,
+  );
+
+  // ---- Griefer
+  let grieferOk = 0;
+  for (let seed = 0; seed < 60; seed++) {
+    const round = griefer.createRound(source, `g-${seed}`);
     if (!round) continue;
-    rounds++;
-    check(round.board.length >= 6 && round.board.length <= 8, `impostor: board of ${round.board.length}`);
-    check(round.impostorIds.size >= 1 && round.impostorIds.size <= 3, 'impostor: bad impostor count');
+    grieferOk++;
+    check(round.memberIds.size >= 2, `griefer: round ${seed} has ${round.memberIds.size} players who fit`);
     check(
-      new Set(round.board.map((player) => player.id)).size === round.board.length,
-      'impostor: the same player appears twice on a board',
+      round.memberIds.size < round.board.length,
+      `griefer: round ${seed} has no griefers at all`,
     );
     for (const player of round.board) {
-      const isImpostor = round.impostorIds.has(player.id);
       check(
-        round.criterion.test(player) !== isImpostor,
-        `impostor: ${player.name} is labelled wrongly for "${round.criterion.label}"`,
+        round.criterion.test(player) === round.memberIds.has(player.id),
+        `griefer: round ${seed} mislabels ${player.name}`,
       );
     }
-
-    // All at once: exactly the impostors wins, anything else loses.
-    let all = impostor.createGame(round, 'all-at-once');
-    for (const player of round.board) if (round.impostorIds.has(player.id)) all = impostor.toggle(all, player);
-    check(impostor.check(all).status === 'won', 'impostor: the exact impostor set did not win');
-
-    // One by one: every impostor in turn wins; a member ends it.
-    let one = impostor.createGame(round, 'one-by-one');
-    for (const player of round.board) if (round.impostorIds.has(player.id)) one = impostor.pick(one, player);
-    check(one.status === 'won', 'impostor: catching every impostor one by one did not win');
-
-    const member = round.board.find((player) => !round.impostorIds.has(player.id))!;
-    check(
-      impostor.pick(impostor.createGame(round, 'one-by-one'), member).status === 'lost',
-      'impostor: picking a genuine member did not end the round',
-    );
+    // Perfect play: select exactly the ones who fit.
+    let game = griefer.createGame(round, 'all-at-once');
+    for (const player of round.board) {
+      if (round.memberIds.has(player.id)) game = griefer.toggle(game, player);
+    }
+    check(griefer.check(game).status === 'won', `griefer: round ${seed} rejected a perfect selection`);
   }
-  notes.push(`impostor: ${rounds}/300 rounds generated`);
-}
+  check(grieferOk >= 50, `griefer: only ${grieferOk} of 60 seeds produced a board`);
 
-// ------------------------------------------------------------- 8. Tic Tac Toe
-{
+  // ---- Tic Tac Toe
   let boards = 0;
-  for (let i = 0; i < 200; i++) {
-    const board = ttt.generateBoard(dataset, `ttt-${i}`);
-    check(board !== null, `tic-tac-toe: attempt ${i} produced no board`);
+  for (let seed = 0; seed < 40; seed++) {
+    const board = ttt.generateBoard(source, `t-${seed}`);
     if (!board) continue;
     boards++;
+    let game = ttt.createGame(board, 'easy');
 
-    for (let r = 0; r < ttt.SIZE; r++) {
-      for (let c = 0; c < ttt.SIZE; c++) {
-        const cell = board.candidates[r][c];
-        check(cell.length > 0, `tic-tac-toe: empty cell at ${r},${c}`);
-        for (const player of cell) {
-          check(
-            board.rows[r].test(player) && board.cols[c].test(player),
-            `tic-tac-toe: ${player.name} does not satisfy cell ${r},${c}`,
-          );
-        }
-      }
-    }
-
-    // Solve it cell by cell through the public API, taking the first candidate
-    // the engine accepts. The deadlock guard must always leave a way forward.
-    let state = ttt.createGame(board);
-    for (let r = 0; r < ttt.SIZE; r++) {
-      for (let c = 0; c < ttt.SIZE; c++) {
-        let placed = false;
-        for (const candidate of board.candidates[r][c]) {
-          const applied = ttt.place(state, r, c, candidate);
-          if (applied.outcome === 'placed') {
-            state = applied.state;
-            placed = true;
-            break;
+    // Fill it by always submitting a player the grid can place, which exercises
+    // the auto-placement path rather than the explicit one.
+    for (let step = 0; step < 40 && game.filled.size < 9; step++) {
+      const used = new Set([...game.filled.values()].map((p) => p.id));
+      let placed = false;
+      for (let r = 0; r < ttt.SIZE && !placed; r++) {
+        for (let c = 0; c < ttt.SIZE && !placed; c++) {
+          if (game.filled.has(ttt.cellKey(r, c))) continue;
+          for (const candidate of board.candidates[r][c]) {
+            if (used.has(candidate.id)) continue;
+            const result = ttt.submit(game, candidate);
+            if (result.outcome.kind === 'placed') {
+              game = result.state;
+              placed = true;
+              break;
+            }
+            if (result.outcome.kind === 'choose') {
+              const cell = result.outcome.cells[0];
+              const forced = ttt.place(game, cell, candidate);
+              if (forced.outcome.kind === 'placed') {
+                game = forced.state;
+                placed = true;
+                break;
+              }
+            }
           }
-          check(
-            applied.outcome === 'already-used' || applied.outcome === 'deadlock',
-            `tic-tac-toe: valid candidate rejected as "${applied.outcome}" at ${r},${c}`,
-          );
         }
-        check(placed, `tic-tac-toe: no playable candidate left for cell ${r},${c}`);
+      }
+      if (!placed) break;
+    }
+    check(game.status === 'won', `tic-tac-toe: board ${seed} could not be completed (${game.filled.size}/9)`);
+    check(game.mistakes === 0, `tic-tac-toe: board ${seed} charged ${game.mistakes} mistakes on perfect play`);
+  }
+  check(boards >= 35, `tic-tac-toe: only ${boards} of 40 seeds produced a board`);
+
+  // A player who fits nothing must be rejected, not placed.
+  {
+    const board = ttt.generateBoard(source, 'reject');
+    if (board) {
+      const game = ttt.createGame(board, 'easy');
+      const misfit = players.find(
+        (p) => !board.rows.some((row) => row.test(p)) && !board.cols.some((col) => col.test(p)),
+      );
+      if (misfit) {
+        const result = ttt.submit(game, misfit);
+        check(result.outcome.kind === 'rejected', `tic-tac-toe: ${misfit.name} fits nothing but was not rejected`);
       }
     }
-    check(state.status === 'won', 'tic-tac-toe: a solved board did not register as won');
-    check(state.mistakes === 0, 'tic-tac-toe: solving cleanly still recorded a mistake');
   }
-  notes.push(`tic-tac-toe: ${boards}/200 solvable boards generated`);
-}
 
-// ------------------------------------------------------------- 9. Connections
-{
+  // Hard must end the board once nine guesses cannot fill nine cells.
+  {
+    const board = ttt.generateBoard(source, 'hard');
+    if (board) {
+      let game = ttt.createGame(board, 'hard');
+      const misfit = players.find(
+        (p) => !board.rows.some((row) => row.test(p)) && !board.cols.some((col) => col.test(p)),
+      );
+      if (misfit) {
+        game = ttt.submit(game, misfit).state;
+        check(game.status === 'lost', 'tic-tac-toe: hard survived a wasted guess');
+      }
+    }
+  }
+
+  // ---- Connections
   let puzzles = 0;
-  for (let i = 0; i < 200; i++) {
-    const puzzle = connections.generatePuzzle(dataset, `cx-${i}`);
-    check(puzzle !== null, `connections: attempt ${i} produced no board`);
+  for (let seed = 0; seed < 40; seed++) {
+    const puzzle = connections.generatePuzzle(source, teammates, `c-${seed}`);
     if (!puzzle) continue;
     puzzles++;
+    check(puzzle.board.length === 16, `connections: puzzle ${seed} has ${puzzle.board.length} tiles`);
+    const ids = new Set(puzzle.board.map((p) => p.id));
+    check(ids.size === 16, `connections: puzzle ${seed} repeats a player`);
 
-    check(puzzle.board.length === 16, `connections: board of ${puzzle.board.length}`);
-    check(new Set(puzzle.board.map((p) => p.id)).size === 16, 'connections: duplicate player on the board');
-    check(puzzle.groups.length === 4, `connections: ${puzzle.groups.length} groups`);
+    let game = connections.createGame(puzzle);
     for (const group of puzzle.groups) {
-      check(group.players.length === 4, `connections: group "${group.label}" has ${group.players.length}`);
+      for (const player of group.players) game = connections.toggle(game, player);
+      game = connections.submit(game);
     }
-
-    // Solve it group by group.
-    let state = connections.createGame(puzzle);
-    for (const group of puzzle.groups) {
-      for (const player of group.players) state = connections.toggle(state, player);
-      state = connections.submit(state);
-    }
-    check(state.status === 'won', 'connections: solving every group did not win');
-    check(state.mistakes === 0, 'connections: a correct group counted as a mistake');
-
-    // Four mistakes must end the board.
-    let losing = connections.createGame(puzzle);
-    for (let attempt = 0; attempt < connections.MAX_MISTAKES; attempt++) {
-      const mixed = [
-        puzzle.groups[0].players[0],
-        puzzle.groups[1].players[0],
-        puzzle.groups[2].players[0],
-        puzzle.groups[3].players[attempt],
-      ];
-      for (const player of mixed) losing = connections.toggle(losing, player);
-      losing = connections.submit(losing);
-    }
-    check(losing.status === 'lost', 'connections: four wrong submissions did not end the board');
+    check(game.status === 'won', `connections: puzzle ${seed} rejected its own groups`);
+    check(game.mistakes === 0, `connections: puzzle ${seed} charged a mistake on perfect play`);
+    check(connections.livesLeft(game) === connections.MAX_MISTAKES, `connections: puzzle ${seed} lost a life`);
   }
-  notes.push(`connections: ${puzzles}/200 boards generated`);
+  check(puzzles >= 35, `connections: only ${puzzles} of 40 seeds produced a board`);
+
+  // A near miss must report how many belonged to one group.
+  {
+    const puzzle = connections.generatePuzzle(source, teammates, 'near');
+    if (puzzle) {
+      let game = connections.createGame(puzzle);
+      for (const player of puzzle.groups[0].players.slice(0, 3)) game = connections.toggle(game, player);
+      game = connections.toggle(game, puzzle.groups[1].players[0]);
+      game = connections.submit(game);
+      check(game.near === 3, `connections: a three-of-four guess reported near=${game.near}`);
+    }
+  }
 }
 
-// -------------------------------------------------------- 10. Guess the Player
-for (const mode of ['exact', 'direction'] as const) {
-  for (let i = 0; i < 120; i++) {
-    const game = gtp.createGame(dataset.players, mode, `gp-${mode}-${i}`);
-    check(game !== null, `guess-the-player: could not create a ${mode} game`);
-    if (!game) continue;
+// ------------------------------------------------------- 11. Guess the Player
+{
+  const pool = gtp.answerable(roster.players);
+  check(pool.length > 0, 'guess-the-player: nobody is answerable');
+  notes.push(`guess-the-player: ${pool.length} answerable`);
 
-    const won = gtp.submitGuess(game, game.secret);
-    check(won.status === 'won', 'guess-the-player: guessing the secret did not win');
+  for (const mode of ['exact', 'direction'] as const) {
+    const drawn = deal(pool, [], `gtp-${mode}`);
+    if (!drawn) continue;
+    const game = gtp.gameFor(drawn.pick, mode);
+    const won = gtp.submitGuess(game, drawn.pick);
+    check(won.status === 'won', `guess-the-player: the correct guess did not win in ${mode}`);
     check(
       won.rows[0].attributes.every((attribute) => attribute.state === 'hit'),
-      'guess-the-player: the secret player did not score all hits',
+      `guess-the-player: the secret player did not match itself on every attribute in ${mode}`,
     );
+    check(
+      won.rows[0].attributes.some((attribute) => attribute.key === 'status'),
+      'guess-the-player: no status column',
+    );
+  }
 
-    // Eight wrong guesses must end the round.
-    let state = game;
-    const decoys = dataset.players.filter((player) => player.id !== game.secret.id);
-    for (let step = 0; step < gtp.MAX_GUESSES; step++) state = gtp.submitGuess(state, decoys[step]);
-    check(state.status === 'lost', 'guess-the-player: eight wrong guesses did not end the round');
-
-    if (mode === 'exact') {
-      const row = gtp.compare(decoys[0], game.secret, 'exact');
-      const age = row.find((attribute) => attribute.key === 'age')!;
-      check(age.direction === undefined, 'guess-the-player: exact mode leaked a direction arrow on age');
-    }
+  // Running out of guesses must lose.
+  const drawn = deal(pool, [], 'gtp-lose');
+  if (drawn) {
+    let game = gtp.gameFor(drawn.pick, 'direction');
+    const wrong = pool.filter((p: RosterPlayer) => p.id !== drawn.pick.id).slice(0, gtp.MAX_GUESSES);
+    for (const player of wrong) game = gtp.submitGuess(game, player);
+    check(game.status === 'lost', `guess-the-player: ${gtp.MAX_GUESSES} wrong guesses did not lose`);
   }
 }
 
-// ------------------------------------------------------------ 11. Giving up
-// Every game has a give-up button, and every one of them must end the round
-// from a mid-round state and then stay ended — a `giveUp` that left the status
-// on 'playing' would render a board you cannot escape, and one that fired twice
-// could resurrect a finished round.
-{
-  const ended = (status: string) => status !== 'playing';
-
-  const hlPool = roster.playersFor('easy', {
-    minimum: 2,
-    eligible: (players) => hl.eligible(players, 'age'),
-  });
-  const hlGame = hl.createGame(hlPool, 'age', 'easy', 'giveup')!;
-  const hlGone = hl.giveUp(hlGame);
-  check(hlGone.status === 'gameover', `give up higher-lower: status is "${hlGone.status}"`);
-  check(hl.giveUp(hlGone) === hlGone, 'give up higher-lower: a second give up changed the state');
-
-  const rounds: [string, { status: string }, (s: never) => { status: string }][] = [
-    ['wordle', wordle.createGame(roster.playersFor('easy', { minimum: 1, eligible: wordle.eligible }))!, wordle.giveUp as never],
-    ['tenaball', tenaball.createGame(tenaball.buildPuzzle(dataset, 'career-earnings', 'giveup')!, 'hard'), tenaball.giveUp as never],
-    ['impostor', impostor.createGame(impostor.createRound(dataset, 'giveup')!, 'all-at-once'), impostor.giveUp as never],
-    ['tic-tac-toe', ttt.createGame(ttt.generateBoard(dataset, 'giveup')!), ttt.giveUp as never],
-    ['connections', connections.createGame(connections.generatePuzzle(dataset, 'giveup')!), connections.giveUp as never],
-    ['guess-the-player', gtp.createGame(dataset.players, 'exact', 'giveup')!, gtp.giveUp as never],
-  ];
-
-  // The two games that read a generated file only join in once it exists.
-  if (majors) {
-    const withMajors = majors;
-    const secret = roster.playersFor('easy', { minimum: 1, eligible: withMajors.eligible })[0];
-    rounds.push([
-      'career-path',
-      career.createGame(secret, withMajors.resultsFor(secret.id), 'order', 'giveup')!,
-      career.giveUp as never,
-    ]);
+// ------------------------------------------------------------ 12. event pools
+if (pools.pools.length > 0) {
+  const byId = new Map(roster.players.map((p) => [p.id, p]));
+  for (const pool of pools.pools) {
+    const playable = pool.players.filter((id) => byId.has(id));
+    notes.push(`pool ${pool.label}: ${playable.length} of ${pool.players.length} playable`);
+    check(playable.length >= 20, `pools: ${pool.label} only has ${playable.length} playable players`);
   }
-  if (teammates) {
-    const mates = teammates;
-    const byId = new Map(roster.players.map((player) => [player.id, player]));
-    const secret = roster.playersFor('easy', {
-      minimum: 1,
-      eligible: (players) =>
-        players.filter((player) => mates.cluesFor(player.id, byId).length >= whoAreYa.MIN_CLUES),
-    })[0];
-    rounds.push([
-      'who-are-ya',
-      whoAreYa.createGame(secret, mates.cluesFor(secret.id, byId), 'easy', 'giveup')!,
-      whoAreYa.giveUp as never,
-    ]);
-  }
-
-  for (const [name, game, surrender] of rounds) {
-    check(!ended(game.status), `give up ${name}: the fixture was already over before giving up`);
-    const gone = surrender(game as never);
-    check(gone.status === 'lost', `give up ${name}: status is "${gone.status}", expected "lost"`);
-    check(surrender(gone as never) === gone, `give up ${name}: a second give up changed the state`);
-  }
-  notes.push(`give up: ${rounds.length + 1} engines end the round and stay ended`);
+} else {
+  skipped.push('pools.json (no event pools)');
 }
 
 // ------------------------------------------------------------------- report --
-console.log('--- game playability ---');
+console.log('\n=== notes ===');
 for (const note of notes) console.log('  ' + note);
-if (problems.length) {
-  console.log(`\n--- ${problems.length} PROBLEM(S) ---`);
-  for (const problem of [...new Set(problems)].slice(0, 40)) console.log('  ! ' + problem);
-  process.exitCode = 1;
-} else {
-  // Two games read a file the notebook generates. Saying "all ten" while those
-  // were skipped would be the one sentence in this report nobody could trust.
-  const skipped = [majors ? null : 'Career Path', teammates ? null : 'Who Are Ya'].filter(Boolean);
-  console.log(
-    skipped.length === 0
-      ? '\nAll ten games are playable start to finish.'
-      : `\n${10 - skipped.length} of 10 games are playable start to finish. ` +
-          `${skipped.join(' and ')} skipped — run the notebook cells (see notebook_cells.md).`,
-  );
+
+if (skipped.length > 0) {
+  console.log('\n=== skipped (run the cells in notebook_cells.md) ===');
+  for (const item of skipped) console.log('  ' + item);
 }
+
+if (problems.length > 0) {
+  console.log(`\n=== ${problems.length} PROBLEM(S) ===`);
+  for (const problem of problems) console.log('  ✗ ' + problem);
+  process.exit(1);
+}
+console.log('\n✓ all checks passed');

@@ -1,3 +1,4 @@
+import { loadJson } from './files';
 import type { RosterPlayer } from './roster';
 
 /**
@@ -73,9 +74,7 @@ let cached: Promise<Teammates> | null = null;
 /** Loads (once) and indexes the teammate counts. ~680 KB, so only on demand. */
 export function loadTeammates(): Promise<Teammates> {
   if (!cached) {
-    cached = import('@data/teammates.json').then(
-      (module) => new Teammates(module.default as unknown as RawPayload),
-    );
+    cached = loadJson('teammates').then((payload) => new Teammates(payload as RawPayload));
   }
   return cached;
 }
