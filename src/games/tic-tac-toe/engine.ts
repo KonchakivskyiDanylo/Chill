@@ -4,6 +4,7 @@ import {
   buildCriteria,
   hasNestedPair,
   intersect,
+  intersects,
   type CriteriaSource,
   type PlayerCriterion,
 } from '@/games/shared/criteria';
@@ -54,38 +55,48 @@ export function generateBoard(source: CriteriaSource, seed: string = String(Date
   return attemptBoards(pool, seed, true) ?? attemptBoards(pool, `${seed}:relaxed`, false);
 }
 
+/**
+ * Builds a board by construction rather than by guessing.
+ *
+ * Picking six criteria at random and checking all nine cells afterwards used
+ * to work, and stopped once the criteria came from the Liquipedia export: of
+ * the 276 rules it produces over a typical pool, 138 are organisations, and
+ * two organisations almost never share a player. A random six therefore
+ * contained an empty cell nearly every time — 36 of 40 seeds produced nothing
+ * at all.
+ *
+ * So the columns are chosen from the criteria that already intersect all three
+ * rows. Every cell is non-empty because it was never allowed to be otherwise,
+ * and the only check left to fail is whether nine *different* players can fill
+ * it.
+ */
 function attemptBoards(pool: PlayerCriterion[], seed: string, strict: boolean): Board | null {
   const rng = makeRng(seed);
 
   for (let attempt = 0; attempt < GENERATION_ATTEMPTS; attempt++) {
-    const picked = sample(rng, pool, SIZE * 2);
-    const rows = picked.slice(0, SIZE);
-    const cols = picked.slice(SIZE);
+    const rows = sample(rng, pool, SIZE);
+    // A board of three "played at X" rows is a dull puzzle before it is a hard
+    // one, so reject the shape early — before the expensive part below.
+    if (strict && !isVaried(rows)) continue;
 
-    // Two axes must not ask the same question.
-    if (rows.some((row) => cols.some((col) => col.id === row.id))) continue;
+    const usable = pool.filter(
+      (candidate) =>
+        !rows.some((row) => row.id === candidate.id) &&
+        rows.every((row) => intersects(row, candidate)),
+    );
+    if (usable.length < SIZE) continue;
+
+    const cols = sample(rng, usable, SIZE);
+    const picked = [...rows, ...cols];
     if (strict) {
-      // A board of six "played at X" axes is a dull puzzle, so keep variety…
       if (!isVaried(picked)) continue;
-      // …and a row that implies a column ("3+ titles" vs "2+ titles") is redundant.
+      // A row that implies a column ("3+ titles" vs "2+ titles") is redundant.
       if (hasNestedPair(picked)) continue;
     }
 
-    const candidates: RosterPlayer[][][] = [];
-    let viable = true;
-    for (let r = 0; r < SIZE && viable; r++) {
-      const rowCandidates: RosterPlayer[][] = [];
-      for (let c = 0; c < SIZE; c++) {
-        const cell = intersect(rows[r], cols[c]);
-        if (cell.length === 0) {
-          viable = false;
-          break;
-        }
-        rowCandidates.push(cell);
-      }
-      if (viable) candidates.push(rowCandidates);
-    }
-    if (!viable) continue;
+    const candidates: RosterPlayer[][][] = rows.map((row) =>
+      cols.map((col) => intersect(row, col)),
+    );
     if (!hasDistinctSolution(candidates)) continue;
 
     return { rows, cols, candidates };

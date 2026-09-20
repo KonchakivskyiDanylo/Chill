@@ -323,8 +323,12 @@ already states.
 
 ```python
 OUT = f'{BASE}/rankings.json'
-YEARS = list(range(2018, 2027))
 SLOTS = 10
+
+# Read off the data, not written down: a re-export that reaches into 2027
+# should grow a 2027 board on its own rather than silently dropping the year.
+YEARS = sorted({y for y in (year_of(t) for t in tournaments) if y is not None})
+print('years covered:', YEARS[0], '→', YEARS[-1])
 
 boards = []
 def board(bid, group, title, entity, tie, ranked, fmt):

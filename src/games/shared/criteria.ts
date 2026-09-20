@@ -200,6 +200,18 @@ export function intersect(a: PlayerCriterion, b: PlayerCriterion): RosterPlayer[
 }
 
 /**
+ * Whether two criteria share anyone at all.
+ *
+ * Separate from `intersect` because the board generator asks this question
+ * hundreds of times per attempt and does not care who the players are. It
+ * stops at the first hit, where `intersect` always walks the whole match set —
+ * and the answer is usually yes on the first or second player.
+ */
+export function intersects(a: PlayerCriterion, b: PlayerCriterion): boolean {
+  return a.matches.some((player) => b.test(player));
+}
+
+/**
  * True when one criterion implies the other, e.g. "3+ FNCS titles" inside
  * "2+ FNCS titles", or "global champion" inside "LAN winner". Such a pair makes
  * a redundant row/column or a muddy Connections group, so generators reject
