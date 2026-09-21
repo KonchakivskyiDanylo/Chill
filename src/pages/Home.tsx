@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { ModePicker } from '@/components/EventMode';
 import { GAMES } from '@/games/registry';
 
 export function Home() {
@@ -12,6 +13,12 @@ export function Home() {
           green letters. No account, no sign-up: pick a game and play.
         </p>
       </section>
+
+      {/*
+        Above the games, because it changes what all ten of them are about. Pick
+        a tournament here and every game runs on that field until you leave it.
+      */}
+      <ModePicker />
 
       <section className="game-grid">
         {GAMES.map((game) => (

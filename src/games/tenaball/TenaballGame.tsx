@@ -1,16 +1,21 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PlayerSearch } from '@/components/PlayerSearch';
 import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
 import type { Board } from '@/data/liquipedia/rankings';
+import { loadFacts, type Facts } from '@/data/liquipedia/facts';
 import type { Orgs } from '@/data/liquipedia/orgs';
-import type { Rankings } from '@/data/liquipedia/rankings';
+import type { Pools } from '@/data/liquipedia/pools';
+import { Rankings } from '@/data/liquipedia/rankings';
 import type { Roster } from '@/data/liquipedia/roster';
 import { useOrgs } from '@/data/liquipedia/useOrgs';
+import { usePools } from '@/data/liquipedia/usePools';
 import { useRankings } from '@/data/liquipedia/useRankings';
 import { useRoster } from '@/data/liquipedia/useRoster';
+import { activePool, useEventMode } from '@/games/shared/mode';
+import { poolPlayers } from '@/games/shared/pool';
 import type { Searchable } from '@/lib/text';
 import { useBestScore } from '@/lib/storage';
 import { getGame } from '@/games/registry';
@@ -23,6 +28,8 @@ import {
   type Difficulty,
   type GameState,
 } from './engine';
+import { derivedBoards } from './derived-boards';
+import { poolRankings } from './pool-boards';
 import './tenaball.css';
 
 const meta = getGame('tenaball')!;
@@ -36,22 +43,107 @@ export default function TenaballGame() {
   const { roster, error: rosterError } = useRoster();
   const { rankings, error: rankingsError } = useRankings();
   const { orgs, error: orgsError } = useOrgs();
+  const { pools } = usePools();
 
   return (
     <LiquipediaGate
       error={rosterError ?? rankingsError ?? orgsError}
       ready={Boolean(roster && rankings && orgs)}
     >
-      {roster && rankings && orgs ? <Game roster={roster} rankings={rankings} orgs={orgs} /> : null}
+      {roster && rankings && orgs ? (
+        <Game roster={roster} rankings={rankings} orgs={orgs} pools={pools} />
+      ) : null}
     </LiquipediaGate>
   );
 }
 
-function Game({ roster, rankings, orgs }: { roster: Roster; rankings: Rankings; orgs: Orgs }) {
+function Game({
+  roster,
+  rankings,
+  orgs,
+  pools,
+}: {
+  roster: Roster;
+  rankings: Rankings;
+  orgs: Orgs;
+  pools: Pools | null;
+}) {
   const [difficulty, setDifficulty] = useState<Difficulty>('easy');
   const [game, setGame] = useState<GameState | null>(null);
   const [query, setQuery] = useState('');
   const [feedback, setFeedback] = useState<{ tone: string; message: string } | null>(null);
+
+  const [event] = useEventMode();
+  const pool = activePool(pools, event);
+
+  /**
+   * Career facts, loaded only inside an event mode.
+   *
+   * Two of the nine field boards — tournaments played, LAN appearances — are
+   * the only thing in this game that needs `facts.json`, and it is 577 KB.
+   * Everyone who opens Tenaball on the whole scene would be paying for two
+   * boards they cannot reach, so this is a deliberate conditional load rather
+   * than another `useFacts()` at the top. The boards appear when it lands;
+   * `poolBoards` simply omits them until then.
+   */
+  const [facts, setFacts] = useState<Facts | null>(null);
+  useEffect(() => {
+    if (!pool) return;
+    let cancelled = false;
+    loadFacts().then(
+      (loaded) => {
+        if (!cancelled) setFacts(loaded);
+      },
+      // A missing facts.json costs two boards, not the game.
+      () => {},
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [pool]);
+
+  /**
+   * The boards on offer: this field's, or the shipped all-time set.
+   *
+   * A field that cannot fill even one board falls back rather than showing an
+   * empty picker — see the note under the difficulty cards.
+   */
+  const derived = useMemo(() => {
+    if (!pool) return null;
+    const built = poolRankings(
+      pool,
+      poolPlayers(roster, pools, event),
+      facts,
+      orgs,
+      rankings.generated,
+    );
+    return built.boards.length > 0 ? built : null;
+  }, [pool, roster, pools, event, facts, orgs, rankings.generated]);
+
+  /**
+   * The all-time set, plus the boards built from the roster in place.
+   *
+   * Wrapped back into a `Rankings` so the picker, the search and the Random
+   * button cannot tell where a board came from — the same trick the field
+   * boards use.
+   */
+  const allTime = useMemo(
+    () =>
+      new Rankings({
+        generated: rankings.generated,
+        slots: rankings.slots,
+        boards: [...rankings.boards, ...derivedBoards(roster.players)],
+      }),
+    [rankings, roster],
+  );
+
+  const active = derived ?? allTime;
+  // True when a mode is on but its field was too small to rank ten of anything.
+  const fellBack = Boolean(pool) && derived === null;
+
+  // A board id is a score key, and the field boards carry their own prefix, so
+  // a best score never leaks between the field and the all-time set.
+  useEffect(() => setGame(null), [event]);
 
   const start = useCallback(
     (board: Board | null) => {
@@ -73,11 +165,31 @@ function Game({ roster, rankings, orgs }: { roster: Roster; rankings: Rankings; 
   const searchPool: readonly Searchable[] = useMemo(() => {
     if (!game) return [];
     if (game.board.entity === 'org') {
-      return orgs.orgs.map((org) => ({ id: org.id, name: org.name }));
+      /*
+       * Keyed by display name, because that is what an org board ranks on.
+       *
+       * This was a real bug: the rows carry "FaZe Clan" and this list used to
+       * hand back `org.id`, which is the page name "FaZe_Clan". They never
+       * matched, so every organisation whose name contains a space — 339 of
+       * 979, including seven of the ten on the all-time earnings board — was
+       * marked wrong when you typed it correctly.
+       *
+       * The board's own labels are unioned in afterwards: a handful of orgs
+       * earn enough to rank without having a roster entry in `orgs.json`
+       * (COOLER Esport, Gentside), and an answer you cannot type is the same
+       * bug wearing a different hat.
+       */
+      const rows = new Map<string, Searchable>();
+      for (const org of orgs.orgs) rows.set(org.name, { id: org.name, name: org.name });
+      for (const row of [...game.board.rows, game.board.next]) {
+        if (!rows.has(row.key)) rows.set(row.key, { id: row.key, name: row.label });
+      }
+      return [...rows.values()];
     }
     if (game.board.entity === 'country') {
-      const names = [...new Set(roster.players.map((p) => p.countryName).filter(Boolean))] as string[];
-      return names.map((name) => ({ id: name, name }));
+      const names = new Set(roster.players.map((p) => p.countryName).filter(Boolean) as string[]);
+      for (const row of [...game.board.rows, game.board.next]) names.add(row.key);
+      return [...names].map((name) => ({ id: name, name }));
     }
     return roster.players;
   }, [game, orgs, roster]);
@@ -104,15 +216,27 @@ function Game({ roster, rankings, orgs }: { roster: Roster; rankings: Rankings; 
             </OptionGrid>
           </section>
 
+          {pool && !fellBack ? (
+            <p className="small muted center" style={{ margin: 0 }}>
+              Every board below is the <strong>{pool.label}</strong> field only.
+            </p>
+          ) : null}
+          {fellBack ? (
+            <Banner tone="info" title={`${pool?.label} is too small for a top ten`}>
+              Not enough of that field can be ranked ten deep on anything, so these are the
+              all-time boards.
+            </Banner>
+          ) : null}
+
           <button
             type="button"
             className="btn btn--primary btn--lg btn--block"
-            onClick={() => start(rankings.random())}
+            onClick={() => start(active.random())}
           >
             🎲 Random category
           </button>
 
-          <CategoryPicker rankings={rankings} query={query} onQuery={setQuery} onPick={start} />
+          <CategoryPicker rankings={active} query={query} onQuery={setQuery} onPick={start} />
         </div>
       </GameShell>
     );
@@ -285,16 +409,16 @@ function CategoryPicker({
       {total === 0 ? (
         <p className="small muted">Nothing matches “{query}”.</p>
       ) : (
-        <div className="tb-categories">
+        <div className="picker-list">
           {[...grouped].map(([group, boards]) => (
             <div key={group} className="stack-sm">
-              <h3 className="tb-categories__head">{group}</h3>
-              <div className="tb-categories__list">
+              <h3 className="picker-list__head">{group}</h3>
+              <div className="picker-list__group">
                 {boards.map((board) => (
                   <button
                     key={board.id}
                     type="button"
-                    className="tb-category"
+                    className="picker-option"
                     onClick={() => onPick(board)}
                   >
                     {board.title}

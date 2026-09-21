@@ -18,9 +18,15 @@ export interface GameState {
   secret: RosterPlayer;
   /** Clues in reveal order. */
   clues: Clue[];
-  /** Every major on record, oldest first — shown once the round is over. */
-  career: MajorResult[];
   revealed: number;
+  /**
+   * How many clues were showing when the round ended.
+   *
+   * Ending a round turns the whole clue list face up, so `revealed` alone can
+   * no longer answer "how much did I actually need". This is the number the
+   * score is really made of, and the list dims everything past it.
+   */
+  earned: number;
   guesses: RosterPlayer[];
   status: 'playing' | 'won' | 'lost';
 }
@@ -105,8 +111,8 @@ export function createGame(
     mode,
     secret,
     clues: chosen.map((result) => ({ result })),
-    career: [...results],
     revealed: 1,
+    earned: 1,
     guesses: [],
     status: 'playing',
   };
@@ -117,18 +123,25 @@ export function submitGuess(state: GameState, guess: RosterPlayer): GameState {
   if (state.guesses.some((g) => g.id === guess.id)) return state;
 
   const guesses = [...state.guesses, guess];
-  if (guess.id === state.secret.id) return { ...state, guesses, status: 'won' };
+  // Winning turns the rest of the clue list face up. Getting it in three means
+  // seven results you never saw, and they are the payoff for getting it in
+  // three — the career you just identified from a quarter of the evidence.
+  if (guess.id === state.secret.id) {
+    return { ...state, guesses, revealed: state.clues.length, status: 'won' };
+  }
 
   // A wrong guess burns a clue; running out of clues ends the round.
   if (state.revealed >= state.clues.length) return { ...state, guesses, status: 'lost' };
-  return { ...state, guesses, revealed: state.revealed + 1 };
+  const revealed = state.revealed + 1;
+  return { ...state, guesses, revealed, earned: revealed };
 }
 
 /** Voluntarily reveal the next clue without guessing. */
 export function revealNext(state: GameState): GameState {
   if (state.status !== 'playing') return state;
   if (state.revealed >= state.clues.length) return state;
-  return { ...state, revealed: state.revealed + 1 };
+  const revealed = state.revealed + 1;
+  return { ...state, revealed, earned: revealed };
 }
 
 /** Ends the round unsolved, with every remaining clue turned face up. */

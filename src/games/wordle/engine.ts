@@ -59,6 +59,11 @@ export function createGame(
 
 // ------------------------------------------------------- digit reveals --
 
+/** No digit is given away before this many guesses — see `revealSchedule`. */
+export const FIRST_REVEAL = 3;
+/** ...and none is held back past this one. */
+export const LAST_REVEAL = 5;
+
 /**
  * When each digit in the answer stops being a secret.
  *
@@ -68,28 +73,32 @@ export function createGame(
  * 342 of the 5,678 handles have one, so those rounds were a lottery rather than
  * a puzzle: TH0MASHD is unreachable if you never think to try a zero.
  *
- * So they are given, but slowly. Digit `k` of `n` is revealed once
- * `floor(6k / (n + 1))` guesses have been made — the six guesses split into
- * `n + 1` even stretches. One digit surfaces after the third guess, two after
- * the second and fourth, three after the first, third and fourth. You still
- * get half the round to find it yourself.
+ * So they are given, but not before guess three. Digit `k` arrives after guess
+ * `3 + k`, and nothing waits past guess five:
  *
- * Five handles carry four digits or more (`LEO2004`, `preston4321`,
- * `Stef2317`, `Stuart0000`, `Ym78267282`); there the formula hands the first
- * one over immediately, which is right — those are not words with a digit in
- * them, they are numbers with a name attached.
+ *   one digit      after 3
+ *   two digits     after 3, 4
+ *   three digits   after 3, 4, 5
+ *   four digits    after 3, 4, 5, 5
+ *
+ * The previous schedule spread the reveals evenly across all six guesses, which
+ * handed the first digit of a four-digit handle over before the player had
+ * typed anything. Eleven handles carry three digits or more and two carry four
+ * (`LEO2004`, `Stef2317`), so that case was rare and, when it came up, gave the
+ * round away on sight. Three guesses of nothing is the point: you get half the
+ * round to find it yourself, and the same half every time.
  *
  * Returns position in the answer -> guesses required.
  */
 export function revealSchedule(answer: string): Map<number, number> {
-  const positions: number[] = [];
-  for (let i = 0; i < answer.length; i++) {
-    if (answer[i] >= '0' && answer[i] <= '9') positions.push(i);
-  }
   const schedule = new Map<number, number>();
-  positions.forEach((position, index) => {
-    schedule.set(position, Math.floor((MAX_GUESSES * (index + 1)) / (positions.length + 1)));
-  });
+  let index = 0;
+  for (let i = 0; i < answer.length; i++) {
+    if (answer[i] >= '0' && answer[i] <= '9') {
+      schedule.set(i, Math.min(FIRST_REVEAL + index, LAST_REVEAL));
+      index++;
+    }
+  }
   return schedule;
 }
 
@@ -197,6 +206,14 @@ export function keyboardState(state: GameState): Map<string, TileState> {
       const current = best.get(char);
       if (!current || rank[scores[index]] > rank[current]) best.set(char, scores[index]);
     });
+  }
+
+  // A revealed digit is a character the player has been *told* is in the answer,
+  // at a position they can see. Leaving its key uncoloured made the hint strip
+  // and the keyboard disagree about a fact the game had already given away —
+  // and the key is where you look before you type.
+  for (const char of revealedDigits(state).values()) {
+    if (rank[best.get(char) ?? 'absent'] < rank.correct) best.set(char, 'correct');
   }
   return best;
 }

@@ -7,6 +7,7 @@ import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PoolSetup } from '@/components/PoolSetup';
 import { Banner } from '@/components/ui';
 import { deal, rotationKey } from '@/games/shared/rotation';
+import { useEventMode } from '@/games/shared/mode';
 import { poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
 import type { Pools } from '@/data/liquipedia/pools';
 import { type Roster } from '@/data/liquipedia/roster';
@@ -106,6 +107,7 @@ export default function WordleGame() {
 
 function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   const [choice, setChoice] = usePoolChoice();
+  const [event] = useEventMode();
   const [game, setGame] = useState<GameState | null>(null);
   const [draft, setDraft] = useState('');
   const [message, setMessage] = useState<string | null>(null);
@@ -115,8 +117,8 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   // A handle only works as an answer at a playable length, so eligibility has
   // to be part of choosing the pool, not a filter applied after it.
   const players = useMemo(
-    () => resolvePool(roster, pools, choice, eligible, 1),
-    [roster, pools, choice],
+    () => resolvePool(roster, pools, event, choice, eligible, 1),
+    [roster, pools, event, choice],
   );
 
   /**
@@ -127,14 +129,14 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
    * the one you were on.
    */
   const newGame = useCallback(() => {
-    const key = rotationKey(meta.id, ...poolScope(choice));
+    const key = rotationKey(meta.id, ...poolScope(event, choice));
     const drawn = deal(players, readLocal<string[]>(key, []));
     if (drawn) writeLocal(key, drawn.seen);
     setGame(drawn ? gameFor(drawn.pick) : null);
     setWrapped(drawn?.wrapped ?? false);
     setDraft('');
     setMessage(null);
-  }, [players, choice]);
+  }, [players, event, choice]);
 
   const commit = useCallback(() => {
     if (!game || game.status !== 'playing') return;
@@ -167,13 +169,15 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
     [game, commit],
   );
 
-  // Physical keyboard support — the on-screen one is for touch.
+  // Physical keyboard support — the on-screen one is for touch. The parameter
+  // is `stroke` rather than the usual `event`, which now means the site-wide
+  // event mode everywhere else in this file.
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (event.key === 'Enter') press('ENTER');
-      else if (event.key === 'Backspace') press('DEL');
-      else if (/^[a-zA-Z0-9]$/.test(event.key)) press(event.key.toUpperCase());
+    const onKey = (stroke: KeyboardEvent) => {
+      if (stroke.metaKey || stroke.ctrlKey || stroke.altKey) return;
+      if (stroke.key === 'Enter') press('ENTER');
+      else if (stroke.key === 'Backspace') press('DEL');
+      else if (/^[a-zA-Z0-9]$/.test(stroke.key)) press(stroke.key.toUpperCase());
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -186,6 +190,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
           <PoolSetup
             roster={roster}
             pools={pools}
+            event={event}
             value={choice}
             onChange={setChoice}
             eligible={eligible}
@@ -249,7 +254,15 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
           )}
         </div>
 
-        {hasDigits(game.answer) && !finished ? (
+        {/*
+          Only once a digit has actually been handed over.
+          The strip used to appear from guess one as a row of blanks reading
+          "This name has 1 digit in it" — which gives away the length of the
+          answer and the fact that it contains a digit, three guesses before the
+          game intends to tell you either. Nothing to show is now shown as
+          nothing.
+        */}
+        {hasDigits(game.answer) && !finished && digits.size > 0 ? (
           <DigitHint answer={game.answer} shown={digits} guesses={game.guesses.length} />
         ) : null}
 
@@ -322,6 +335,9 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
  * third character is a 0" is a fact you then have to hold in your head while
  * counting tiles. A row of blanks with the digit sitting in its own slot is
  * the same fact, already positioned.
+ *
+ * Only rendered once the first digit has landed — before that there is nothing
+ * to say that is not a spoiler. See the call site.
  */
 function DigitHint({
   answer,
@@ -336,24 +352,44 @@ function DigitHint({
   const pending = [...schedule.values()].filter((after) => guesses < after);
   const next = pending.length > 0 ? Math.min(...pending) : null;
 
+  /*
+   * Which digits arrived on *this* guess, so they can be announced rather than
+   * quietly appearing. A reveal is the only thing this game ever gives you for
+   * free and it used to slide in unmarked under a grid you were staring at.
+   */
+  const justRevealed = new Set(
+    [...schedule.entries()].filter(([, after]) => after === guesses).map(([position]) => position),
+  );
+
   return (
     <div className="wordle-hint">
       <div className="wordle-hint__row" aria-label="Known digits">
         {answer.split('').map((_char, index) => (
           <span
             key={index}
-            className={`wordle-hint__cell${shown.has(index) ? ' wordle-hint__cell--shown' : ''}`}
+            className={[
+              'wordle-hint__cell',
+              shown.has(index) ? 'wordle-hint__cell--shown' : '',
+              justRevealed.has(index) ? 'wordle-hint__cell--new' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
           >
             {shown.get(index) ?? ''}
           </span>
         ))}
       </div>
-      <p className="tiny faint center">
-        {shown.size === 0
-          ? `This name has ${plural(schedule.size, 'digit')} in it.`
-          : `${shown.size} of ${schedule.size} digits shown.`}
-        {next !== null ? ` Next one after guess ${next}.` : ''}
-      </p>
+      {justRevealed.size > 0 ? (
+        <p className="wordle-hint__pop" role="status">
+          {justRevealed.size === 1 ? 'Digit revealed' : `${justRevealed.size} digits revealed`} — it
+          is on the keyboard too
+        </p>
+      ) : (
+        <p className="tiny faint center">
+          {`${shown.size} of ${plural(schedule.size, 'digit')} shown.`}
+          {next !== null ? ` Next after guess ${next}.` : ''}
+        </p>
+      )}
     </div>
   );
 }

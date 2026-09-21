@@ -14,6 +14,7 @@ import { useMajors } from '@/data/liquipedia/useMajors';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import { deal, rotationKey } from '@/games/shared/rotation';
+import { useEventMode } from '@/games/shared/mode';
 import { poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { moneyShort, ordinal, playerMoney, plural } from '@/lib/format';
 import { readLocal, writeLocal } from '@/lib/storage';
@@ -58,6 +59,7 @@ export default function CareerPathGame() {
 
 function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools: Pools | null }) {
   const [choice, setChoice] = usePoolChoice();
+  const [event] = useEventMode();
   const [mode, setMode] = useState<Mode>('order');
   const [game, setGame] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -66,12 +68,12 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
   const answerable = useMemo(() => majors.eligible(roster.players), [roster, majors]);
 
   const players = useMemo(
-    () => resolvePool(roster, pools, choice, majors.eligible, 10),
-    [roster, pools, choice, majors],
+    () => resolvePool(roster, pools, event, choice, majors.eligible, 10),
+    [roster, pools, event, choice, majors],
   );
 
   const start = useCallback(() => {
-    const key = rotationKey(meta.id, ...poolScope(choice));
+    const key = rotationKey(meta.id, ...poolScope(event, choice));
     const drawn = deal(players, readLocal<string[]>(key, []));
     if (!drawn) {
       setError(`No player in this pool has ${majors.minAppearances} majors on record.`);
@@ -80,7 +82,7 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
     writeLocal(key, drawn.seen);
     setError(null);
     setGame(createGame(drawn.pick, majors.resultsFor(drawn.pick.id), mode));
-  }, [players, choice, majors, mode]);
+  }, [players, event, choice, majors, mode]);
 
   const note = <RosterNote what="Results" generated={majors.generated} />;
 
@@ -91,6 +93,7 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
           <PoolSetup
             roster={roster}
             pools={pools}
+            event={event}
             value={choice}
             onChange={setChoice}
             eligible={majors.eligible}
@@ -130,7 +133,6 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
   const finished = game.status !== 'playing';
   const visible = game.clues.slice(0, game.revealed);
   const guessedIds = new Set(game.guesses.map((p) => p.id));
-  const shownIds = new Set(game.clues.map((clue) => clue.result.tournament.name));
 
   return (
     <GameShell
@@ -149,7 +151,7 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
     >
       <div className="stack">
         <div className="stats">
-          <Stat label="Clues shown" value={`${game.revealed}/${game.clues.length}`} />
+          <Stat label="Clues used" value={`${finished ? game.earned : game.revealed}/${game.clues.length}`} />
           <Stat label="Guesses" value={game.guesses.length} />
           <Stat label="Mode" value={game.mode === 'order' ? 'Order' : 'Random'} />
         </div>
@@ -158,15 +160,29 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
           <div className="card__title">
             {game.mode === 'order' ? 'Career path — oldest first' : 'Career path — random order'}
           </div>
+          {/*
+            One list, start to finish. Ending the round fills in the rest of the
+            ten *here*, continuing what you were already reading, rather than
+            printing a second copy of the career in a card underneath the
+            answer. Clues you never needed are dimmed.
+          */}
           <ol className="cp-path list-reset">
             {visible.map((clue, index) => (
               <ClueRow
                 key={clue.result.tournament.name}
                 result={clue.result}
                 isNew={index === visible.length - 1 && !finished}
+                dim={finished && index >= game.earned}
               />
             ))}
           </ol>
+          {finished && game.clues.length > game.earned ? (
+            <p className="tiny faint" style={{ margin: 0 }}>
+              You got there on {plural(game.earned, 'clue')} — the dimmed{' '}
+              {plural(game.clues.length - game.earned, 'result')} below{' '}
+              {game.clues.length - game.earned === 1 ? 'was' : 'were'} still to come.
+            </p>
+          ) : null}
         </section>
 
         {finished ? (
@@ -178,26 +194,6 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
               The player was <strong>{game.secret.name}</strong>.
             </Banner>
             <SecretCard player={game.secret} />
-
-            {/*
-             * The whole record, not just the ten clues. Half the fun of being
-             * told the answer is seeing the career you were only shown a
-             * tenth of.
-             */}
-            <section className="card stack-sm">
-              <div className="card__title">
-                Every major — {plural(game.career.length, 'result')}
-              </div>
-              <ol className="cp-path cp-path--full list-reset">
-                {game.career.map((result) => (
-                  <ClueRow
-                    key={result.tournament.name}
-                    result={result}
-                    dim={!shownIds.has(result.tournament.name)}
-                  />
-                ))}
-              </ol>
-            </section>
 
             <button type="button" className="btn btn--primary btn--lg btn--block" onClick={start}>
               Next player
@@ -211,11 +207,16 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
               exclude={guessedIds}
               autoFocus
             />
-            <div className="row">
+            {/*
+              Side by side: taking a clue and quitting are the two ways out of a
+              round you are stuck in, and they belong on the same line so you
+              can weigh one against the other. Give up is the red one, on the
+              right, where a destructive action is expected.
+            */}
+            <div className="action-pair">
               <button
                 type="button"
                 className="btn"
-                style={{ flex: 1 }}
                 onClick={() => setGame(revealNext(game))}
                 disabled={cluesLeft(game) === 0}
               >
@@ -223,9 +224,7 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
                   ? 'All clues revealed — last guess!'
                   : `Reveal next clue (${cluesLeft(game)} left)`}
               </button>
-            </div>
-            <div className="row" style={{ justifyContent: 'center' }}>
-              <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />
+              <GiveUpButton onGiveUp={() => setGame(giveUp(game))} variant="danger" />
             </div>
           </div>
         )}

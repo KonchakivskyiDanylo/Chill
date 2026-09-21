@@ -13,7 +13,9 @@ import { useRoster } from '@/data/liquipedia/useRoster';
 import { formatClock } from '@/lib/format';
 import { useBestScore } from '@/lib/storage';
 import { getGame } from '@/games/registry';
-import { buildCriteria, type Criterion } from './criteria';
+import { activePool, useEventMode } from '@/games/shared/mode';
+import { poolPlayers } from '@/games/shared/pool';
+import { buildCriteria, buildPoolCriteria, type Criterion } from './criteria';
 import './list.css';
 
 const meta = getGame('list')!;
@@ -37,10 +39,29 @@ export default function ListGame() {
 }
 
 function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: Pools | null }) {
-  const criteria = useMemo(() => buildCriteria(roster, facts, pools), [roster, facts, pools]);
+  const [event] = useEventMode();
+  const pool = activePool(pools, event);
+
+  /**
+   * The lists on offer: this field's, or the all-time set.
+   *
+   * A field is a hundred players, so every list it can produce is derived on
+   * the spot — see `buildPoolCriteria`. If the field is too small to fill even
+   * one list the all-time set stands in, which is what the note on the setup
+   * screen is for.
+   */
+  const criteria = useMemo(() => {
+    if (pool) {
+      const scoped = buildPoolCriteria(pool, poolPlayers(roster, pools, event), facts);
+      if (scoped.length > 0) return scoped;
+    }
+    return buildCriteria(roster, facts, pools);
+  }, [pool, roster, facts, pools, event]);
 
   const [difficulty, setDifficulty] = useState<Difficulty>('easy');
   const [criterion, setCriterion] = useState<Criterion | null>(null);
+  /** The category search box — see `ListPicker`. */
+  const [query, setQuery] = useState('');
   const [running, setRunning] = useState(false);
   const [finished, setFinished] = useState(false);
   /** Ended by the give-up button rather than by the clock. */
@@ -109,9 +130,25 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
       return;
     }
 
-    adjustTime(BONUS_SECONDS);
+    /*
+     * Naming the last one ends the round, then and there.
+     *
+     * It used to keep the clock running on an empty list with nothing left to
+     * type, until time ran out and the game said "Time! 14 of 14" — which is a
+     * win reported as though it were a loss, after thirty seconds of sitting
+     * there. Clearing the list is the best thing that can happen in this game
+     * and it should be the thing that stops it.
+     */
+    const complete = found.length + 1 >= criterion.answers.length;
+    if (complete) {
+      setRunning(false);
+      setFinished(true);
+      setFeedback(null);
+    } else {
+      adjustTime(BONUS_SECONDS);
+      setFeedback({ tone: 'var(--success)', message: `${player.name} +${BONUS_SECONDS}s` });
+    }
     setFound((prev) => [player, ...prev]);
-    setFeedback({ tone: 'var(--success)', message: `${player.name} +${BONUS_SECONDS}s` });
   };
 
   if (criteria.length === 0) {
@@ -147,26 +184,33 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
             </OptionGrid>
           </section>
 
-          <section className="card stack">
-            <div className="card__title">Pick a list</div>
-            <OptionGrid>
-              {criteria.map((option) => (
-                <OptionCard
-                  key={option.id}
-                  label={option.title}
-                  hint={
-                    <>
-                      {option.subtitle}
-                      <span className="tiny faint" style={{ display: 'block', marginTop: 4 }}>
-                        {option.answers.length} to find
-                      </span>
-                    </>
-                  }
-                  onClick={() => setCriterion(option)}
-                />
-              ))}
-            </OptionGrid>
-          </section>
+          {pool ? (
+            <p className="small muted center" style={{ margin: 0 }}>
+              Every list below is the <strong>{pool.label}</strong> field only.
+            </p>
+          ) : null}
+
+          {/*
+            Random first, then the list — the same shape as Tenaball's picker,
+            and for the same reason. The categories grew from five hand-picked
+            ones to a few dozen, which is past the point where a wall of cards
+            is a choice rather than a search.
+          */}
+          <button
+            type="button"
+            className="btn btn--primary btn--lg btn--block"
+            onClick={() => setCriterion(criteria[Math.floor(Math.random() * criteria.length)])}
+          >
+            🎲 Random list
+          </button>
+
+          <ListPicker
+            criteria={criteria}
+            query={query}
+            onQuery={setQuery}
+            onPick={setCriterion}
+            scope={pool?.label ?? null}
+          />
         </div>
       </GameShell>
     );
@@ -263,14 +307,16 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
         {finished ? (
           <div className="stack">
             <Banner
-              tone={found.length >= criterion.answers.length ? 'success' : 'info'}
+              tone={missed.length === 0 ? 'success' : 'info'}
               title={
-                found.length >= criterion.answers.length
-                  ? `Perfect — all ${criterion.answers.length}!`
+                missed.length === 0
+                  ? `You win — all ${criterion.answers.length} of them!`
                   : `${gaveUp ? 'Gave up' : 'Time!'} ${found.length} of ${criterion.answers.length}`
               }
             >
-              {missed.length > 0 ? `You missed ${missed.length}.` : 'You named every single one.'}
+              {missed.length > 0
+                ? `You missed ${missed.length}.`
+                : `Cleared the whole list with ${formatClock(timeLeft)} on the clock.`}
             </Banner>
 
             {missed.length > 0 ? (
@@ -304,4 +350,111 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
       </div>
     </GameShell>
   );
+}
+
+/**
+ * The list picker: a search box over grouped categories.
+ *
+ * Same component shape as Tenaball's, deliberately — the two games ask the
+ * same question ("which of these dozens do you want?") and answering it in two
+ * different ways on two adjacent pages is the kind of thing that makes a site
+ * feel assembled rather than designed.
+ *
+ * Grouped by what the list is about, because "FNCS grand final winners —
+ * Europe" and "Players with 3+ FNCS wins" are neighbours in a player's head
+ * and were forty cards apart in an alphabetical wall.
+ */
+function ListPicker({
+  criteria,
+  query,
+  onQuery,
+  onPick,
+  scope,
+}: {
+  criteria: Criterion[];
+  query: string;
+  onQuery: (value: string) => void;
+  onPick: (criterion: Criterion) => void;
+  /** The event field in force, if any — shown so the header says what these are. */
+  scope: string | null;
+}) {
+  const needle = query.trim().toLowerCase();
+  const matching = needle
+    ? criteria.filter(
+        (entry) =>
+          entry.title.toLowerCase().includes(needle) ||
+          (entry.subtitle ?? '').toLowerCase().includes(needle),
+      )
+    : criteria;
+
+  const grouped = new Map<string, Criterion[]>();
+  for (const entry of matching) {
+    const group = groupOf(entry);
+    const bucket = grouped.get(group);
+    if (bucket) bucket.push(entry);
+    else grouped.set(group, [entry]);
+  }
+
+  return (
+    <section className="card stack">
+      <div className="row-between">
+        <div className="card__title" style={{ marginBottom: 0 }}>
+          {scope ? `Or pick a ${scope} list` : 'Or pick a list'}
+        </div>
+        <span className="tiny faint">{matching.length} available</span>
+      </div>
+      <input
+        className="input"
+        value={query}
+        placeholder="Search lists — “FNCS”, “Europe”, “earnings”…"
+        onChange={(event) => onQuery(event.target.value)}
+        aria-label="Search lists"
+        autoComplete="off"
+        spellCheck={false}
+      />
+      {matching.length === 0 ? (
+        <p className="small muted">Nothing matches “{query}”.</p>
+      ) : (
+        <div className="picker-list">
+          {[...grouped].map(([group, entries]) => (
+            <div key={group} className="stack-sm">
+              <h3 className="picker-list__head">{group}</h3>
+              <div className="picker-list__group">
+                {entries.map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    className="picker-option"
+                    title={entry.subtitle}
+                    onClick={() => onPick(entry)}
+                  >
+                    {entry.title}{' '}
+                    <span className="faint">· {entry.answers.length}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Which heading a list sits under, read off its id prefix. */
+function groupOf(criterion: Criterion): string {
+  const [kind] = criterion.id.split(':');
+  switch (kind) {
+    case 'pool':
+      return 'Qualified fields';
+    case 'fncs':
+    case 'fncs-wins':
+      return 'FNCS';
+    case 'earnings':
+      return 'Earnings';
+    case 'won-in-year':
+      return 'Year by year';
+    default:
+      return 'Titles';
+  }
 }

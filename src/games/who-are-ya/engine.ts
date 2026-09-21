@@ -30,9 +30,13 @@ export interface GameState {
   secret: RosterPlayer;
   /** Clues in reveal order. */
   clues: TeammateClue[];
-  /** Every teammate on record, most shared first — shown once the round ends. */
-  all: TeammateClue[];
   revealed: number;
+  /**
+   * How many clues were showing when the round ended — see the same field in
+   * Career Path. Ending a round turns the rest of the clue list face up, so
+   * this is the number that says how much you actually needed.
+   */
+  earned: number;
   guesses: RosterPlayer[];
   status: 'playing' | 'won' | 'lost';
 }
@@ -59,7 +63,7 @@ export function createGame(
   const rng = makeRng(seed);
   const top = clues.slice(0, MAX_CLUES);
   const ordered = mode === 'random' ? shuffle(rng, top) : [...top].reverse();
-  return { mode, secret, clues: ordered, all: [...clues], revealed: 1, guesses: [], status: 'playing' };
+  return { mode, secret, clues: ordered, revealed: 1, earned: 1, guesses: [], status: 'playing' };
 }
 
 export function submitGuess(state: GameState, guess: RosterPlayer): GameState {
@@ -67,14 +71,21 @@ export function submitGuess(state: GameState, guess: RosterPlayer): GameState {
   if (state.guesses.some((g) => g.id === guess.id)) return state;
 
   const guesses = [...state.guesses, guess];
-  if (guess.id === state.secret.id) return { ...state, guesses, status: 'won' };
+  // Winning shows the rest of the clue list — the teammates the round was
+  // holding back, not every teammate on record. Ten names you can read against
+  // the ones you were given; the full career list was a different question.
+  if (guess.id === state.secret.id) {
+    return { ...state, guesses, revealed: state.clues.length, status: 'won' };
+  }
   if (state.revealed >= state.clues.length) return { ...state, guesses, status: 'lost' };
-  return { ...state, guesses, revealed: state.revealed + 1 };
+  const revealed = state.revealed + 1;
+  return { ...state, guesses, revealed, earned: revealed };
 }
 
 export function revealNext(state: GameState): GameState {
   if (state.status !== 'playing' || state.revealed >= state.clues.length) return state;
-  return { ...state, revealed: state.revealed + 1 };
+  const revealed = state.revealed + 1;
+  return { ...state, revealed, earned: revealed };
 }
 
 /** Ends the round unsolved, with every remaining teammate revealed. */

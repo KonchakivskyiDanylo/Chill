@@ -158,13 +158,15 @@ export function submit(state: GameState): GameState {
   }
 
   /*
-   * How close the guess was, as a number rather than the traditional "One
-   * away…".
+   * How close the guess was — but only when that is worth saying.
    *
-   * "One away" only ever fires on three-of-four, so it says nothing on a guess
-   * that was two-and-two — which is the guess a player most needs telling
-   * about, because it means they have merged two different groups. Reporting
-   * the best overlap covers both and is a stronger hint besides.
+   * Reported for three-of-four and nothing else. Two-of-four was also being
+   * announced, and it is almost always true: pick any four from a board of
+   * sixteen holding four groups and two of them land together by accident more
+   * often than not. So "2 of those 4 belong to one group" fired on most wrong
+   * guesses while telling the player nothing they could act on — a hint that
+   * common reads as noise, and it made the genuine three-of-four hint easy to
+   * scroll past.
    */
   const best = Math.max(
     ...unsolved.map((group) => group.players.filter((player) => selectedIds.has(player.id)).length),
@@ -175,7 +177,7 @@ export function submit(state: GameState): GameState {
     mistakes,
     selected: [],
     status: mistakes >= MAX_MISTAKES ? 'lost' : 'playing',
-    near: best,
+    near: best >= GROUP_SIZE - 1 ? best : null,
   };
 }
 

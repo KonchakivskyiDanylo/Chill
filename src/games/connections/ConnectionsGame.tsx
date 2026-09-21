@@ -14,6 +14,7 @@ import { useOrgs } from '@/data/liquipedia/useOrgs';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import { useTeammates } from '@/data/liquipedia/useTeammates';
+import { useEventMode } from '@/games/shared/mode';
 import { resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { getGame } from '@/games/registry';
 import {
@@ -68,13 +69,14 @@ function Game({
   pools: Pools | null;
 }) {
   const [choice, setChoice] = usePoolChoice();
+  const [event] = useEventMode();
   const [game, setGame] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const eligible = useMemo(() => facts.eligible(3), [facts]);
   const players = useMemo(
-    () => resolvePool(roster, pools, choice, eligible, 80),
-    [roster, pools, choice, eligible],
+    () => resolvePool(roster, pools, event, choice, eligible, 80),
+    [roster, pools, event, choice, eligible],
   );
 
   const start = useCallback(() => {
@@ -94,6 +96,7 @@ function Game({
           <PoolSetup
             roster={roster}
             pools={pools}
+            event={event}
             value={choice}
             onChange={setChoice}
             eligible={eligible}
@@ -162,17 +165,19 @@ function Game({
         ) : null}
 
         {/*
-         * How close the last guess was, stated as a count. Far more use than
-         * the usual "One away…", which stays silent on the two-and-two guess
-         * that means you have merged two groups.
+         * One away, and only one away.
+         *
+         * The engine reports `near` for three-of-four and nothing else — see
+         * the note on `submit`. Two of any four landing in the same group is
+         * close to chance on a sixteen-card board, so saying so every time was
+         * noise that buried the one hint worth reading.
          */}
         {game.near !== null && !finished ? (
-          <Banner tone={game.near === GROUP_SIZE - 1 ? 'info' : 'danger'}>
+          <Banner tone="info">
             <strong>
               {game.near} of those {GROUP_SIZE}
             </strong>{' '}
-            {game.near === 1 ? 'belongs' : 'belong'} to one group
-            {game.near === GROUP_SIZE - 1 ? ' — swap one out.' : '.'}
+            belong to one group — swap one out.
           </Banner>
         ) : null}
 

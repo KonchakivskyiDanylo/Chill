@@ -1,6 +1,15 @@
-import type { FameTier } from '@/data/types';
 import { COUNTRY_CODES } from './countries';
 import { loadJson } from './files';
+
+/**
+ * The difficulty band a player sits in.
+ *
+ * A column in `players.json`, maintained by the notebook — the roster is the
+ * only thing that knows it, so it is declared here. It used to live in
+ * `data/types.ts` alongside the Wikipedia import's domain model, which was
+ * deleted once no game read that import any more.
+ */
+export type FameTier = 'easy' | 'medium' | 'hard';
 
 /**
  * The Liquipedia roster.

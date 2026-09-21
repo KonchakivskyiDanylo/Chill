@@ -46,7 +46,9 @@ export function RegionCards({
 }) {
   const options: RegionChoice[] = [null, ...regions];
   return (
-    <OptionGrid>
+    // Compact: a region card is a flag and two words, so it has no business
+    // being as tall as a difficulty card that carries a sentence and a number.
+    <OptionGrid compact>
       {options.map((region) => (
         <OptionCard
           key={region ?? 'all'}

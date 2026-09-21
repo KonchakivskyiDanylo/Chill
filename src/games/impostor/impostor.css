@@ -1,7 +1,11 @@
+/* Four across at most: a board of eight read as a single long line of names on
+   a wide screen, which is a list rather than a grid to scan. */
 .imp-grid {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  max-width: 660px;
+  margin: 0 auto;
 }
 
 /*

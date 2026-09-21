@@ -7,19 +7,20 @@ import { DIFFICULTIES, type Difficulty } from './difficulty';
 /**
  * Who a game may ask about.
  *
- * Three independent narrowings used to live in three games in three different
- * shapes; this is the one answer. A choice is either an *event pool* or the
- * roster, and they behave differently on purpose:
+ * Two independent decisions, deliberately kept apart:
  *
- *   event pool   a fixed field — the eighty players at the Esports World Cup,
- *                the eighty-two at the Globals. Nothing narrows it further.
- *                Eighty players is already the smallest a game can run on, and
- *                "Globals, Asia, Hard" would leave three.
- *   roster       everything, narrowed by region, difficulty and whether the
- *                player is still competing.
+ *   the event mode   a fixed field — the eighty players at the Esports World
+ *                    Cup, the eighty-two at the Globals. Chosen once on the
+ *                    home page and in force across the whole site, because
+ *                    "this week everything is about the Globals" is a mood you
+ *                    are in, not a per-game setting. See `mode.ts`.
+ *   the pool choice  how the roster is narrowed when no event is in force:
+ *                    random, or region + difficulty + status.
  *
- * So the picker is genuinely modal, and the UI says so rather than greying out
- * five controls the moment a pool is chosen.
+ * The event used to be a fourth field in `PoolChoice`, picked from a row of
+ * cards at the top of all eight setup screens. That put a site-wide mood inside
+ * a per-game form, and left every setup screen carrying four sections where
+ * three of them switched off the moment you used the first.
  */
 
 /**
@@ -46,32 +47,62 @@ export type Level = Difficulty | 'any';
 
 export const LEVELS: Level[] = ['easy', 'medium', 'hard', 'any'];
 
+/**
+ * Random, or narrowed by hand.
+ *
+ * The setup screen opens on `random` and shows nothing but Start. Eight games
+ * used to greet a first-time player with stacked sections of option cards —
+ * who, where, how hard, still competing — before they could find out what the
+ * game even was. None of that is a decision anyone can make usefully before
+ * their first round; all of it is worth having by the tenth.
+ */
+export type PickMode = 'random' | 'custom';
+
 export interface PoolChoice {
-  /** An event pool id, or null for the roster. */
-  event: string | null;
+  mode: PickMode;
+  /** Remembered while on `random`, so switching back to Custom restores it. */
   region: RegionChoice;
   difficulty: Level;
   status: StatusChoice;
 }
 
 export const DEFAULT_POOL: PoolChoice = {
-  event: null,
+  mode: 'random',
   region: null,
   difficulty: 'medium',
   status: 'all',
 };
 
+/** What `random` actually means: no narrowing of any kind. */
+const RANDOM: Omit<PoolChoice, 'mode'> = {
+  region: null,
+  difficulty: 'any',
+  status: 'all',
+};
+
+/**
+ * The narrowing a choice actually applies.
+ *
+ * On `random` the stored region/difficulty/status are ignored rather than
+ * overwritten, so a player who spent a minute building "Europe, Hard, Active",
+ * hit Random for one round and came back still has it.
+ */
+export function effective(choice: PoolChoice): Omit<PoolChoice, 'mode'> {
+  return choice.mode === 'random' ? RANDOM : choice;
+}
+
 /**
  * The chosen pool, remembered across games and reloads.
  *
- * One setting for the whole site, like the difficulty it replaces: picking the
- * Globals in Fortnitedle and then opening Career Path should keep you on the
- * Globals.
+ * One setting for the whole site, like the difficulty it replaces: narrowing to
+ * Europe in Fortnitedle and then opening Career Path should keep you on Europe.
  */
 export function usePoolChoice(): [PoolChoice, (next: PoolChoice) => void] {
   const [value, setValue] = useLocalState<PoolChoice>('pool', DEFAULT_POOL);
   // Written by an older build, or hand-edited: fill in anything missing rather
-  // than dropping someone back to the default for one absent key.
+  // than dropping someone back to the default for one absent key. Older builds
+  // stored an `event` here too; it is read from `mode.ts` now, and a stale copy
+  // riding along in this object is harmless because nothing looks at it.
   return [{ ...DEFAULT_POOL, ...value }, setValue];
 }
 
@@ -92,75 +123,80 @@ function withStatus(status: StatusChoice, eligible?: Eligible): Eligible {
   };
 }
 
+/** The roster rows that make up one event's field, in roster order. */
+export function poolPlayers(
+  roster: Roster,
+  pools: Pools | null,
+  event: string | null,
+): RosterPlayer[] {
+  const pool = pools?.get(event);
+  if (!pool) return [];
+  const byId = new Map(roster.players.map((player) => [player.id, player]));
+  return pool.players
+    .map((id) => byId.get(id))
+    .filter((player): player is RosterPlayer => Boolean(player));
+}
+
 /**
  * The players a game may draw from.
  *
  * `minimum` only applies to the roster branch: a tier too small to play widens
- * into the next one (see `Roster.playersFor`). An event pool never widens —
+ * into the next one (see `Roster.playersFor`). An event field never widens —
  * there is nothing to widen into, and silently adding players who did not
- * qualify would be a lie about what the pool is.
+ * qualify would be a lie about what the field is.
  */
 export function resolvePool(
   roster: Roster,
   pools: Pools | null,
+  event: string | null,
   choice: PoolChoice,
   eligible?: Eligible,
   minimum = 1,
 ): RosterPlayer[] {
-  const pool = pools?.get(choice.event);
-  if (pool) {
-    const byId = new Map(roster.players.map((player) => [player.id, player]));
-    const players = pool.players
-      .map((id) => byId.get(id))
-      .filter((player): player is RosterPlayer => Boolean(player));
+  if (pools?.get(event)) {
+    const players = poolPlayers(roster, pools, event);
     return eligible ? eligible(players) : players;
   }
-  const filter = withStatus(choice.status, eligible);
-  if (choice.difficulty === 'any') {
+  const { region, difficulty, status } = effective(choice);
+  const filter = withStatus(status, eligible);
+  if (difficulty === 'any') {
     // Every band at once, so there is nothing to widen into and no minimum to
     // meet — this is already the widest the roster goes.
-    return DIFFICULTIES.flatMap((level) => roster.exactly(level, { region: choice.region, eligible: filter }));
+    return DIFFICULTIES.flatMap((level) => roster.exactly(level, { region, eligible: filter }));
   }
-  return roster.playersFor(choice.difficulty, {
-    minimum,
-    region: choice.region,
-    eligible: filter,
-  });
+  return roster.playersFor(difficulty, { minimum, region, eligible: filter });
 }
 
 /** Exactly this tier under the current choice, with no widening — what a card counts. */
 export function countFor(
   roster: Roster,
   choice: PoolChoice,
-  difficulty: Level,
+  level: Level,
   eligible?: Eligible,
 ): number {
-  const filter = withStatus(choice.status, eligible);
-  if (difficulty === 'any') {
+  const { region, status } = effective(choice);
+  const filter = withStatus(status, eligible);
+  if (level === 'any') {
     return DIFFICULTIES.reduce(
-      (n, level) => n + roster.exactly(level, { region: choice.region, eligible: filter }).length,
+      (n, band) => n + roster.exactly(band, { region, eligible: filter }).length,
       0,
     );
   }
-  return roster.exactly(difficulty, { region: choice.region, eligible: filter }).length;
+  return roster.exactly(level, { region, eligible: filter }).length;
 }
 
 /**
  * The parts of a choice that change who is in the bag.
  *
  * Fed to `rotationKey`, so switching region or difficulty starts its own
- * no-repeat cycle instead of poisoning the one you were on. An event pool is
+ * no-repeat cycle instead of poisoning the one you were on. An event field is
  * keyed by itself alone — the other three do not apply to it, and including
  * them would split one eighty-player cycle into a dozen.
  */
-export function poolScope(choice: PoolChoice): (string | null)[] {
-  if (choice.event) return ['event', choice.event];
-  return ['roster', choice.region, choice.difficulty, choice.status];
-}
-
-/** Short label for the chip shown while playing. */
-export function poolLabel(choice: PoolChoice, pools: Pools | null): string {
-  return pools?.get(choice.event)?.label ?? (choice.region ?? 'All regions');
+export function poolScope(event: string | null, choice: PoolChoice): (string | null)[] {
+  if (event) return ['event', event];
+  const { region, difficulty, status } = effective(choice);
+  return ['roster', region, difficulty, status];
 }
 
 /** The career-earnings range a difficulty actually covers. */
@@ -183,13 +219,14 @@ export interface TierBand {
  * chosen it reads `regionTier`, so the numbers describe the band you are
  * actually about to play — Asia's Easy is not Europe's Easy.
  */
-export function tierBands(roster: Roster, choice: PoolChoice): Partial<Record<Difficulty, TierBand>> {
+export function tierBands(
+  roster: Roster,
+  choice: PoolChoice,
+): Partial<Record<Difficulty, TierBand>> {
+  const { region, status } = effective(choice);
   const out: Partial<Record<Difficulty, TierBand>> = {};
   for (const level of DIFFICULTIES) {
-    const players = roster.exactly(level, {
-      region: choice.region,
-      eligible: withStatus(choice.status),
-    });
+    const players = roster.exactly(level, { region, eligible: withStatus(status) });
     if (players.length === 0) continue;
     let min = Infinity;
     let max = 0;

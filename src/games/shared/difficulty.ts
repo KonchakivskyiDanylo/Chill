@@ -1,4 +1,4 @@
-import type { FameTier } from '@/data/types';
+import type { FameTier } from '@/data/liquipedia/roster';
 
 /**
  * The fame difficulty scale, used by Higher or Lower and Wordle.
@@ -19,7 +19,14 @@ export interface DifficultyMeta {
   id: Difficulty;
   label: string;
   icon: string;
-  /** Who you get asked about. */
+  /**
+   * Who you get asked about, in as few words as it takes.
+   *
+   * One short clause, because the card carrying it also prints the earnings
+   * band the level covers — which is the same sentence, said precisely. Two
+   * lines of prose above that number was one choice explained three times,
+   * four cards across.
+   */
   blurb: string;
 }
 
@@ -28,18 +35,18 @@ export const DIFFICULTY_META: Record<Difficulty, DifficultyMeta> = {
     id: 'easy',
     label: 'Easy',
     icon: '🟢',
-    blurb: 'The names everyone knows — World Cup winners, FNCS champions, the biggest earners.',
+    blurb: 'The names everyone knows.',
   },
   medium: {
     id: 'medium',
     label: 'Medium',
     icon: '🟡',
-    blurb: 'Regulars of the competitive scene: known if you watch, not household names.',
+    blurb: 'Regulars of the competitive scene.',
   },
   hard: {
     id: 'hard',
     label: 'Hard',
     icon: '🔴',
-    blurb: 'Deep cuts — regional winners and one-off qualifiers only the scene remembers.',
+    blurb: 'Deep cuts only the scene remembers.',
   },
 };

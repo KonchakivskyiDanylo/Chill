@@ -1,8 +1,17 @@
-import type { Player } from '@/data/types';
 import { avatarColors, initials } from '@/lib/text';
 
-/** Everything the avatar needs, so rows from either data source can use it. */
-type Avatarable = Pick<Player, 'id' | 'name' | 'photoUrl'>;
+/**
+ * Everything the avatar needs, and nothing else.
+ *
+ * Structural rather than a `Pick` of a row type: the avatar is happy to render
+ * anything with a stable id and a name, and tying it to one table's shape only
+ * ever meant it could not render the other's.
+ */
+interface Avatarable {
+  id: string;
+  name: string;
+  photoUrl: string | null;
+}
 
 /**
  * Headshot when the data source provides one, otherwise a stable colour +

@@ -10,10 +10,25 @@ export function money(value: number): string {
   return usd.format(Math.round(value));
 }
 
-/** Compact money for tight spaces: $1.1M, $845K. */
+/**
+ * Compact money for tight spaces: $1.1M, $845K.
+ *
+ * Trailing zeros are dropped, so a round million reads "$1M" rather than
+ * "$1.00M" — which matters most where the number is a threshold someone chose
+ * ("$1M+ career earnings"), and the decimals imply a precision nobody meant.
+ */
 export function moneyShort(value: number): string {
-  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 2)}M`;
-  if (value >= 1_000) return `$${Math.round(value / 1_000)}K`;
+  if (value >= 1_000_000) {
+    const millions = (value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 2);
+    // Only ever strip zeros that sit after a decimal point: a blanket
+    // `/\.?0+$/` turns "10" into "1" and prints $10M as $1M.
+    return `$${millions.includes('.') ? millions.replace(/\.?0+$/, '') : millions}M`;
+  }
+  if (value >= 1_000) {
+    const thousands = Math.round(value / 1_000);
+    // $999,600 rounds to 1000K, which is a million with the wrong unit on it.
+    return thousands >= 1_000 ? '$1M' : `$${thousands}K`;
+  }
   return `$${Math.round(value)}`;
 }
 

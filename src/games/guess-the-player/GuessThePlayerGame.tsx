@@ -12,6 +12,7 @@ import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import { deal, rotationKey } from '@/games/shared/rotation';
+import { useEventMode } from '@/games/shared/mode';
 import { poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { playerMoney } from '@/lib/format';
 import { readLocal, writeLocal } from '@/lib/storage';
@@ -67,19 +68,20 @@ export default function GuessThePlayerGame() {
 
 function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   const [choice, setChoice] = usePoolChoice();
+  const [event] = useEventMode();
   const [mode, setMode] = useState<FeedbackMode>('direction');
   const [game, setGame] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const players = useMemo(
-    () => resolvePool(roster, pools, choice, answerable, 20),
-    [roster, pools, choice],
+    () => resolvePool(roster, pools, event, choice, answerable, 20),
+    [roster, pools, event, choice],
   );
 
   const start = useCallback(() => {
     // A no-repeat cycle per pool, so the same secret does not come round twice
     // in an evening. See `games/shared/rotation.ts`.
-    const key = rotationKey(meta.id, ...poolScope(choice));
+    const key = rotationKey(meta.id, ...poolScope(event, choice));
     const drawn = deal(players, readLocal<string[]>(key, []));
     if (!drawn) {
       setError('No player in this pool has a published birthday and earnings figure.');
@@ -88,7 +90,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
     writeLocal(key, drawn.seen);
     setError(null);
     setGame(gameFor(drawn.pick, mode));
-  }, [players, choice, mode]);
+  }, [players, event, choice, mode]);
 
   if (!game) {
     return (
@@ -97,6 +99,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
           <PoolSetup
             roster={roster}
             pools={pools}
+            event={event}
             value={choice}
             onChange={setChoice}
             eligible={answerable}

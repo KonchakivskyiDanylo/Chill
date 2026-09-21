@@ -16,6 +16,7 @@ import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import { useTeammates } from '@/data/liquipedia/useTeammates';
 import { deal, rotationKey } from '@/games/shared/rotation';
+import { useEventMode } from '@/games/shared/mode';
 import { poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { playerMoney, plural } from '@/lib/format';
 import { readLocal, writeLocal } from '@/lib/storage';
@@ -78,6 +79,7 @@ function Game({
   pools: Pools | null;
 }) {
   const [choice, setChoice] = usePoolChoice();
+  const [event] = useEventMode();
   const [mode, setMode] = useState<Mode>('easy');
   const [game, setGame] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -104,12 +106,12 @@ function Game({
 
   const answerable = useMemo(() => eligible(roster.players), [eligible, roster]);
   const players = useMemo(
-    () => resolvePool(roster, pools, choice, eligible, 10),
-    [roster, pools, choice, eligible],
+    () => resolvePool(roster, pools, event, choice, eligible, 10),
+    [roster, pools, event, choice, eligible],
   );
 
   const start = useCallback(() => {
-    const key = rotationKey(meta.id, ...poolScope(choice));
+    const key = rotationKey(meta.id, ...poolScope(event, choice));
     const drawn = deal(players, readLocal<string[]>(key, []));
     if (!drawn) {
       setError(
@@ -120,7 +122,7 @@ function Game({
     writeLocal(key, drawn.seen);
     setError(null);
     setGame(createGame(drawn.pick, cluesFor(drawn.pick.id), mode));
-  }, [players, choice, cluesFor, mode]);
+  }, [players, event, choice, cluesFor, mode]);
 
   const note = <RosterNote what="Teammates" generated={teammates.generated} />;
 
@@ -131,6 +133,7 @@ function Game({
           <PoolSetup
             roster={roster}
             pools={pools}
+            event={event}
             value={choice}
             onChange={setChoice}
             eligible={eligible}
@@ -171,7 +174,6 @@ function Game({
   const visible = game.clues.slice(0, game.revealed);
   const guessedIds = new Set(game.guesses.map((p) => p.id));
   const withMatches = showsMatches(game.mode);
-  const shownIds = new Set(visible.map((clue) => clue.player.id));
 
   return (
     <GameShell
@@ -190,19 +192,29 @@ function Game({
     >
       <div className="stack">
         <div className="stats">
-          <Stat label="Teammates" value={`${game.revealed}/${game.clues.length}`} />
+          <Stat label="Clues used" value={`${finished ? game.earned : game.revealed}/${game.clues.length}`} />
           <Stat label="Guesses" value={game.guesses.length} />
           <Stat label="Order" value={MODES.find((m) => m.id === game.mode)!.label} />
         </div>
 
         <section className="card stack">
           <div className="card__title">Tournament teammates</div>
+          {/*
+            One list, start to finish — the same change Career Path got. Ending
+            the round fills in the teammates it was still holding back, here,
+            dimmed; it does not print a second list of everyone on record.
+          */}
           <ul className="stack-sm list-reset">
-            {visible.map((clue) => (
+            {visible.map((clue, index) => (
               <li
                 key={clue.player.id}
                 className="row-between"
-                style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', flexWrap: 'nowrap' }}
+                style={{
+                  padding: '8px 0',
+                  borderBottom: '1px solid var(--border)',
+                  flexWrap: 'nowrap',
+                  opacity: finished && index >= game.earned ? 0.55 : 1,
+                }}
               >
                 <PlayerLine
                   player={clue.player}
@@ -217,6 +229,13 @@ function Game({
               </li>
             ))}
           </ul>
+          {finished && game.clues.length > game.earned ? (
+            <p className="tiny faint" style={{ margin: 0 }}>
+              You got there on {plural(game.earned, 'clue')} — the dimmed{' '}
+              {plural(game.clues.length - game.earned, 'teammate')}{' '}
+              {game.clues.length - game.earned === 1 ? 'was' : 'were'} still to come.
+            </p>
+          ) : null}
           <p className="tiny faint">
             Ranked by tournaments entered together, across every event in the export
             {game.mode === 'random' ? ', shown in random order.' : ', fewest first.'}
@@ -229,7 +248,7 @@ function Game({
               tone={game.status === 'won' ? 'success' : 'danger'}
               title={
                 game.status === 'won'
-                  ? `Got it after ${game.revealed} ${game.revealed === 1 ? 'clue' : 'clues'}!`
+                  ? `Got it after ${plural(game.earned, 'clue')}!`
                   : 'Out of clues'
               }
             >
@@ -247,31 +266,6 @@ function Game({
               </div>
             </div>
 
-            {/* Everyone on record, with the counts — including the clues the
-                round never got as far as showing. */}
-            <section className="card stack-sm">
-              <div className="card__title">
-                Every teammate on record — {plural(game.all.length, 'player')}
-              </div>
-              <ul className="stack-sm list-reset">
-                {game.all.map((clue) => (
-                  <li
-                    key={clue.player.id}
-                    className="row-between"
-                    style={{
-                      padding: '6px 0',
-                      borderBottom: '1px solid var(--border)',
-                      flexWrap: 'nowrap',
-                      opacity: shownIds.has(clue.player.id) ? 1 : 0.6,
-                    }}
-                  >
-                    <PlayerLine player={clue.player} size={30} meta={clue.player.countryName} />
-                    <span className="chip nums">{plural(clue.events, 'tournament')}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-
             <button type="button" className="btn btn--primary btn--lg btn--block" onClick={start}>
               Next player
             </button>
@@ -284,18 +278,19 @@ function Game({
               exclude={guessedIds}
               autoFocus
             />
-            <button
-              type="button"
-              className="btn btn--block"
-              onClick={() => setGame(revealNext(game))}
-              disabled={cluesLeft(game) === 0}
-            >
-              {cluesLeft(game) === 0
-                ? 'All teammates revealed — last guess!'
-                : `Reveal next teammate (${cluesLeft(game)} left)`}
-            </button>
-            <div className="row" style={{ justifyContent: 'center' }}>
-              <GiveUpButton onGiveUp={() => setGame(giveUp(game))} />
+            {/* Same pairing as Career Path: take a clue, or stop. */}
+            <div className="action-pair">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setGame(revealNext(game))}
+                disabled={cluesLeft(game) === 0}
+              >
+                {cluesLeft(game) === 0
+                  ? 'All teammates revealed — last guess!'
+                  : `Reveal next teammate (${cluesLeft(game)} left)`}
+              </button>
+              <GiveUpButton onGiveUp={() => setGame(giveUp(game))} variant="danger" />
             </div>
           </div>
         )}

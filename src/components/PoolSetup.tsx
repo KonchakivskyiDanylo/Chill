@@ -2,10 +2,10 @@ import { useMemo, type ReactNode } from 'react';
 import type { Pools } from '@/data/liquipedia/pools';
 import type { Roster } from '@/data/liquipedia/roster';
 import { DIFFICULTY_META } from '@/games/shared/difficulty';
+import { activePool } from '@/games/shared/mode';
 import {
   countFor,
   LEVELS,
-  resolvePool,
   tierBands,
   type Eligible,
   type Level,
@@ -25,20 +25,29 @@ import { OptionCard, OptionGrid } from './ui';
  * first clue was on screen before you had finished reading the options — and
  * changing your mind cost you a round.
  *
- * The event-pool branch hides region, difficulty and status rather than greying
- * them out, because they do not apply at all: a pool is a fixed field of eighty
- * and that is the whole point of it.
+ * It opens closed. A first-time player gets a title, one sentence and Start;
+ * the region, difficulty and status cards are a second click away behind
+ * Choose. They used to be the first thing on the page — three sections and
+ * fourteen cards, roughly a thousand pixels of decisions, before you could find
+ * out what the game was. Nobody can answer "which region?" before their first
+ * round, and everybody can by their tenth, so the cards are still there and
+ * they are still remembered — they are simply no longer the greeting.
+ *
+ * With an event mode in force there is nothing here at all but Start: a fixed
+ * field of eighty cannot be narrowed by region or difficulty and the mode chip
+ * in the header already says which field it is.
  */
 
 const STATUSES: { id: StatusChoice; label: string; hint: string; icon: string }[] = [
   { id: 'all', label: 'Everyone', hint: 'The whole roster, playing or not.', icon: '🌐' },
   { id: 'active', label: 'Active', hint: 'Players still competing today.', icon: '🟢' },
-  { id: 'retired', label: 'Retired', hint: 'Players who have stopped — the history of the scene.', icon: '📼' },
+  { id: 'retired', label: 'Retired', hint: 'Players who have stopped.', icon: '📼' },
 ];
 
 export function PoolSetup({
   roster,
   pools,
+  event,
   value,
   onChange,
   eligible,
@@ -49,6 +58,8 @@ export function PoolSetup({
 }: {
   roster: Roster;
   pools: Pools | null;
+  /** The site-wide event mode, or null for the whole scene. */
+  event: string | null;
   value: PoolChoice;
   onChange: (next: PoolChoice) => void;
   /** This game's own answerability filter, so every count is a count of real answers. */
@@ -61,6 +72,9 @@ export function PoolSetup({
 }) {
   const set = (patch: Partial<PoolChoice>) => onChange({ ...value, ...patch });
 
+  const pool = activePool(pools, event);
+  const custom = value.mode === 'custom';
+
   const difficultyCounts = useMemo(
     () =>
       Object.fromEntries(
@@ -71,144 +85,138 @@ export function PoolSetup({
 
   const bands = useMemo(() => tierBands(roster, value), [roster, value]);
 
-  const poolSizes = useMemo(() => {
-    const sizes = new Map<string, number>();
-    for (const pool of pools?.pools ?? []) {
-      sizes.set(pool.id, resolvePool(roster, pools, { ...value, event: pool.id }, eligible).length);
-    }
-    return sizes;
-  }, [roster, pools, value, eligible]);
-
-  const available = (pools?.pools ?? []).filter((pool) => (poolSizes.get(pool.id) ?? 0) > 0);
-  const onEvent = value.event !== null;
-
   return (
     <div className="stack">
-      {available.length > 0 ? (
+      {pool ? (
+        <p className="small muted center">
+          Playing the <strong>{pool.label}</strong> field —{' '}
+          {plural(pool.players.length, 'player')}. Change or leave the mode from the header.
+        </p>
+      ) : (
         <section className="card stack">
-          <div className="card__title">Who are you playing?</div>
-          <OptionGrid>
-            <OptionCard
-              label={
-                <>
-                  <span aria-hidden="true">🌐</span> Full roster
-                </>
-              }
-              hint="Every player in the export, narrowed by region, level and status."
-              selected={!onEvent}
-              onClick={() => set({ event: null })}
-            />
-            {available.map((pool) => (
-              <OptionCard
-                key={pool.id}
-                label={
-                  <>
-                    <span aria-hidden="true">🏆</span> {pool.label}
-                  </>
-                }
-                hint={
-                  <>
-                    {pool.blurb}
-                    <span className="tiny faint" style={{ display: 'block', marginTop: 4 }}>
-                      {plural(poolSizes.get(pool.id) ?? 0, 'player')} · no levels, no regions
-                    </span>
-                  </>
-                }
-                selected={value.event === pool.id}
-                onClick={() => set({ event: pool.id })}
-              />
-            ))}
-          </OptionGrid>
-        </section>
-      ) : null}
+          <div className="row-between">
+            <div className="card__title" style={{ marginBottom: 0 }}>
+              Who you get
+            </div>
+            {custom ? (
+              <button type="button" className="link-btn tiny" onClick={() => set({ mode: 'random' })}>
+                reset to random
+              </button>
+            ) : null}
+          </div>
 
-      {onEvent ? null : (
-        <>
-          <section className="card stack">
-            <div className="card__title">Region</div>
-            {/* No player counts: a number tells you nothing about whether you
-                will recognise anyone, and the difficulty cards below say what
-                the band actually means in money. */}
-            <RegionCards
-              regions={roster.regions}
-              value={value.region}
-              onChange={(region) => set({ region })}
-            />
-          </section>
+          <div className="difficulty-switch">
+            <button
+              type="button"
+              className="difficulty-switch__btn"
+              aria-pressed={!custom}
+              onClick={() => set({ mode: 'random' })}
+            >
+              <span aria-hidden="true">🎲</span> Random
+            </button>
+            <button
+              type="button"
+              className="difficulty-switch__btn"
+              aria-pressed={custom}
+              onClick={() => set({ mode: 'custom' })}
+            >
+              <span aria-hidden="true">🎛️</span> Choose
+            </button>
+          </div>
 
-          <section className="card stack">
-            <div className="card__title">Difficulty</div>
-            <OptionGrid>
-              {LEVELS.map((id) => {
-                if (id === 'any') {
-                  return (
+          {custom ? (
+            <div className="stack">
+              <div className="stack-sm">
+                <div className="field-label">Region</div>
+                {/* No player counts: a number tells you nothing about whether
+                    you will recognise anyone, and the difficulty cards below
+                    say what the band actually means in money. */}
+                <RegionCards
+                  regions={roster.regions}
+                  value={value.region}
+                  onChange={(region) => set({ region })}
+                />
+              </div>
+
+              <div className="stack-sm">
+                <div className="field-label">Difficulty</div>
+                <OptionGrid>
+                  {LEVELS.map((id) => {
+                    if (id === 'any') {
+                      return (
+                        <OptionCard
+                          key={id}
+                          label={
+                            <>
+                              <span aria-hidden="true">🎲</span> Any
+                            </>
+                          }
+                          hint="No ranking applied."
+                          selected={value.difficulty === 'any'}
+                          disabled={difficultyCounts.any === 0}
+                          onClick={() => set({ difficulty: 'any' })}
+                        />
+                      );
+                    }
+                    const meta = DIFFICULTY_META[id];
+                    const band = bands[id];
+                    return (
+                      <OptionCard
+                        key={id}
+                        label={
+                          <>
+                            <span aria-hidden="true">{meta.icon}</span> {meta.label}
+                          </>
+                        }
+                        hint={
+                          <>
+                            {meta.blurb}
+                            {band ? (
+                              <span className="tiny faint" style={{ display: 'block' }}>
+                                {id === 'easy'
+                                  ? `${moneyShort(band.min)}+ earned`
+                                  : id === 'hard'
+                                    ? `under ${moneyShort(band.max)} earned`
+                                    : `${moneyShort(band.min)} – ${moneyShort(band.max)} earned`}
+                              </span>
+                            ) : null}
+                          </>
+                        }
+                        selected={value.difficulty === id}
+                        // A tier with nobody in it is not a choice.
+                        disabled={difficultyCounts[id] === 0}
+                        onClick={() => set({ difficulty: id })}
+                      />
+                    );
+                  })}
+                </OptionGrid>
+              </div>
+
+              <div className="stack-sm">
+                <div className="field-label">Still competing?</div>
+                <OptionGrid>
+                  {STATUSES.map((status) => (
                     <OptionCard
-                      key={id}
+                      key={status.id}
                       label={
                         <>
-                          <span aria-hidden="true">🎲</span> Random
+                          <span aria-hidden="true">{status.icon}</span> {status.label}
                         </>
                       }
-                      hint="Any player at all, from household names to one-off qualifiers. No ranking applied."
-                      selected={value.difficulty === 'any'}
-                      disabled={difficultyCounts.any === 0}
-                      onClick={() => set({ difficulty: 'any' })}
+                      hint={status.hint}
+                      selected={value.status === status.id}
+                      onClick={() => set({ status: status.id })}
                     />
-                  );
-                }
-                const meta = DIFFICULTY_META[id];
-                const band = bands[id];
-                return (
-                  <OptionCard
-                    key={id}
-                    label={
-                      <>
-                        <span aria-hidden="true">{meta.icon}</span> {meta.label}
-                      </>
-                    }
-                    hint={
-                      <>
-                        {meta.blurb}
-                        {band ? (
-                          <span className="tiny faint" style={{ display: 'block', marginTop: 4 }}>
-                            {id === 'easy'
-                              ? `${moneyShort(band.min)}+ career earnings`
-                              : id === 'hard'
-                                ? `under ${moneyShort(band.max)} career earnings`
-                                : `${moneyShort(band.min)} – ${moneyShort(band.max)} career earnings`}
-                          </span>
-                        ) : null}
-                      </>
-                    }
-                    selected={value.difficulty === id}
-                    // A tier with nobody in it is not a choice.
-                    disabled={difficultyCounts[id] === 0}
-                    onClick={() => set({ difficulty: id })}
-                  />
-                );
-              })}
-            </OptionGrid>
-          </section>
-
-          <section className="card stack">
-            <div className="card__title">Still competing?</div>
-            <OptionGrid>
-              {STATUSES.map((status) => (
-                <OptionCard
-                  key={status.id}
-                  label={
-                    <>
-                      <span aria-hidden="true">{status.icon}</span> {status.label}
-                    </>
-                  }
-                  hint={status.hint}
-                  selected={value.status === status.id}
-                  onClick={() => set({ status: status.id })}
-                />
-              ))}
-            </OptionGrid>
-          </section>
-        </>
+                  ))}
+                </OptionGrid>
+              </div>
+            </div>
+          ) : (
+            <p className="small muted" style={{ margin: 0 }}>
+              Any player, any region, any level. Hit Choose to narrow it down.
+            </p>
+          )}
+        </section>
       )}
 
       {extra}

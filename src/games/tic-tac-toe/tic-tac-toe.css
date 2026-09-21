@@ -1,8 +1,22 @@
+/*
+ * A square board has to be capped, or it eats the screen.
+ *
+ * The cells are `aspect-ratio: 1` in `1fr` columns, so their height is
+ * whatever the page is wide: on a 1120px page that made 268px cells and an
+ * 877px board, and the name input underneath it — the thing you actually type
+ * into — was permanently below the fold. Nothing about this game is easier to
+ * read at 268px than at 130px.
+ *
+ * 540px is three ~124px cells plus the row headers, which is the width a 3x3
+ * grid of short handles wants and leaves the whole game on one screen.
+ */
 .ttt-grid {
   display: grid;
-  grid-template-columns: minmax(84px, 1fr) repeat(3, minmax(96px, 1fr));
+  grid-template-columns: minmax(74px, 0.9fr) repeat(3, minmax(88px, 1fr));
   gap: 6px;
   min-width: 420px;
+  max-width: 540px;
+  margin: 0 auto;
 }
 
 .ttt-corner {

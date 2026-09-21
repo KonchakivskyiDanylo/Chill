@@ -41,7 +41,12 @@ export function GameShell({
   };
 
   return (
-    <div className="page stack-lg">
+    // `page--game`, not the full 1120px: a game is a board, an input and a
+    // paragraph of rules, and all three read worse the wider they get. The
+    // boards cap themselves and were left floating in white space; the rules
+    // ran to 140-character lines. The home page keeps the wide column, because
+    // a grid of ten cards is the one thing here that wants it.
+    <div className="page page--game stack-lg">
       <div className="stack">
         <Link to="/" className="small muted" style={{ width: 'fit-content' }}>
           ← All games

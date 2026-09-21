@@ -153,6 +153,11 @@ textarea {
   max-width: 760px;
 }
 
+/* Every game page. See the note in `GameShell`. */
+.page--game {
+  max-width: 880px;
+}
+
 /* The shell below the header: games list on the left, everything else right. */
 .app__body {
   flex: 1;
@@ -512,6 +517,33 @@ textarea {
   width: 100%;
 }
 
+/*
+ * Two actions that are one decision — "take another clue" next to "give up".
+ *
+ * Shared by Career Path and Who Are Ya, which ask it in the same words. The
+ * first button takes the room it needs and the second is fixed on the right:
+ * they belong on one row because you weigh them against each other, but they
+ * are not equal choices and should not be equal widths.
+ */
+.action-pair {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+.action-pair > .btn:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.action-pair > .btn:last-child {
+  flex: none;
+}
+
+@media (max-width: 460px) {
+  .action-pair {
+    flex-direction: column;
+  }
+}
+
 .btn--lg {
   min-height: 60px;
   font-size: 1.05rem;
@@ -528,6 +560,17 @@ textarea {
   background: var(--danger-soft);
   border-color: rgba(239, 68, 68, 0.4);
   color: var(--danger);
+}
+/* Armed: one more click ends the round. Solid, so it cannot be mistaken. */
+.btn--danger-armed {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+.btn--danger-armed:hover:not(:disabled) {
+  background: var(--danger);
+  border-color: var(--danger);
+  filter: brightness(1.08);
 }
 
 /* ----------------------------------------------------------- option cards -- */
@@ -570,6 +613,26 @@ textarea {
   background: var(--primary-soft);
   box-shadow: inset 0 0 0 1px var(--primary);
 }
+/*
+ * Label-only cards — the regions.
+ *
+ * Sized so all seven sit on one row inside a game card at the page's width:
+ * two rows of region buttons is a paragraph's worth of height to say seven
+ * words. The two-word names wrap inside their card instead, and the grid keeps
+ * every card the same height, so that reads as intentional rather than ragged.
+ */
+.options--compact {
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 6px;
+}
+.options--compact .option {
+  min-height: 0;
+  padding: 9px 10px;
+}
+.options--compact .option__label {
+  font-size: 0.85rem;
+}
+
 .option__label {
   font-weight: 700;
 }
@@ -577,6 +640,158 @@ textarea {
   font-size: 0.82rem;
   color: var(--text-muted);
   line-height: 1.4;
+}
+
+/* A heading for one field inside a card, where .card__title names the card. */
+.field-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* ------------------------------------------------------------ mode chip -- */
+
+/*
+ * The event mode, in the header, on every page.
+ *
+ * Deliberately the loudest thing up there after the wordmark: it changes what
+ * all ten games are about, so a player who forgot they set it has to be able to
+ * see why every question is suddenly about eighty people.
+ */
+.mode-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 6px 5px 11px;
+  border-radius: 999px;
+  background: var(--warning-soft);
+  border: 1px solid rgba(234, 179, 8, 0.45);
+  color: var(--warning);
+  font-size: 0.82rem;
+  font-weight: 700;
+  /* `min-width: 0` so the label below can actually ellipsize: a flex item
+     defaults to its content's width and would push the ✕ off the header. */
+  min-width: 0;
+  max-width: min(42vw, 320px);
+}
+
+.mode-chip__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mode-chip__count {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(234, 179, 8, 0.22);
+  font-variant-numeric: tabular-nums;
+}
+
+.mode-chip__exit {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.mode-chip__exit:hover {
+  background: rgba(234, 179, 8, 0.28);
+}
+
+/*
+ * On a phone the header cannot hold the brand, a badge, two buttons and this.
+ *
+ * The "Prototype" badge is the one that goes: it says the same thing on every
+ * page forever, where the mode chip is the only thing up there that changes
+ * what the site is doing — and it is the only way back out of a mode.
+ *
+ * Selected through `.site-header` because `.chip` sets `display: inline-flex`
+ * at the same specificity and further down the file, so a bare
+ * `.site-header__badge` loses on source order and the badge stays put.
+ */
+@media (max-width: 620px) {
+  .site-header .site-header__badge {
+    display: none;
+  }
+  .site-header__inner {
+    gap: 8px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .mode-chip__count {
+    display: none;
+  }
+  .mode-chip {
+    /* A floor, or flex-shrink collapses it to the ✕ and an ellipsis: the chip
+       is the only exit from a mode, so it has to stay legible before the
+       wordmark beside it does. */
+    min-width: 108px;
+    max-width: 52vw;
+  }
+  .brand {
+    min-width: 0;
+    overflow: hidden;
+  }
+}
+
+/* ------------------------------------------------------- category picker -- */
+
+/*
+ * A search box over headed groups of pills.
+ *
+ * Shared by Tenaball and List, which both outgrew a grid of cards: two hundred
+ * boards and several dozen lists are not a choice you make by scrolling, they
+ * are one you make by typing two words of what you already wanted. Lifted out
+ * of `tenaball.css` when List adopted it — the two setup screens sit one click
+ * apart and asking the same question two different ways looked accidental.
+ */
+.picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.picker-list__head {
+  font-size: 0.72rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.picker-list__group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.picker-option {
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+.picker-option:hover {
+  border-color: var(--primary);
+  background: var(--primary-soft);
 }
 
 /* ----------------------------------------------------------------- chips -- */

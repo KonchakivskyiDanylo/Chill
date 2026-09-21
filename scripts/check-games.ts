@@ -210,11 +210,21 @@ for (const category of ['age', 'earnings', 'fncsWins'] as const) {
   }
   notes.push(`fortnitedle: ${withDigits} answers contain a digit`);
 
-  // The documented schedule, exactly.
-  const one = wordle.revealSchedule('TH0MASHD');
-  check([...one.values()].join() === '3', `fortnitedle: one digit should reveal after 3, got ${[...one.values()]}`);
-  const two = wordle.revealSchedule('A1B2C');
-  check([...two.values()].join() === '2,4', `fortnitedle: two digits should reveal after 2 and 4, got ${[...two.values()]}`);
+  // The documented schedule, exactly: nothing before guess 3, nothing after 5.
+  const cases: [string, string][] = [
+    ['TH0MASHD', '3'],
+    ['A1B2C', '3,4'],
+    ['A309', '3,4,5'],
+    ['LEO2004', '3,4,5,5'],
+  ];
+  for (const [answer, expected] of cases) {
+    const got = [...wordle.revealSchedule(answer).values()].join();
+    check(got === expected, `fortnitedle: ${answer} should reveal after ${expected}, got ${got}`);
+  }
+  check(
+    Math.min(...wordle.revealSchedule('A309').values()) >= wordle.FIRST_REVEAL,
+    'fortnitedle: a digit leaked before the first reveal guess',
+  );
 
   // A perfect solve.
   const game = wordle.gameFor(pool[0]);
@@ -239,7 +249,18 @@ if (majors) {
         game.clues.length <= career.MAX_CLUES,
         `career-path: ${secret.name} got ${game.clues.length} clues, max is ${career.MAX_CLUES}`,
       );
-      check(game.career.length === results.length, `career-path: ${secret.name} lost results from the reveal`);
+      // A correct guess turns the rest of the clue list face up, and records
+      // how many were actually needed.
+      const solved = career.submitGuess(game, secret);
+      check(solved.status === 'won', `career-path: correct guess did not win on ${secret.name}`);
+      check(
+        solved.revealed === game.clues.length,
+        `career-path: winning on ${secret.name} left ${solved.revealed}/${game.clues.length} clues hidden`,
+      );
+      check(
+        solved.earned <= solved.revealed,
+        `career-path: ${secret.name} earned more clues than were revealed`,
+      );
       longest = Math.max(longest, game.clues.length);
 
       if (mode === 'order') {
@@ -288,12 +309,16 @@ if (teammates && facts) {
       const game = whoAreYa.createGame(secret, clues, mode, `wy-${mode}-${secret.id}`);
       check(game !== null, `who-are-ya: could not start on ${secret.name}`);
       if (!game) continue;
-      check(game.all.length === clues.length, `who-are-ya: ${secret.name} lost teammates from the reveal`);
       check(
         !game.clues.some((clue) => clue.player.id === secret.id),
         `who-are-ya: ${secret.name} is listed as their own teammate`,
       );
-      check(whoAreYa.submitGuess(game, secret).status === 'won', 'who-are-ya: correct guess did not win');
+      const solved = whoAreYa.submitGuess(game, secret);
+      check(solved.status === 'won', 'who-are-ya: correct guess did not win');
+      check(
+        solved.revealed === game.clues.length,
+        `who-are-ya: winning on ${secret.name} left ${solved.revealed}/${game.clues.length} clues hidden`,
+      );
     }
   }
 }

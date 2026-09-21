@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useLocalState } from '@/lib/storage';
+import { ModeChip } from './EventMode';
 import { Footer } from './Footer';
 import { SideNav } from './SideNav';
 
@@ -87,10 +88,12 @@ export function Layout({ children }: { children: ReactNode }) {
               Off<span className="brand__accent">Spawn</span>
             </span>
           </Link>
-          <span className="chip chip--primary tiny" style={{ marginLeft: 2 }}>
+          <span className="chip chip--primary tiny site-header__badge" style={{ marginLeft: 2 }}>
             Prototype
           </span>
           <div className="spacer" />
+          {/* Only renders when an event mode is in force — see `EventMode`. */}
+          <ModeChip />
           <button
             type="button"
             className="icon-btn"

@@ -9,7 +9,22 @@ import { useEffect, useState } from 'react';
  * by accident next to "New game". It disarms itself after a few seconds so it
  * never sits there looking like a permanent state.
  */
-export function GiveUpButton({ onGiveUp, label = 'Give up' }: { onGiveUp: () => void; label?: string }) {
+export function GiveUpButton({
+  onGiveUp,
+  label = 'Give up',
+  variant = 'quiet',
+}: {
+  onGiveUp: () => void;
+  label?: string;
+  /**
+   * `quiet` is the small grey control that sits under a board — the default,
+   * because in most games giving up is an escape hatch and should not compete
+   * with the thing you are meant to be doing. `danger` is a full-size red
+   * button for the one layout that pairs it with another action on the same
+   * row, where matching weights is what makes the pair readable as a choice.
+   */
+  variant?: 'quiet' | 'danger';
+}) {
   const [armed, setArmed] = useState(false);
 
   useEffect(() => {
@@ -18,10 +33,15 @@ export function GiveUpButton({ onGiveUp, label = 'Give up' }: { onGiveUp: () => 
     return () => window.clearTimeout(timer);
   }, [armed]);
 
+  const className =
+    variant === 'danger'
+      ? `btn btn--danger${armed ? ' btn--danger-armed' : ''}`
+      : `icon-btn${armed ? ' icon-btn--danger' : ''}`;
+
   return (
     <button
       type="button"
-      className={`icon-btn${armed ? ' icon-btn--danger' : ''}`}
+      className={className}
       aria-label={armed ? 'Confirm giving up' : label}
       onClick={() => {
         if (armed) {

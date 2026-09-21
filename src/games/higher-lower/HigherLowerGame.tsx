@@ -9,6 +9,7 @@ import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import type { Pools } from '@/data/liquipedia/pools';
 import { EXPORT_DATE, SOURCE, type Roster, type RosterPlayer } from '@/data/liquipedia/roster';
+import { useEventMode } from '@/games/shared/mode';
 import { poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { playerMoney, plural } from '@/lib/format';
 import { CountryBadge } from '@/components/CountryBadge';
@@ -66,11 +67,12 @@ export default function HigherLowerGame() {
 
 function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   const [choice, setChoice] = usePoolChoice();
+  const [event] = useEventMode();
   const [category, setCategory] = useState<Category>('earnings');
   const [game, setGame] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const scope = `higher-lower:${category}:${poolScope(choice).join(':')}`;
+  const scope = `higher-lower:${category}:${poolScope(event, choice).join(':')}`;
   const { best, submit: submitBest } = useBestScore(scope);
 
   /**
@@ -84,8 +86,8 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
 
   const players = useMemo(
     // A pair is the smallest run that can be dealt.
-    () => resolvePool(roster, pools, choice, forCategory, 2),
-    [roster, pools, choice, forCategory],
+    () => resolvePool(roster, pools, event, choice, forCategory, 2),
+    [roster, pools, event, choice, forCategory],
   );
 
   /**
@@ -137,6 +139,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
           <PoolSetup
             roster={roster}
             pools={pools}
+            event={event}
             value={choice}
             onChange={setChoice}
             eligible={forCategory}

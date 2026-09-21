@@ -12,6 +12,7 @@ import type { Facts } from '@/data/liquipedia/facts';
 import type { Orgs } from '@/data/liquipedia/orgs';
 import type { Pools } from '@/data/liquipedia/pools';
 import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
+import { useEventMode } from '@/games/shared/mode';
 import { resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { getGame } from '@/games/registry';
 import {
@@ -19,7 +20,6 @@ import {
   createGame,
   createRound,
   giveUp,
-  membersLeft,
   pick,
   toggle,
   type GameState,
@@ -72,6 +72,7 @@ function Game({
   pools: Pools | null;
 }) {
   const [choice, setChoice] = usePoolChoice();
+  const [event] = useEventMode();
   const [mode, setMode] = useState<Mode>('all-at-once');
   const [game, setGame] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -81,8 +82,8 @@ function Game({
   // A board needs players with enough recorded career to satisfy a rule.
   const eligible = useMemo(() => facts.eligible(3), [facts]);
   const players = useMemo(
-    () => resolvePool(roster, pools, choice, eligible, 40),
-    [roster, pools, choice, eligible],
+    () => resolvePool(roster, pools, event, choice, eligible, 40),
+    [roster, pools, event, choice, eligible],
   );
 
   const start = useCallback(() => {
@@ -103,6 +104,7 @@ function Game({
           <PoolSetup
             roster={roster}
             pools={pools}
+            event={event}
             value={choice}
             onChange={setChoice}
             eligible={eligible}
@@ -137,7 +139,6 @@ function Game({
 
   const { round } = game;
   const finished = game.status !== 'playing';
-  const left = membersLeft(game);
 
   const onCardClick = (player: RosterPlayer) => {
     if (finished) return;
@@ -166,12 +167,19 @@ function Game({
           <h2>
             Find the players who <span style={{ color: 'var(--primary)' }}>{round.criterion.label}</span>
           </h2>
+          {/*
+            No count, on purpose.
+            "3 of these 8 do" made the last pick arithmetic rather than
+            knowledge — once you had two you knew exactly how many were left and
+            could stop reading. Roughly half of any board fits; which half is
+            the whole game.
+          */}
           <p className="small muted" style={{ marginTop: 6 }}>
-            {round.memberIds.size} of these {round.board.length} do. The rest are griefers.
+            About half of these {round.board.length} do. The rest are griefers.
             {game.mode === 'all-at-once'
               ? ' Select them all, then hit Check.'
               : ' Pick them one at a time — a griefer ends the round.'}
-            {finished ? '' : ` ${left} left to find.`}
+            {finished ? ` ${round.memberIds.size} fitted the rule.` : ''}
           </p>
         </section>
 

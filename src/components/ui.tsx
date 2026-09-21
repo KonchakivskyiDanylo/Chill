@@ -45,8 +45,13 @@ export function OptionCard({
   );
 }
 
-export function OptionGrid({ children }: { children: ReactNode }) {
-  return <div className="options">{children}</div>;
+/**
+ * `compact` is for cards that are a label and nothing else — the regions.
+ * Eight of them at the default 150px minimum took two rows and the height of a
+ * paragraph to say eight words.
+ */
+export function OptionGrid({ children, compact }: { children: ReactNode; compact?: boolean }) {
+  return <div className={compact ? 'options options--compact' : 'options'}>{children}</div>;
 }
 
 export function Stat({ label, value }: { label: string; value: ReactNode }) {

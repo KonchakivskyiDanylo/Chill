@@ -59,13 +59,24 @@ export interface CriteriaOptions {
   minMatches?: number;
   /** Criteria matching more than this share of the pool are dropped (too easy). */
   maxShare?: number;
+  /**
+   * How many organisations may become rules, richest first.
+   *
+   * Capped, and low, for two reasons. The generators pick a rule at random, and
+   * without a cap 174 of the ~250 rules were organisations — so "has played for
+   * X" came up seven times in ten and career earnings, titles and tournaments
+   * almost never did. And the tail of that list is orgs nobody can name: being
+   * asked which four of eight players once had a stint at a team with a
+   * Liquipedia page and $102k in career prize money is not a quiz question.
+   */
+  maxOrgs?: number;
 }
 
 export function buildCriteria(
   { players, facts, orgs }: CriteriaSource,
   options: CriteriaOptions = {},
 ): PlayerCriterion[] {
-  const { minMatches = 4, maxShare = 0.5 } = options;
+  const { minMatches = 4, maxShare = 0.5, maxOrgs = 10 } = options;
   const out: PlayerCriterion[] = [];
 
   const add = (
@@ -103,7 +114,10 @@ export function buildCriteria(
   // ---------------------------------------------------------------- orgs --
   // Org *history*, not the current badge — most players have worn several, and
   // "has played for FaZe" is a far better question than "plays for FaZe today".
-  for (const org of orgs.notable()) {
+  //
+  // `notable()` is already sorted richest first, so the cap takes the orgs a
+  // viewer would actually recognise. See `maxOrgs`.
+  for (const org of orgs.notable().slice(0, maxOrgs)) {
     const ids = new Set(org.ever);
     add(`org:${org.id}`, 'org', `has played for ${org.name}`, org.name, (p) => ids.has(p.id));
   }
@@ -160,7 +174,10 @@ export function buildCriteria(
       `won-in:${region}`,
       'won-in-region',
       `has won a title in ${region}`,
-      `Title in ${region}`,
+      // "Title in North America" read as the name of a tournament rather than
+      // a thing a player did, which on a grid header is the only reading that
+      // matters. The verb is what makes it a question.
+      `Won in ${region}`,
       (p) => facts.of(p.id).winRegions.includes(region),
     );
   }

@@ -36,18 +36,34 @@ export interface GameMeta {
 /**
  * Rules every game repeats, written once.
  *
- * Eight of the ten now share a setup step (see `components/PoolSetup`), so
- * eight rules panels were about to say the same three paragraphs in three
- * slightly different ways.
+ * Eight of the ten share a setup step (see `components/PoolSetup`), so eight
+ * rules panels were about to say the same three paragraphs in three slightly
+ * different ways.
  */
 const POOL_SECTION: RuleSection = {
   title: 'Who you get asked about',
   items: [
-    'Full roster — every player in the export, narrowed three ways below.',
-    'An event pool — the field that qualified for one tournament, such as the FNCS Globals or the Esports World Cup. A pool is a fixed list of players, so region, difficulty and status do not apply to it.',
+    'Random 🎲 — any player at all, from household names to one-off qualifiers. This is the default, and Start works without touching anything.',
+    'Choose 🎛️ — narrow it by region, difficulty and whether the player is still competing. Whatever you pick is remembered, here and in every other game.',
     'Region — play one region’s scene only. Difficulty is then ranked inside that region, so Easy means “well known in Asia”, not “well known worldwide”.',
-    'Difficulty — Easy 🟢, Medium 🟡 and Hard 🔴 are bands of career earnings, and each card tells you the band it covers. Random 🎲 ignores the bands entirely.',
+    'Difficulty — Easy 🟢, Medium 🟡 and Hard 🔴 are bands of career earnings, and each card tells you the band it covers.',
     'Active, retired or everyone — the export says which players are still competing.',
+  ],
+};
+
+/**
+ * The event mode, explained in the games it changes.
+ *
+ * Separate from `POOL_SECTION` because it is not a setting on this screen: it
+ * is chosen on the home page and shown in the header, and while it is on the
+ * section above does not apply at all.
+ */
+const MODE_SECTION: RuleSection = {
+  title: 'Event mode',
+  items: [
+    'On the home page you can swap the whole scene for one tournament’s field — the FNCS Globals, the Esports World Cup.',
+    'Every game then draws from that field and nothing else, and says so in the header until you leave it.',
+    'A field is a fixed list of players, so region, difficulty and status do not apply to it: eighty players is already the narrowest these games can run on.',
   ],
 };
 
@@ -88,6 +104,7 @@ export const GAMES: GameMeta[] = [
         ],
       },
       POOL_SECTION,
+      MODE_SECTION,
     ],
     Component: lazy(() => import('./higher-lower/HigherLowerGame')),
   },
@@ -111,12 +128,13 @@ export const GAMES: GameMeta[] = [
         title: 'Names with numbers in them',
         items: [
           'A digit is the one thing in this game you cannot reason your way to: a letter tile tells you something every round, a digit tells you nothing until you happen to try it.',
-          'So they are given away, slowly. A name with one digit reveals it after your third guess; two digits appear after the second and the fourth; three after the first, third and fourth.',
-          'The strip under the grid shows the shape of the name with the revealed digits already in position.',
-          'Names that are mostly numbers hand over the first digit immediately — they are not words with a digit in them.',
+          'So they are given away, but never before your third guess. One digit arrives after guess 3; two after 3 and 4; three after 3, 4 and 5. Anything more comes out by guess 5.',
+          'Until the first one lands, nothing is shown at all — a strip of blanks would give away both the length of the name and the fact that it has a digit in it.',
+          'When a digit does arrive it appears in position under the grid, and its key turns green on the keyboard.',
         ],
       },
       POOL_SECTION,
+      MODE_SECTION,
     ],
     Component: lazy(() => import('./wordle/WordleGame')),
   },
@@ -134,7 +152,7 @@ export const GAMES: GameMeta[] = [
       'Clues are majors only: the Epic-run grand finals since the 2019 World Cup — FNCS regionals, the Globals, the World Cup itself.',
       'Each clue is one tournament and where the player finished.',
       'Only players with at least five majors on record can be the answer.',
-      'Get it right and the whole career is revealed, not just the ten clues you were shown.',
+      'Get it right and the rest of the ten clues turn face up, dimmed, so you can see what you would have been shown next.',
     ],
     sections: [
       {
@@ -146,6 +164,7 @@ export const GAMES: GameMeta[] = [
         ],
       },
       POOL_SECTION,
+      MODE_SECTION,
     ],
     Component: lazy(() => import('./career-path/CareerPathGame')),
   },
@@ -163,7 +182,7 @@ export const GAMES: GameMeta[] = [
       'Teammates are ranked by how many tournaments the pair entered together, counted across every tournament in the export.',
       'A pair counts once per result they share, so two solo players at the same event are not teammates.',
       'The answer needs at least three recorded teammates and five tournaments on record.',
-      'Get it right and every teammate on record is revealed, with the counts.',
+      'Get it right and the rest of the clue list turns face up, dimmed, with the counts shown.',
     ],
     sections: [
       {
@@ -175,6 +194,7 @@ export const GAMES: GameMeta[] = [
         ],
       },
       POOL_SECTION,
+      MODE_SECTION,
     ],
     Component: lazy(() => import('./who-are-ya/WhoAreYaGame')),
   },
@@ -202,8 +222,10 @@ export const GAMES: GameMeta[] = [
           'Some are about the whole career — earnings, FNCS wins, LAN appearances. Some are about one year, one region, one country or one tournament.',
           'Not every board wants a player. An organisations board wants org names and a countries board wants country names — the prompt above the input says which.',
           'Hit Random for a board you did not choose, or search the list if you have one in mind.',
+          'In an event mode the two hundred are replaced by that field’s own boards — the ten biggest earners who qualified, the ten youngest, the countries that sent the most.',
         ],
       },
+      MODE_SECTION,
     ],
     Component: lazy(() => import('./tenaball/TenaballGame')),
   },
@@ -221,6 +243,7 @@ export const GAMES: GameMeta[] = [
       'Repeating a name you already found does not count again.',
       'Easy: wrong answers cost nothing.',
       'Hard: every wrong answer takes 3 seconds off the clock.',
+      'Name every player on the list and the round ends there and then — you do not have to sit out the clock to win it.',
       'When time runs out you see everyone you missed.',
       'The suggestion box helps you spell a name you already thought of — it never tells you whether that name is on the list.',
     ],
@@ -231,8 +254,10 @@ export const GAMES: GameMeta[] = [
           'Qualified fields — everyone who made it to the FNCS Globals, or to the Esports World Cup.',
           'FNCS grand final winners, split by region, because Europe’s winners and North America’s are two different memories.',
           'LAN winners — anyone who has won an offline tournament in the top two tiers.',
+          'In an event mode the lists are all about that field instead: everyone who qualified, the qualifiers from one region or country, the ones who have won an FNCS and the ones who never have.',
         ],
       },
+      MODE_SECTION,
     ],
     Component: lazy(() => import('./list/ListGame')),
   },
@@ -250,6 +275,7 @@ export const GAMES: GameMeta[] = [
       'Cards show the player’s handle and nothing else: no flag, no org, no earnings.',
       'That is deliberate. A card carrying a Brazilian flag answers "competes in Brazil" for you, which made the old version a reading exercise rather than a knowledge one.',
       'Rules are never about country or region, for the same reason — those are the two facts you could guess from a handle.',
+      'Roughly half of every board fits the rule, and the board never tells you how many. A stated count makes the last pick arithmetic instead of knowledge.',
     ],
     sections: [
       {
@@ -271,6 +297,7 @@ export const GAMES: GameMeta[] = [
         ],
       },
       POOL_SECTION,
+      MODE_SECTION,
     ],
     Component: lazy(() => import('./impostor/ImpostorGame')),
   },
@@ -311,6 +338,7 @@ export const GAMES: GameMeta[] = [
         ],
       },
       POOL_SECTION,
+      MODE_SECTION,
     ],
     Component: lazy(() => import('./tic-tac-toe/TicTacToeGame')),
   },
@@ -327,10 +355,10 @@ export const GAMES: GameMeta[] = [
     rules: [
       'Groups can be an organisation, a title, an earnings threshold, a year, a tournament they played, or the teammates of one player.',
       'Every player belongs to exactly one of the four groups — the generator draws each from the pool that fits its group and none of the others.',
-      'A wrong guess tells you how many of your four belonged to a single group.',
-      'That is more use than the usual “one away”, which stays silent on the two-and-two guess that means you have merged two groups.',
+      'A wrong guess tells you when three of your four belonged to one group, and says nothing otherwise.',
+      'Nothing otherwise is deliberate: two of any four landing in the same group is close to chance on a sixteen-card board, so reporting it every time buried the one hint worth reading.',
     ],
-    sections: [POOL_SECTION],
+    sections: [POOL_SECTION, MODE_SECTION],
     Component: lazy(() => import('./connections/ConnectionsGame')),
   },
   {
@@ -358,6 +386,7 @@ export const GAMES: GameMeta[] = [
         ],
       },
       POOL_SECTION,
+      MODE_SECTION,
     ],
     Component: lazy(() => import('./guess-the-player/GuessThePlayerGame')),
   },

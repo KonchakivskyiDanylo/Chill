@@ -46,6 +46,36 @@ const USABLE = new Set([
   'played-event',
 ]);
 
+/**
+ * One criterion per kind, then shuffled — not one shuffle over all of them.
+ *
+ * The flat shuffle was effectively an org generator. `buildCriteria` produces
+ * roughly 250 rules over a full pool and about 174 of them are organisations,
+ * so a uniform draw served "has played for X" seven times in ten and reached
+ * the four earnings rules under twice in a hundred rounds. Every kind now gets
+ * one seat in the draw, so a career-earnings board is as likely as an org one.
+ */
+function byKind(criteria: PlayerCriterion[], rng: ReturnType<typeof makeRng>): PlayerCriterion[] {
+  const buckets = new Map<string, PlayerCriterion[]>();
+  for (const criterion of criteria) {
+    const bucket = buckets.get(criterion.kind);
+    if (bucket) bucket.push(criterion);
+    else buckets.set(criterion.kind, [criterion]);
+  }
+  // A few rounds deep per kind, so a kind whose first pick cannot fill a board
+  // gets another go before the draw falls back to everything else.
+  const ordered: PlayerCriterion[] = [];
+  for (let round = 0; round < 3; round++) {
+    const layer: PlayerCriterion[] = [];
+    for (const bucket of buckets.values()) {
+      const pick = bucket[Math.floor(rng() * bucket.length)];
+      if (pick && !ordered.includes(pick) && !layer.includes(pick)) layer.push(pick);
+    }
+    ordered.push(...shuffle(rng, layer));
+  }
+  return [...ordered, ...shuffle(rng, criteria)];
+}
+
 export function createRound(source: CriteriaSource, seed: string = String(Date.now())): Round | null {
   const rng = makeRng(seed);
   const criteria = buildCriteria(source, { minMatches: 4, maxShare: 0.4 }).filter((criterion) =>
@@ -53,12 +83,19 @@ export function createRound(source: CriteriaSource, seed: string = String(Date.n
   );
   if (criteria.length === 0) return null;
 
-  for (const criterion of shuffle(rng, criteria)) {
+  for (const criterion of byKind(criteria, rng)) {
     const outsiders = source.players.filter((player) => !criterion.test(player));
     const boardSize = randInt(rng, 6, 8);
-    // The players who fit are the minority: the round is a hunt for them, and
-    // picking six of eight would be clicking rather than deciding.
-    const memberCount = randInt(rng, 2, 3);
+    /*
+     * Roughly half the board fits, and the board never says how many.
+     *
+     * It used to be two or three of six-to-eight, printed above the cards as
+     * "find the 3". Both halves of that made the round easier than it looked:
+     * a known count turns the last pick into arithmetic, and a small count
+     * means most cards are griefers, so guessing is cheap. At half and unknown
+     * you have to actually judge every card.
+     */
+    const memberCount = randInt(rng, Math.floor(boardSize / 2), Math.floor(boardSize / 2) + 1);
     const grieferCount = boardSize - memberCount;
     if (criterion.matches.length < memberCount || outsiders.length < grieferCount) continue;
 

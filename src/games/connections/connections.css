@@ -1,7 +1,11 @@
+/* Capped for the same reason the Tic Tac Toe board is: four 1fr columns on a
+   1120px page give 265px-wide tiles holding a seven-character handle. */
 .cx-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
+  max-width: 640px;
+  margin: 0 auto;
 }
 
 .cx-tile {

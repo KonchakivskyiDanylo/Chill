@@ -13,6 +13,7 @@ import { useFacts } from '@/data/liquipedia/useFacts';
 import { useOrgs } from '@/data/liquipedia/useOrgs';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
+import { useEventMode } from '@/games/shared/mode';
 import { resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { getGame } from '@/games/registry';
 import {
@@ -70,6 +71,7 @@ function Game({
   pools: Pools | null;
 }) {
   const [choice, setChoice] = usePoolChoice();
+  const [event] = useEventMode();
   const [ruleset, setRuleset] = useState<Difficulty>('easy');
   const [game, setGame] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -79,8 +81,8 @@ function Game({
 
   const eligible = useMemo(() => facts.eligible(3), [facts]);
   const players = useMemo(
-    () => resolvePool(roster, pools, choice, eligible, 60),
-    [roster, pools, choice, eligible],
+    () => resolvePool(roster, pools, event, choice, eligible, 60),
+    [roster, pools, event, choice, eligible],
   );
 
   const start = useCallback(() => {
@@ -107,6 +109,7 @@ function Game({
           <PoolSetup
             roster={roster}
             pools={pools}
+            event={event}
             value={choice}
             onChange={setChoice}
             eligible={eligible}

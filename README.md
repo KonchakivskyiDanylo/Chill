@@ -19,11 +19,12 @@ npm run dev          # http://localhost:5173
 | `npm run dev` | Vite dev server |
 | `npm run build` | Typecheck + production build to `dist/` |
 | `npm run typecheck` | TypeScript only |
-| `npm run etl:fetch` | Downloads the upstream sources into `scripts/etl/.cache/` |
-| `npm run etl:build` | Regenerates `src/data/fortnite/` from the cache |
-| `npm run audit` | Checks the imported data for implausible values |
-| `npm run check:data` | Asserts the dataset's invariants (see below) |
 | `npm run check:games` | Drives all ten games through a full round headlessly. Career Path and Who Are Ya report SKIPPED until their generated files exist |
+
+The `etl:*`, `audit` and `check:data` scripts are gone, along with the
+316-player Wikipedia import they maintained. Every game reads the Liquipedia
+export, and the derived files are built by the cells in
+[notebook_cells.md](notebook_cells.md).
 
 **Where the data comes from and how to extend it: see [DATA.md](DATA.md).**
 
@@ -32,19 +33,25 @@ npm run dev          # http://localhost:5173
 | Game | Modes | Notes |
 | --- | --- | --- |
 | Higher or Lower | Age / Career earnings / FNCS wins | Endless, one mistake ends the run, best score in `localStorage`. Hard adds the Equal button. Pairs are chosen so the gap matches a target that narrows with difficulty *and* streak |
-| Fortnitedle | — | 6 guesses, digits are playable characters. A name's digits are revealed on a schedule: one after guess 3, two after 2 and 4, three after 1, 3 and 4 |
+| Fortnitedle | — | 6 guesses, digits are playable characters. Nothing is given away before guess 3; then one digit after 3, a second after 4, the rest by 5 — and a revealed digit turns green on the keyboard |
 | Career Path | Order / Random | 10 clues. Order tells the career as a story (first major, most recent, best of each stretch between); Random draws 10 at random from the whole career |
 | Who Are Ya? | Counts shown / hidden / Random order | Teammates fewest-shared first. Needs 3+ teammates and 5+ tournaments on record |
 | Tenaball | ~250 categories × Easy / Hard | Boards answer in players, organisations *or* countries. Each states its own tie rule |
-| List | Easy / Hard | 90s, +5s per correct answer, −3s per miss on Hard |
-| Griefer | All at once / One by one | Find the 2–3 players who **fit** the rule among 6–8. Cards show the handle only |
+| List | Easy / Hard | 90s, +5s per correct answer, −3s per miss on Hard. Naming everyone ends the round as a win |
+| Griefer | All at once / One by one | Find the players who **fit** the rule among 6–8. Roughly half do, and the board never says how many. Cards show the handle only |
 | Tic Tac Toe | Easy / Hard | Type a player; the grid works out which cell they belong in. Easy allows 3 mistakes, Hard gives 9 guesses |
 | Connections | — | 16 players, 4 groups, 4 lives shown as hearts |
 | Guess the Player | Exact / Direction | 6 attributes, 8 guesses |
 
-Eight of the ten share a **setup step** (`components/PoolSetup`): an event pool
-*or* the roster narrowed by region, difficulty and active/retired, then Start.
+Eight of the ten share a **setup step** (`components/PoolSetup`), and it opens
+closed: Random, or Choose to narrow by region, difficulty and active/retired.
 Tenaball and List pick a category instead, because that is their whole subject.
+
+Above all of them sits the **event mode** (`games/shared/mode.ts`), chosen on
+the home page and shown in the header. Pick a tournament and every game draws
+only from that field until you leave it — the eight setup screens collapse to a
+Start button, and Tenaball and List swap their categories for field-scoped ones
+derived in the browser.
 
 Fortnitedle, Career Path, Who Are Ya and Guess the Player deal their secret
 player from a **no-repeat rotation** (`games/shared/rotation.ts`): the pool
@@ -100,11 +107,11 @@ None of the derived files carries a `tier` column: difficulty is joined from
 `players.json` by page name, so re-tiering the roster re-tiers every game and
 the derived files cannot go stale against it.
 
-`src/data/fortnite/` — the older **Wikipedia import**, 316 players — is still
-in the tree and is no longer read by anything. It is kept deliberately: it is
-the only source with hand-checked per-event rosters, and the `Dataset` /
-`PlayerRepository` layer around it still documents how a different backend
-would plug in.
+The older **Wikipedia import** — 316 players in `src/data/fortnite/`, with the
+`Dataset` / `PlayerRepository` layer and the ETL scripts that fed it — has been
+removed. It had not been read by a game since the migration, and the four npm
+scripts kept alive to validate it were validating a dataset nothing rendered.
+The history is in git if any of it is ever wanted back.
 
 **There is no build step.** The app imports that file in place, through the
 `@data` alias. Two columns in it are maintained by the notebook that owns the
@@ -130,20 +137,10 @@ and reloading — no code changes, nothing to regenerate.
 
 ### The fame ranking
 
-Both sources are tiered the same way. For the Wikipedia import,
-`fame_calculation.ipynb` scores every player at 70% normalised log career
-earnings and 30% tournament wins weighted by how big the tournament was — a
-World Cup title is worth 100 points, an EU FNCS 30, a console cup 2 — so a
-grinder cannot outrank a champion on prize money alone. It cuts the ranking by
-rank, not by score: top 10% Easy, next 30% Medium, the rest Hard.
-
-Run it from the repo root; it writes `src/data/fortnite/fame-ranking.json`,
-which `repository.ts` imports, so re-running it after the dataset grows is all
-it takes to re-tier everyone. `npm run check:games` fails if that file is
-missing or does not cover the whole roster.
-
-The Liquipedia roster does not use it. Its tiers are the `tier` column, written
-upstream — see above.
+`fame_calculation.ipynb` and the `fame-ranking.json` it produced belonged to the
+Wikipedia import and went with it. The Liquipedia roster has never used them:
+its difficulty is the `tier` / `region_tier` columns above, written upstream by
+the notebook that owns `players.json`.
 
 Games do not read the JSON. They ask for a pool:
 
@@ -164,29 +161,27 @@ Game logic is separated from UI throughout: each game has a pure `engine.ts`
 
 ```
 src/
-  data/
-    types.ts          Domain model (Player, TournamentEvent, ...)
-    repository.ts     ← the one seam between games and the data source
-    dataset.ts        Read-only query layer every game uses
-    DataProvider.tsx  Loads the dataset once, provides it to the app
-    fortnite/
-      events.ts       GENERATED — 220 tournaments
-      entries.ts      GENERATED — 220 rosters and where they placed
-      players.ts      GENERATED — 316 players, verified facts only
-      countries.ts    Country names and the fallback country -> region map
-      fame-ranking.json  GENERATED by fame_calculation.ipynb — the Easy/Medium/Hard tiers
-      build.ts        Derives results, teammates, titles and org history
-    liquipedia/
-      roster.ts       Reads .../players.json in place, via the @data alias
-      majors.ts       Reads .../career_path.json — Career Path's tournaments
-      teammates.ts    Reads .../teammates.json — who has played with whom
-      countries.ts    Liquipedia nationality names -> ISO country codes
-      useLoaded.ts    The load-on-mount hook the three share
-  scripts/etl/        Fetches the sources and regenerates the three tables
+  data/liquipedia/
+    roster.ts         Reads .../players.json in place, via the @data alias
+    facts.ts          Career facts players.json cannot answer
+    majors.ts         Reads .../career_path.json — Career Path's tournaments
+    teammates.ts      Reads .../teammates.json — who has played with whom
+    rankings.ts       The precomputed Tenaball boards
+    pools.ts          Event-qualified fields — the event mode reads these
+    orgs.ts           Organisations and who has played for them
+    countries.ts      Liquipedia nationality names -> ISO country codes
+    files.ts          The one place that knows how to read the export
+    useLoaded.ts      The load-on-mount hook they all share
   games/<game>/engine.ts + <Game>.tsx
-  games/shared/criteria.ts   Player predicates shared by Griefer / Piece Control / Connections
-  games/shared/difficulty.ts Fame tier labels, shared by the four Liquipedia games
+  games/shared/criteria.ts   Player predicates shared by Griefer / Tic Tac Toe / Connections
+  games/shared/difficulty.ts Fame tier labels, shared by the pooled games
+  games/shared/pool.ts       Region / difficulty / status, and Random vs Choose
+  games/shared/mode.ts       The site-wide event mode
   games/shared/rotation.ts   Deals a pool out once before anyone repeats
+  games/tenaball/board-builder.ts  Assembling a board from ranked rows
+  games/tenaball/pool-boards.ts    Field boards, derived in the browser
+  games/tenaball/derived-boards.ts All-time boards the notebook does not ship
+  components/EventMode.tsx   The mode picker (home) and mode chip (header)
   components/SideNav.tsx     The games list down the left of every page
   components/Footer.tsx      Site footer — carries the Liquipedia attribution
   pages/Credits.tsx          Long-form attribution, as CC-BY-SA asks for
@@ -212,17 +207,15 @@ falls back to a deterministic initials avatar.
 
 ## About the data
 
-316 players, 220 tournaments and every FNCS winner in every region from Season X
-(2019) to Major 2 of 2026, imported from Wikipedia and Liquipedia. Nothing is
-estimated: where a source is silent the field stays empty, and `npm run
-check:data` prints the coverage so the gaps are visible rather than papered over.
+5,678 players, 14,645 tournaments and 442,736 placements, imported from
+Liquipedia, with FNCS title counts matched in from Wikipedia. Nothing is
+estimated: where a source is silent the field stays empty — a missing earnings
+figure renders as a dash, never a zero — and a player with no published
+birthday is left out of the questions that need one rather than guessed at.
 
-The model is relational — an `EventEntry` records a whole roster's finish at one
-event, so teammates, title counts, org history and career results are all derived
-from the same rows and cannot contradict each other.
-
-The two real gaps are **placements other than 1st** and **prize money per
-event**; neither source publishes them. Details, and how to load them, are in
+Everything derived from it is derived in one place, the notebook, and read in
+place by the app. `npm run check:games` plays all ten games to completion in
+Node and asserts the invariants each one depends on. Details are in
 [DATA.md](DATA.md).
 
 ## Edge cases
@@ -230,7 +223,7 @@ event**; neither source publishes them. Details, and how to load them, are in
 Generated puzzles are validated before they are shown, and the games degrade
 gracefully rather than dead-ending:
 
-- Piece Control boards are only offered if all nine cells can be filled with nine
+- Tic Tac Toe boards are only offered if all nine cells can be filled with nine
   *different* players; during play, a move that would leave another cell
   unfillable is refused (and costs no mistake) instead of soft-locking.
 - Connections draws each group from its *exclusive* pool, so groups cannot

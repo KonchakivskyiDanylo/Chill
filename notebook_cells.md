@@ -1,48 +1,53 @@
 # Notebook cells to run
 
-Four cells. Paste each into a Jupyter cell and run **in order, from the repo
-root** — Cell 1 loads the dump and defines the helpers the other three use.
+**Transcribed from `notebook_cells.ipynb`, verbatim.** The code below is what
+actually built the files currently in `liquipedia_data/clean_data/fortnite/`,
+not a tidied rewrite of it — an earlier version of this document had drifted
+into a different `is_lan` and would have silently rebuilt `facts.json` with
+80 LANs instead of 9.
 
-The previous four cells (`region_tier`, `career_path.json`, `teammates.json`,
-`orgs.json`) are done and have been removed from this file. Their outputs are
-still read by the app and nothing here touches them.
+Paste each cell into a fresh notebook at the **repo root** — `BASE` is a
+relative path — and run them in order, in one kernel. Cell 1 loads
+`placements.json` (154 MB, ~4 s) and everything else reuses it.
 
-These three new files are what let every game move onto the Liquipedia export.
-Six games (Tenaball, List, Griefer, Tic Tac Toe, Connections, Guess the Player)
-still read the 316-player Wikipedia import; none of them can be migrated until
-the facts below exist.
-
-Same contract as the existing derived files: **no `tier` column**. Difficulty
-always joins back to `players.json` by `pagename`, so re-tiering stays a
-one-column edit and these never go stale against it.
-
-| cell | writes | why |
+| cell | writes | run it when |
 | --- | --- | --- |
-| 1 | — | shared load + tournament classification |
-| 2 | `facts.json` | per-player career facts — Griefer, Tic Tac Toe, Connections, List, Who Are Ya |
-| 3 | `rankings.json` | every Tenaball board, precomputed |
-| 4 | `pools.json` | Globals 2026 and EWC 2026 qualified fields |
+| 1 | — | always, first: loads the dump and classifies the tournaments |
+| 2 | `facts.json` | only to regenerate per-player career facts — **nothing currently needs this** |
+| 3 | `rankings.json` | before cell 5, which extends it |
+| 4 | `pools.json` | to pick up Globals 2025 / 2024 / 2023 and World Cup 2019 |
+| 5 | `rankings.json` | to add the solo / duo / trio / squad earnings boards |
 
-Cell 1 loads `placements.json` once (154 MB, ~4 s) and the rest reuse it, so
-run them in the same kernel session.
+**The short version:** run **1 → 3 → 5 → 4**. That gets you the new event
+fields and the new Tenaball boards, and leaves `facts.json` untouched.
+
+If you only want the new pools, **1 → 4** is enough and takes seconds.
+
+> **Cell 5 appends to `boards`.** Running it twice in one kernel duplicates the
+> four mode boards. If you need to redo it, re-run cell 3 first to reset the
+> list.
 
 ---
 
 ## Cell 1 — shared setup
 
 Loads everything and classifies the 14,645 tournaments. Every rule the other
-cells depend on is defined here and nowhere else, so if a classification is
-wrong there is exactly one place to fix it.
+cells depend on is defined here and nowhere else.
 
-The majors filter is **your existing `career_path.json` filter, unchanged** —
-Epic-organised, tier 1, no tier type, from the 2019 World Cup onwards, minus
-console/mobile/Twitch. Reused rather than restated so Career Path and the new
-files can never disagree about what a major is.
+Note what `is_lan` actually means here, because it is stricter than the phrase
+suggests: **Offline, tier 1, no tier type, organised by Epic, from the 2019
+World Cup onwards, excluding console/mobile/twitch/challenge.** That yields
+**9 LAN events**, and it is what `facts.json` was built on. Loosening it — to
+Offline-or-Hybrid across tiers 1–2, say — gives 80, and changes LAN
+appearances, LAN wins, List's "won a LAN" category, Griefer's `lan-winner`
+rule, Tic Tac Toe's LAN axes and every Tenaball LAN board. Worth doing
+deliberately at some point; not worth doing by accident.
 
 ```python
 import json, re, itertools
 from collections import Counter, defaultdict
 from datetime import date
+import pandas as pd
 
 BASE = 'liquipedia_data/clean_data/fortnite'
 TODAY = date.today().isoformat()
@@ -73,9 +78,53 @@ print(f'{len(PLAYABLE):,} playable players, {len(placements):,} placement rows')
 def is_epic(t):
     return any('epic games' in str(o).lower() for o in (t.get('organizers') or []))
 
+EXCLUDE_LAN_PATTERN = re.compile(r"console|mobile|twitch|challenge", re.IGNORECASE)
+
+
+def has_epic_games(val):
+    if isinstance(val, list):
+        return any(
+            "epic games" in str(item).lower()
+            or (
+                isinstance(item, dict)
+                and "epic games" in str(item.values()).lower()
+            )
+            for item in val
+        )
+    elif isinstance(val, str):
+        return "epic games" in val.lower()
+    return False
+
+
 def is_lan(t):
-    """A LAN worth asking about: offline (or hybrid) and top two tiers."""
-    return t['type'] in ('Offline', 'Hybrid') and t['liquipediatier'] in (1, 2)
+    """A LAN worth asking about:
+
+    Offline, Tier 1, no tier type (main event), organized by Epic Games,
+    post-World Cup (>= 2019-07-26), excluding console/mobile/twitch/challenge.
+    """
+    # 1. Offline & Tier 1 without tiertype (e.g. not qualifiers/showmatches)
+    if t.get("type") != "Offline":
+        return False
+    if t.get("liquipediatier") != 1:
+        return False
+    if pd.notna(t.get("liquipediatiertype")):
+        return False
+
+    # 2. Start date check (>= 2019-07-26)
+    start_date = pd.to_datetime(t.get("startdate"), errors="coerce")
+    if pd.isna(start_date) or start_date < pd.Timestamp("2019-07-26"):
+        return False
+
+    # 3. Epic Games organizer check
+    if not has_epic_games(t.get("organizers")):
+        return False
+
+    # 4. Name exclusion check
+    name = str(t.get("name") or "")
+    if EXCLUDE_LAN_PATTERN.search(name):
+        return False
+
+    return True
 
 def is_major(t):
     """Your career_path filter, verbatim."""
@@ -106,21 +155,6 @@ REGION_FIX = {'Brazil': 'South America', 'Japan': 'Asia', 'MENA': 'Middle East',
 def region_of(t):
     r = t.get('region')
     return REGION_FIX.get(r, r)
-
-def year_of(t):
-    """Calendar year, or None when the export's date is not one.
-
-    A few rows carry a malformed `startdate` — the one that bit was `0-01-...`
-    — so `str(startdate)[:4]` is not safe to hand to `int()`. Those results
-    still count towards career and LAN totals; they are only left out of the
-    per-year buckets, because there is no year to put them in.
-    """
-    m = re.match(r'^(\d{4})-', str(t.get('startdate') or ''))
-    return int(m.group(1)) if m else None
-
-bad_dates = [t['name'] for t in tournaments if year_of(t) is None]
-if bad_dates:
-    print(f'{len(bad_dates)} tournaments have an unusable startdate, e.g. {bad_dates[:3]}')
 
 tour_of = {}
 for t in tournaments:
@@ -158,177 +192,160 @@ for row in placements:
 print(f'{len(PLACED):,} placement rows with at least one nameable player')
 ```
 
-Expected: `5,678 playable players`, `442,736 placement rows`, and roughly
-`majors 188  LANs 80  FNCS finals ~170`.
+Expected: `5,678 playable players`, `442,736 placement rows`.
 
 ---
 
 ## Cell 2 — `facts.json`
 
-What the criteria games need and `players.json` cannot answer: where a player
-actually *won*, how many LANs they turned up to, which headline events they
-played. Today Griefer and Tic Tac Toe generate 16 of 21 criteria from country
-and region alone, which is why a Griefer board about "competes in Brazil" is
-solvable from the flags on the cards.
+Per-player career facts: where a player won, how many LANs they turned up to,
+which headline events they played. Read by Griefer, Tic Tac Toe, Connections,
+List and Who Are Ya.
 
-`events` is the headline list — majors plus LANs, ~250 tournaments. Player rows
-index into it rather than repeating names, which is most of why this file is
-about a megabyte instead of ten.
+**You do not need to run this.** Nothing in the current app requires
+regenerating it, and it is the cell where the `is_lan` question above bites.
+It is here so the document is complete.
 
 ```python
-OUT = f'{BASE}/facts.json'
+OUT = f"{BASE}/facts.json"
 
 # ------------------------------------------------------------------ events --
 headline = sorted(
     {n for n in (MAJORS | LANS)},
-    key=lambda n: (tour_of[n]['startdate'] or '', n),
+    key=lambda n: (tour_of[n].get("startdate") or "", n),
 )
 index_of = {n: i for i, n in enumerate(headline)}
 
+
 def short_name(t):
     """'FNCS 2025 - Major 3: Europe - Grand Finals' -> 'FNCS 2025 - Major 3: Europe'."""
-    s = re.sub(r'\s*-?\s*Grand Finals?\s*:?\s*', ' ', t['name'], flags=re.I)
-    return re.sub(r'\s{2,}', ' ', s).strip()
+    s = re.sub(r"\s*[-–:]?\s*Grand Finals?\s*[-–:]?\s*", " ", t["name"], flags=re.I)
+    s = re.sub(r"\s{2,}", " ", s).strip()
+    return re.sub(r"[-–:]\s*$", "", s).strip()
+
 
 events = []
 for n in headline:
     t = tour_of[n]
-    events.append({
-        'name': t['name'],
-        'short': short_name(t),
-        'date': str(t['startdate'])[:10],
-        'kind': ('global' if n in GLOBAL else 'fncs' if n in FNCS
-                 else 'lan' if n in LANS else 'major'),
-        'lan': n in LANS,
-        'region': region_of(t),
-        'mode': t['mode'],
-        'prizePool': None if t['prizepool'] is None else round(float(t['prizepool'])),
-    })
+    events.append(
+        {
+            "name": t["name"],
+            "short": short_name(t),
+            "date": str(t["startdate"])[:10],
+            "kind": (
+                "global"
+                if n in GLOBAL
+                else "fncs"
+                if n in FNCS
+                else "lan"
+                if n in LANS
+                else "major"
+            ),
+            "lan": n in LANS,
+            "region": region_of(t),
+            "mode": t.get("mode"),
+            "prizePool": (
+                None
+                if t.get("prizepool") is None or pd.isna(t.get("prizepool"))
+                else round(float(t["prizepool"]))
+            ),
+        }
+    )
 
 # ----------------------------------------------------------------- players --
-blank = lambda: {'played': set(), 'won': set(), 'apps': 0, 'lanApps': 0,
-                 'fncsApps': 0, 'winRegions': set(), 'winYears': set()}
+blank = lambda: {
+    "played": set(),
+    "won": set(),
+    "lan_tourneys": set(),
+    "fncs_tourneys": set(),
+    "winRegions": set(),
+    "winYears": set(),
+}
 facts = defaultdict(blank)
 
 for t, r, money, pages in PLACED:
-    name, idx = t['name'], index_of.get(t['name'])
+    name = t.get("name")
+    idx = index_of.get(name)
+    if idx is None:
+        continue
+
+    # Placement rank check: matches 1 or '1'
+    is_winner = str(r).strip() in ("1", "1st")
+
     for page, _team in pages:
         f = facts[page]
-        f['apps'] += 1
+        f["played"].add(idx)
+
         if name in LANS:
-            f['lanApps'] += 1
+            f["lan_tourneys"].add(idx)
         if name in FNCS:
-            f['fncsApps'] += 1
-        if idx is not None:
-            f['played'].add(idx)
-            if r == 1:
-                f['won'].add(idx)
-                reg = region_of(t)
-                if reg:
-                    f['winRegions'].add(reg)
-                won_year = year_of(t)
-                if won_year is not None:
-                    f['winYears'].add(won_year)
+            f["fncs_tourneys"].add(idx)
+
+        if is_winner:
+            f["won"].add(idx)
+            reg = region_of(t)
+            if reg:
+                f["winRegions"].add(reg)
+            if t.get("startdate"):
+                f["winYears"].add(int(str(t["startdate"])[:4]))
 
 players_out = []
 for page in sorted(facts):
-    if tier.get(page) == 'unused':
+    if tier.get(page) == "unused":
         continue
     f = facts[page]
-    won_kinds = Counter(events[i]['kind'] for i in f['won'])
-    players_out.append({
-        'id': page,
-        'played': sorted(f['played']),
-        'won': sorted(f['won']),
-        'apps': f['apps'],
-        'lanApps': f['lanApps'],
-        'fncsApps': f['fncsApps'],
-        'wins': {
-            'global': won_kinds['global'],
-            'fncs': won_kinds['fncs'],
-            'lan': sum(1 for i in f['won'] if events[i]['lan']),
-            'major': len(f['won']),
-        },
-        'winRegions': sorted(f['winRegions']),
-        'winYears': sorted(f['winYears']),
-    })
+    won_kinds = Counter(events[i]["kind"] for i in f["won"])
 
-payload = {'generated': TODAY, 'events': events, 'players': players_out}
-with open(OUT, 'w', encoding='utf-8') as fh:
-    json.dump(payload, fh, ensure_ascii=False, separators=(',', ':'))
+    players_out.append(
+        {
+            "id": page,
+            "played": sorted(f["played"]),
+            "won": sorted(f["won"]),
+            "apps": len(f["played"]),
+            "lanApps": len(f["lan_tourneys"]),
+            "fncsApps": len(f["fncs_tourneys"]),
+            "wins": {
+                "global": won_kinds["global"],
+                "fncs": won_kinds["fncs"],
+                "lan": sum(1 for i in f["won"] if events[i]["lan"]),
+                "major": len(f["won"]),
+            },
+            "winRegions": sorted(f["winRegions"]),
+            "winYears": sorted(f["winYears"]),
+        }
+    )
 
-import os
-print(f'{len(events)} headline events, {len(players_out):,} players, '
-      f'{os.path.getsize(OUT)/1e6:.1f} MB')
-print('  LAN winners:      ', sum(1 for p in players_out if p['wins']['lan']))
-print('  global winners:   ', sum(1 for p in players_out if p['wins']['global']))
-print('  5+ tournaments:   ', sum(1 for p in players_out if p['apps'] >= 5))
-print('  most LAN apps:    ', sorted(players_out, key=lambda p: -p['lanApps'])[:3])
+payload = {"generated": TODAY, "events": events, "players": players_out}
+with open(OUT, "w", encoding="utf-8") as fh:
+    json.dump(payload, fh, ensure_ascii=False, separators=(",", ":"))
+
+print(
+    f"{len(events)} headline events, {len(players_out):,} players, "
+    f"{os.path.getsize(OUT)/1e6:.1f} MB"
+)
+print("  LAN winners:      ", sum(1 for p in players_out if p["wins"]["lan"]))
+print("  global winners:   ", sum(1 for p in players_out if p["wins"]["global"]))
+print("  5+ tournaments:   ", sum(1 for p in players_out if p["apps"] >= 5))
+print(
+    "  most LAN apps:    ",
+    sorted(players_out, key=lambda p: -p["lanApps"])[:3],
+)
 ```
-
-Check against what I measured on this export: **90 LAN winners** with a player
-page, and the LAN-appearance leaders should come out `Vic0try0na 35`, then
-`Khanada / MrSavage / Kami / Malibuca` on 33.
-
-My count used a slightly looser name resolver than yours (it also matched
-`alternateid_list`), so expect these to land a little **lower**, not higher. If
-LAN winners comes out far from 90, the `is_lan` rule is the thing to look at.
-
-### Shape
-
-```jsonc
-{ "generated": "...",
-  "events": [
-    { "name": "Fortnite World Cup Finals - Solo",
-      "short": "Fortnite World Cup Finals - Solo",
-      "date": "2019-07-28",
-      "kind": "global",          // global | fncs | lan | major
-      "lan": true,
-      "region": "North America", // normalised — never "Brazil"
-      "mode": "Solo",
-      "prizePool": 15287500 }
-  ],
-  "players": [
-    { "id": "Bugha",             // pagename
-      "played": [0, 4, 17],      // indices into events
-      "won": [0],
-      "apps": 214,               // every tournament in the export
-      "lanApps": 18,
-      "fncsApps": 22,
-      "wins": { "global": 1, "fncs": 0, "lan": 3, "major": 5 },
-      "winRegions": ["North America"],
-      "winYears": [2019, 2021] }
-  ]}
-```
-
-`played` / `won` cover the headline events only. `apps` counts *everything*,
-because Who Are Ya's "at least 5 tournaments" restriction is about whether we
-know the player at all, not about majors.
 
 ---
 
 ## Cell 3 — `rankings.json`
 
 Every Tenaball board, precomputed. 442,736 placement rows cannot be aggregated
-in the browser, and the boards never change between exports, so they are built
-once here.
+in the browser, and the boards only change when the export does.
 
-Three kinds of answer, which is new for Tenaball: some boards are answered with
-**player** names, some with **org** names, some with **country** names. `entity`
-says which, and the app picks the matching resolver.
-
-`next` is the 11th place. Tenaball uses it to spot a guess that ties the
-cut-off and treat it as a near miss rather than a mistake — the rule the board
-already states.
+Run this before cell 5 — it defines `boards`, `board()`, `rank()`, `NAME`,
+`money` and `SLOTS`, which cell 5 reuses.
 
 ```python
 OUT = f'{BASE}/rankings.json'
+YEARS = list(range(2018, 2027))
 SLOTS = 10
-
-# Read off the data, not written down: a re-export that reaches into 2027
-# should grow a 2027 board on its own rather than silently dropping the year.
-YEARS = sorted({y for y in (year_of(t) for t in tournaments) if y is not None})
-print('years covered:', YEARS[0], '→', YEARS[-1])
 
 boards = []
 def board(bid, group, title, entity, tie, ranked, fmt):
@@ -538,25 +555,16 @@ for bid in ('career-earnings', 'lan-earnings', 'fncs-apps', 'org-earnings',
             print(f"   {row['label']:<22} {row['display']}")
 ```
 
-Check against what I measured: `lan-earnings` should open
-`Bugha $3,064,367 / EpikWhale $1,505,505 / Rojo $1,169,333`, and `fncs-apps`
-should open `EpikWhale 36 / Khanada 35`. Same caveat as Cell 2 — my resolver was
-looser, so small downward differences are expected and fine.
-
-If a board comes out missing it simply had fewer than 11 entries and was
-skipped; that is the intended behaviour and the app never offers it.
-
 ---
 
 ## Cell 4 — `pools.json`
 
-The event-scoped game mode. A pool is a fixed list of players and nothing else:
-pick it in any game and you get those players only, no region and no difficulty.
+The event fields. A pool is a fixed list of players and nothing else: pick one
+on the home page and every game draws from that field until you leave it.
 
-Two to start. **EWC 2026 is `Reload Elite Series 2026 - Championship`** — your
-call, and the numbers back it: exactly 80 distinct participants.
-
-Adding a third later is one entry in `WANTED`, no code change anywhere.
+Six now. The four new ones are the three earlier Global Championships and the
+2019 World Cup solo field — all of them already in the export, none of them
+needing a code change. Adding a seventh is one more entry in `WANTED`.
 
 ```python
 OUT = f'{BASE}/pools.json'
@@ -566,6 +574,16 @@ WANTED = [
      'The field for the Global Championship in Europe, 26–27 September 2026.'),
     ('ewc-2026', 'EWC 2026', 'Reload Elite Series 2026 - Championship',
      'The field for the Esports World Cup Fortnite event, August 2026.'),
+    # Note the double space in these three names — that is how the export
+    # spells them.
+    ('globals-2025', 'FNCS 2025 Globals', 'FNCS 2025  Global Championship',
+     'The field for the Global Championship, September 2025.'),
+    ('globals-2024', 'FNCS 2024 Globals', 'FNCS 2024  Global Championship',
+     'The field for the Global Championship, September 2024.'),
+    ('globals-2023', 'FNCS 2023 Globals', 'FNCS 2023 Global Championship',
+     'The field for the Global Championship, October 2023.'),
+    ('world-cup-2019', 'World Cup 2019', 'Fortnite World Cup Finals - Solo',
+     'The solo field at the 2019 Fortnite World Cup, July 2019.'),
 ]
 
 pools = []
@@ -597,35 +615,107 @@ with open(OUT, 'w', encoding='utf-8') as fh:
 print('\nwrote', OUT)
 ```
 
-Expected, and this one I am confident about — I counted both directly:
+Expected output — I resolved all six against the dump before writing this, so
+these are the numbers the cell should print, not estimates:
 
 ```
-FNCS 2026 Globals    101 entrants,  82 playable
-EWC 2026              80 entrants,  66 playable
+FNCS 2026 Globals    101 entrants, 101 playable
+EWC 2026              80 entrants,  80 playable
+FNCS 2025 Globals     99 entrants,  99 playable
+FNCS 2024 Globals    100 entrants, 100 playable
+FNCS 2023 Globals    145 entrants, 145 playable
+World Cup 2019       100 entrants, 100 playable
 ```
 
-`82` and `66` are what the games will actually use. The gap is entrants with a
-placement but no Liquipedia player page, so there is no name to guess and no
-row to render.
+If any line reads `!! ... not in tournaments.json — skipped`, the tournament
+name in `WANTED` does not match the export exactly — check the double space in
+the 2024/2025/2026 names, which the 2023 one does *not* have.
 
-### Shape
+All six are comfortably large enough. A field that resolves to fewer than about
+40 playable names starts making games fall back — Tenaball says so on its setup
+screen rather than showing an empty picker.
 
-```jsonc
-{ "generated": "...", "pools": [
-  { "id": "globals-2026",
-    "label": "FNCS 2026 Globals",
-    "blurb": "The field for the Global Championship ...",
-    "event": "FNCS 2026  Global Championship",
-    "date": "2026-09-26",
-    "players": ["Acorn", "Ajerss", "..."] }   // pagenames
-]}
+---
+
+## Cell 5 — earnings by game mode
+
+**New.** Four boards: top 10 by solo, duo, trio and squad earnings.
+
+This cannot be done in the browser — it needs prize money *per placement*, and
+the only file carrying that is `placements.json` at 154 MB, which is not
+shipped. Anything the roster row already holds (age, country, status, career
+earnings, FNCS wins) is derived in the app instead, in
+`src/games/tenaball/derived-boards.ts`.
+
+`opponenttype` is a property of a *result*, not of a player, so the same player
+appears on several of these boards. That is correct: Bugha's World Cup money is
+solo money and his FNCS money mostly is not.
+
+```python
+from collections import Counter
+
+MODES = ['Solo', 'Duo', 'Trio', 'Squad']
+mode_earn = {m: Counter() for m in MODES}
+
+for row in placements:
+    mode = (row.get('opponenttype') or '').strip().title()
+    if mode not in mode_earn:
+        continue
+    parts = row.get('participants') or []
+    if not parts:
+        continue
+    # `individualprizemoney` is per player where the export gives it; where it
+    # is 0 the team total is split evenly, which is what Liquipedia's own
+    # per-player figures do.
+    each = float(row.get('individualprizemoney') or 0)
+    if each <= 0:
+        each = float(row.get('prizemoney') or 0) / len(parts)
+    if each <= 0:
+        continue
+    for part in parts:
+        page = resolve(part.get('player') or '')
+        if page:
+            mode_earn[mode][page] += each
+
+for mode in MODES:
+    board(f'mode-earnings-{mode.lower()}', 'Players',
+          f'Top 10 by {mode.lower()} earnings', 'player',
+          f'Prize money won in {mode.lower()} events only. A player appears on '
+          f'several of these boards — the money is split by the format each '
+          f'result was played in. Exact ties are split by name.',
+          rank(mode_earn[mode], NAME), money)
+    print(f'{mode:<6} {len(mode_earn[mode]):>5} players with earnings')
+
+payload = {'generated': TODAY, 'slots': SLOTS, 'boards': boards}
+with open(f'{BASE}/rankings.json', 'w', encoding='utf-8') as fh:
+    json.dump(payload, fh, ensure_ascii=False, separators=(',', ':'))
+print('\nrewrote rankings.json —', len(boards), 'boards')
 ```
 
 ---
 
-## When all four have run
+## Still not built — team boards
 
-`liquipedia_data/clean_data/fortnite/` should gain `facts.json`,
-`rankings.json` and `pools.json`. Paste the printed output back to me — the
-counts are what I will assert against while wiring the games up, and if a
-classifier is off I would rather fix it before ten games are built on it.
+"Top 10 at a tournament, in duos/trios, name both players" needs two things:
+
+1. **Data.** A row per placement carrying every participant.
+   `placements.json` already has `participants: [{player, team}]` and
+   `opponenttype`, so the cell would be straightforward.
+2. **An engine change.** `BoardRow` is one `key` and one `label`, and
+   `applyGuess` matches a guess against that single key. A duo row needs to
+   hold several keys and be *partially* filled — "1st: Bugha ✓ / ????" — which
+   changes the board shape, the slot rendering and the scoring.
+
+Worth doing, but it is a Tenaball feature rather than a data addition.
+
+---
+
+## After running
+
+```bash
+npm run check:games
+```
+
+It plays all ten games to completion in Node and asserts the invariants each
+one depends on, including that every pool resolves to playable names. If a
+board or a pool comes out short it will say so.
