@@ -1,31 +1,34 @@
 # Notebook cells to run
 
-**Transcribed from `notebook_cells.ipynb`, verbatim.** The code below is what
-actually built the files currently in `liquipedia_data/clean_data/fortnite/`,
-not a tidied rewrite of it — an earlier version of this document had drifted
-into a different `is_lan` and would have silently rebuilt `facts.json` with
-80 LANs instead of 9.
+Four cells, **in this order, top to bottom**. One kernel, started from the repo
+root — `BASE` is a relative path. Cell 1 loads `placements.json` (154 MB,
+~4 s) and the other three reuse it.
 
-Paste each cell into a fresh notebook at the **repo root** — `BASE` is a
-relative path — and run them in order, in one kernel. Cell 1 loads
-`placements.json` (154 MB, ~4 s) and everything else reuses it.
+| cell | writes |
+| --- | --- |
+| 1 | — (loads the dump, classifies the tournaments) |
+| 2 | `rankings.json` |
+| 3 | `rankings.json` again, with four more boards |
+| 4 | `pools.json` |
 
-| cell | writes | run it when |
-| --- | --- | --- |
-| 1 | — | always, first: loads the dump and classifies the tournaments |
-| 2 | `facts.json` | only to regenerate per-player career facts — **nothing currently needs this** |
-| 3 | `rankings.json` | before cell 5, which extends it |
-| 4 | `pools.json` | to pick up Globals 2025 / 2024 / 2023 and World Cup 2019 |
-| 5 | `rankings.json` | to add the solo / duo / trio / squad earnings boards |
+There is a fifth cell in an appendix at the bottom that rebuilds
+`facts.json`. **You do not need it** — nothing in the app has changed that
+depends on it, and it is the one cell where the `is_lan` question below
+actually changes the data.
 
-**The short version:** run **1 → 3 → 5 → 4**. That gets you the new event
-fields and the new Tenaball boards, and leaves `facts.json` untouched.
+> **Cell 3 appends to `boards`.** Running it twice in one kernel duplicates the
+> four mode boards. If you need to redo it, run cell 2 again first.
 
-If you only want the new pools, **1 → 4** is enough and takes seconds.
+This is transcribed from `notebook_cells.ipynb` verbatim, with three fixes
+that a clean run needs:
 
-> **Cell 5 appends to `boards`.** Running it twice in one kernel duplicates the
-> four mode boards. If you need to redo it, re-run cell 3 first to reset the
-> list.
+- `import os` — `os.path.getsize` was used to report file sizes and never
+  imported. It survived in the old notebook only because those lines are the
+  last thing each cell does.
+- `year_of` — lived in a scratch cell of its own rather than in setup, so a
+  clean run hit `NameError: name 'year_of' is not defined` partway through the
+  rankings cell.
+- four more entries in `WANTED`, for the event fields that do not exist yet.
 
 ---
 
@@ -34,17 +37,17 @@ If you only want the new pools, **1 → 4** is enough and takes seconds.
 Loads everything and classifies the 14,645 tournaments. Every rule the other
 cells depend on is defined here and nowhere else.
 
-Note what `is_lan` actually means here, because it is stricter than the phrase
+Note what `is_lan` actually means, because it is stricter than the word
 suggests: **Offline, tier 1, no tier type, organised by Epic, from the 2019
-World Cup onwards, excluding console/mobile/twitch/challenge.** That yields
-**9 LAN events**, and it is what `facts.json` was built on. Loosening it — to
-Offline-or-Hybrid across tiers 1–2, say — gives 80, and changes LAN
-appearances, LAN wins, List's "won a LAN" category, Griefer's `lan-winner`
-rule, Tic Tac Toe's LAN axes and every Tenaball LAN board. Worth doing
-deliberately at some point; not worth doing by accident.
+World Cup onwards, excluding console/mobile/twitch/challenge.** That gives
+**9 LAN events**, and it is what the current `facts.json` was built on.
+Loosening it — to Offline-or-Hybrid across tiers 1–2, say — gives 80, and
+moves LAN appearances, LAN wins, List's "won a LAN" category, Griefer's
+`lan-winner` rule, Tic Tac Toe's LAN axes and every Tenaball LAN board. Worth
+doing deliberately one day; not worth doing by accident.
 
 ```python
-import json, re, itertools
+import json, re, itertools, os
 from collections import Counter, defaultdict
 from datetime import date
 import pandas as pd
@@ -145,6 +148,21 @@ def is_world_cup(t):
 def is_global(t):
     return is_world_cup(t) and 'Finals' in t['name'] or 'Global Championship' in t['name']
 
+def year_of(t):
+    """Calendar year, or None when the export's date is not one.
+
+    A few rows carry a malformed `startdate` — the one that bit was
+    `0-01-...` — so `str(startdate)[:4]` is not safe to hand to `int()`.
+    Those results still count towards career and LAN totals; they are only
+    left out of the per-year buckets, because there is no year to put them in.
+    """
+    m = re.match(r'^(\d{4})-', str(t.get('startdate') or ''))
+    return int(m.group(1)) if m else None
+
+bad_dates = [t['name'] for t in tournaments if year_of(t) is None]
+if bad_dates:
+    print(f'{len(bad_dates)} tournaments have an unusable startdate, e.g. {bad_dates[:3]}')
+
 # Region label: tournaments.json says "Brazil", players.json says "South
 # America". One word for one place, or the per-region boards split in two.
 REGION_FIX = {'Brazil': 'South America', 'Japan': 'Asia', 'MENA': 'Middle East',
@@ -196,151 +214,13 @@ Expected: `5,678 playable players`, `442,736 placement rows`.
 
 ---
 
-## Cell 2 — `facts.json`
-
-Per-player career facts: where a player won, how many LANs they turned up to,
-which headline events they played. Read by Griefer, Tic Tac Toe, Connections,
-List and Who Are Ya.
-
-**You do not need to run this.** Nothing in the current app requires
-regenerating it, and it is the cell where the `is_lan` question above bites.
-It is here so the document is complete.
-
-```python
-OUT = f"{BASE}/facts.json"
-
-# ------------------------------------------------------------------ events --
-headline = sorted(
-    {n for n in (MAJORS | LANS)},
-    key=lambda n: (tour_of[n].get("startdate") or "", n),
-)
-index_of = {n: i for i, n in enumerate(headline)}
-
-
-def short_name(t):
-    """'FNCS 2025 - Major 3: Europe - Grand Finals' -> 'FNCS 2025 - Major 3: Europe'."""
-    s = re.sub(r"\s*[-–:]?\s*Grand Finals?\s*[-–:]?\s*", " ", t["name"], flags=re.I)
-    s = re.sub(r"\s{2,}", " ", s).strip()
-    return re.sub(r"[-–:]\s*$", "", s).strip()
-
-
-events = []
-for n in headline:
-    t = tour_of[n]
-    events.append(
-        {
-            "name": t["name"],
-            "short": short_name(t),
-            "date": str(t["startdate"])[:10],
-            "kind": (
-                "global"
-                if n in GLOBAL
-                else "fncs"
-                if n in FNCS
-                else "lan"
-                if n in LANS
-                else "major"
-            ),
-            "lan": n in LANS,
-            "region": region_of(t),
-            "mode": t.get("mode"),
-            "prizePool": (
-                None
-                if t.get("prizepool") is None or pd.isna(t.get("prizepool"))
-                else round(float(t["prizepool"]))
-            ),
-        }
-    )
-
-# ----------------------------------------------------------------- players --
-blank = lambda: {
-    "played": set(),
-    "won": set(),
-    "lan_tourneys": set(),
-    "fncs_tourneys": set(),
-    "winRegions": set(),
-    "winYears": set(),
-}
-facts = defaultdict(blank)
-
-for t, r, money, pages in PLACED:
-    name = t.get("name")
-    idx = index_of.get(name)
-    if idx is None:
-        continue
-
-    # Placement rank check: matches 1 or '1'
-    is_winner = str(r).strip() in ("1", "1st")
-
-    for page, _team in pages:
-        f = facts[page]
-        f["played"].add(idx)
-
-        if name in LANS:
-            f["lan_tourneys"].add(idx)
-        if name in FNCS:
-            f["fncs_tourneys"].add(idx)
-
-        if is_winner:
-            f["won"].add(idx)
-            reg = region_of(t)
-            if reg:
-                f["winRegions"].add(reg)
-            if t.get("startdate"):
-                f["winYears"].add(int(str(t["startdate"])[:4]))
-
-players_out = []
-for page in sorted(facts):
-    if tier.get(page) == "unused":
-        continue
-    f = facts[page]
-    won_kinds = Counter(events[i]["kind"] for i in f["won"])
-
-    players_out.append(
-        {
-            "id": page,
-            "played": sorted(f["played"]),
-            "won": sorted(f["won"]),
-            "apps": len(f["played"]),
-            "lanApps": len(f["lan_tourneys"]),
-            "fncsApps": len(f["fncs_tourneys"]),
-            "wins": {
-                "global": won_kinds["global"],
-                "fncs": won_kinds["fncs"],
-                "lan": sum(1 for i in f["won"] if events[i]["lan"]),
-                "major": len(f["won"]),
-            },
-            "winRegions": sorted(f["winRegions"]),
-            "winYears": sorted(f["winYears"]),
-        }
-    )
-
-payload = {"generated": TODAY, "events": events, "players": players_out}
-with open(OUT, "w", encoding="utf-8") as fh:
-    json.dump(payload, fh, ensure_ascii=False, separators=(",", ":"))
-
-print(
-    f"{len(events)} headline events, {len(players_out):,} players, "
-    f"{os.path.getsize(OUT)/1e6:.1f} MB"
-)
-print("  LAN winners:      ", sum(1 for p in players_out if p["wins"]["lan"]))
-print("  global winners:   ", sum(1 for p in players_out if p["wins"]["global"]))
-print("  5+ tournaments:   ", sum(1 for p in players_out if p["apps"] >= 5))
-print(
-    "  most LAN apps:    ",
-    sorted(players_out, key=lambda p: -p["lanApps"])[:3],
-)
-```
-
----
-
-## Cell 3 — `rankings.json`
+## Cell 2 — `rankings.json`
 
 Every Tenaball board, precomputed. 442,736 placement rows cannot be aggregated
 in the browser, and the boards only change when the export does.
 
-Run this before cell 5 — it defines `boards`, `board()`, `rank()`, `NAME`,
-`money` and `SLOTS`, which cell 5 reuses.
+Defines `boards`, `board()`, `rank()`, `NAME`, `money` and `SLOTS`, which
+cell 3 reuses — so it has to run first.
 
 ```python
 OUT = f'{BASE}/rankings.json'
@@ -557,14 +437,94 @@ for bid in ('career-earnings', 'lan-earnings', 'fncs-apps', 'org-earnings',
 
 ---
 
+## Cell 3 — earnings by game mode
+
+**New.** Four more boards: top 10 by solo, duo, trio and squad earnings, then
+it rewrites `rankings.json` with the full set.
+
+This cannot be done in the browser — it needs prize money *per placement*, and
+the only file carrying that is `placements.json` at 154 MB, which is not
+shipped. Anything the roster row already holds (age, country, status, career
+earnings, FNCS wins) is derived in the app instead, in
+`src/games/tenaball/derived-boards.ts`.
+
+`opponenttype` is a property of a *result*, not of a player, so the same player
+appears on several of these boards. That is correct: Bugha's World Cup money is
+solo money and his FNCS money mostly is not.
+
+Expected output — I ran all four cells against the real dump before writing
+this, with the writes redirected to a scratch directory:
+
+```
+solo    5269 players with earnings
+duo     5384 players with earnings
+trio    4755 players with earnings
+squad   3256 players with earnings
+
+rewrote rankings.json — 219 boards
+```
+
+**215 boards in, 219 out: four added, none changed, none removed.** Running
+cells 2 and 3 does not move any existing board. The new ones open with Bugha on
+solo, aqua on duo — which is the right answer and a decent sign the split is
+working.
+
+```python
+from collections import Counter
+
+# (value in `opponenttype`, the word to put in the board title).
+# The export spells the four-player format "Quad"; everyone calls it squads,
+# so the data key and the label are kept apart. The other values in the column
+# are "Team" (1,711 rows, mixed team-vs-team events) which is not a format
+# anyone would ask about, and blanks.
+MODES = [('Solo', 'solo'), ('Duo', 'duo'), ('Trio', 'trio'), ('Quad', 'squad')]
+mode_earn = {key: Counter() for key, _ in MODES}
+
+for row in placements:
+    mode = (row.get('opponenttype') or '').strip().title()
+    if mode not in mode_earn:
+        continue
+    parts = row.get('participants') or []
+    if not parts:
+        continue
+    # `individualprizemoney` is per player where the export gives it; where it
+    # is 0 the team total is split evenly, which is what Liquipedia's own
+    # per-player figures do.
+    each = float(row.get('individualprizemoney') or 0)
+    if each <= 0:
+        each = float(row.get('prizemoney') or 0) / len(parts)
+    if each <= 0:
+        continue
+    for part in parts:
+        page = resolve(part.get('player') or '')
+        if page:
+            mode_earn[mode][page] += each
+
+for key, word in MODES:
+    board(f'mode-earnings-{word}', 'Players',
+          f'Top 10 by {word} earnings', 'player',
+          f'Prize money won in {word} events only. A player appears on several '
+          f'of these boards — the money is split by the format each result was '
+          f'played in. Exact ties are split by name.',
+          rank(mode_earn[key], NAME), money)
+    print(f'{word:<6} {len(mode_earn[key]):>5} players with earnings')
+
+payload = {'generated': TODAY, 'slots': SLOTS, 'boards': boards}
+with open(f'{BASE}/rankings.json', 'w', encoding='utf-8') as fh:
+    json.dump(payload, fh, ensure_ascii=False, separators=(',', ':'))
+print('\nrewrote rankings.json —', len(boards), 'boards')
+```
+
+---
+
 ## Cell 4 — `pools.json`
 
 The event fields. A pool is a fixed list of players and nothing else: pick one
 on the home page and every game draws from that field until you leave it.
 
 Six now. The four new ones are the three earlier Global Championships and the
-2019 World Cup solo field — all of them already in the export, none of them
-needing a code change. Adding a seventh is one more entry in `WANTED`.
+2019 World Cup solo field — all already in the export, none needing a code
+change. A seventh is one more entry in `WANTED`.
 
 ```python
 OUT = f'{BASE}/pools.json'
@@ -574,8 +534,8 @@ WANTED = [
      'The field for the Global Championship in Europe, 26–27 September 2026.'),
     ('ewc-2026', 'EWC 2026', 'Reload Elite Series 2026 - Championship',
      'The field for the Esports World Cup Fortnite event, August 2026.'),
-    # Note the double space in these three names — that is how the export
-    # spells them.
+    # Note the double space in the 2024/2025/2026 names — that is how the
+    # export spells them. The 2023 one has a single space.
     ('globals-2025', 'FNCS 2025 Globals', 'FNCS 2025  Global Championship',
      'The field for the Global Championship, September 2025.'),
     ('globals-2024', 'FNCS 2024 Globals', 'FNCS 2024  Global Championship',
@@ -615,7 +575,7 @@ with open(OUT, 'w', encoding='utf-8') as fh:
 print('\nwrote', OUT)
 ```
 
-Expected output — I resolved all six against the dump before writing this, so
+Expected output. I resolved all six against the dump before writing this, so
 these are the numbers the cell should print, not estimates:
 
 ```
@@ -627,69 +587,158 @@ FNCS 2023 Globals    145 entrants, 145 playable
 World Cup 2019       100 entrants, 100 playable
 ```
 
-If any line reads `!! ... not in tournaments.json — skipped`, the tournament
-name in `WANTED` does not match the export exactly — check the double space in
-the 2024/2025/2026 names, which the 2023 one does *not* have.
-
-All six are comfortably large enough. A field that resolves to fewer than about
-40 playable names starts making games fall back — Tenaball says so on its setup
-screen rather than showing an empty picker.
+A line reading `!! ... not in tournaments.json — skipped` means the name in
+`WANTED` does not match the export exactly — check the double space.
 
 ---
 
-## Cell 5 — earnings by game mode
+## After running
 
-**New.** Four boards: top 10 by solo, duo, trio and squad earnings.
+```bash
+npm run check:games
+```
 
-This cannot be done in the browser — it needs prize money *per placement*, and
-the only file carrying that is `placements.json` at 154 MB, which is not
-shipped. Anything the roster row already holds (age, country, status, career
-earnings, FNCS wins) is derived in the app instead, in
-`src/games/tenaball/derived-boards.ts`.
+Plays all ten games to completion in Node and asserts the invariants each one
+depends on, including that every pool resolves to playable names.
 
-`opponenttype` is a property of a *result*, not of a player, so the same player
-appears on several of these boards. That is correct: Bugha's World Cup money is
-solo money and his FNCS money mostly is not.
+---
+
+## Appendix — `facts.json`
+
+Per-player career facts: where a player won, how many LANs they turned up to,
+which headline events they played. Read by Griefer, Tic Tac Toe, Connections,
+List and Who Are Ya.
+
+**Not part of the run above.** It is here so the document is complete. Running
+it rebuilds `facts.json` from whatever `is_lan` currently says, which is the
+one thing in this file that will quietly change how the games play.
+
+It depends only on cell 1, so it can be run any time after it.
 
 ```python
-from collections import Counter
+OUT = f"{BASE}/facts.json"
 
-MODES = ['Solo', 'Duo', 'Trio', 'Squad']
-mode_earn = {m: Counter() for m in MODES}
+# ------------------------------------------------------------------ events --
+headline = sorted(
+    {n for n in (MAJORS | LANS)},
+    key=lambda n: (tour_of[n].get("startdate") or "", n),
+)
+index_of = {n: i for i, n in enumerate(headline)}
 
-for row in placements:
-    mode = (row.get('opponenttype') or '').strip().title()
-    if mode not in mode_earn:
+
+def short_name(t):
+    """'FNCS 2025 - Major 3: Europe - Grand Finals' -> 'FNCS 2025 - Major 3: Europe'."""
+    s = re.sub(r"\s*[-–:]?\s*Grand Finals?\s*[-–:]?\s*", " ", t["name"], flags=re.I)
+    s = re.sub(r"\s{2,}", " ", s).strip()
+    return re.sub(r"[-–:]\s*$", "", s).strip()
+
+
+events = []
+for n in headline:
+    t = tour_of[n]
+    events.append(
+        {
+            "name": t["name"],
+            "short": short_name(t),
+            "date": str(t["startdate"])[:10],
+            "kind": (
+                "global"
+                if n in GLOBAL
+                else "fncs"
+                if n in FNCS
+                else "lan"
+                if n in LANS
+                else "major"
+            ),
+            "lan": n in LANS,
+            "region": region_of(t),
+            "mode": t.get("mode"),
+            "prizePool": (
+                None
+                if t.get("prizepool") is None or pd.isna(t.get("prizepool"))
+                else round(float(t["prizepool"]))
+            ),
+        }
+    )
+
+# ----------------------------------------------------------------- players --
+blank = lambda: {
+    "played": set(),
+    "won": set(),
+    "lan_tourneys": set(),
+    "fncs_tourneys": set(),
+    "winRegions": set(),
+    "winYears": set(),
+}
+facts = defaultdict(blank)
+
+for t, r, money, pages in PLACED:
+    name = t.get("name")
+    idx = index_of.get(name)
+    if idx is None:
         continue
-    parts = row.get('participants') or []
-    if not parts:
-        continue
-    # `individualprizemoney` is per player where the export gives it; where it
-    # is 0 the team total is split evenly, which is what Liquipedia's own
-    # per-player figures do.
-    each = float(row.get('individualprizemoney') or 0)
-    if each <= 0:
-        each = float(row.get('prizemoney') or 0) / len(parts)
-    if each <= 0:
-        continue
-    for part in parts:
-        page = resolve(part.get('player') or '')
-        if page:
-            mode_earn[mode][page] += each
 
-for mode in MODES:
-    board(f'mode-earnings-{mode.lower()}', 'Players',
-          f'Top 10 by {mode.lower()} earnings', 'player',
-          f'Prize money won in {mode.lower()} events only. A player appears on '
-          f'several of these boards — the money is split by the format each '
-          f'result was played in. Exact ties are split by name.',
-          rank(mode_earn[mode], NAME), money)
-    print(f'{mode:<6} {len(mode_earn[mode]):>5} players with earnings')
+    # Placement rank check: matches 1 or '1'
+    is_winner = str(r).strip() in ("1", "1st")
 
-payload = {'generated': TODAY, 'slots': SLOTS, 'boards': boards}
-with open(f'{BASE}/rankings.json', 'w', encoding='utf-8') as fh:
-    json.dump(payload, fh, ensure_ascii=False, separators=(',', ':'))
-print('\nrewrote rankings.json —', len(boards), 'boards')
+    for page, _team in pages:
+        f = facts[page]
+        f["played"].add(idx)
+
+        if name in LANS:
+            f["lan_tourneys"].add(idx)
+        if name in FNCS:
+            f["fncs_tourneys"].add(idx)
+
+        if is_winner:
+            f["won"].add(idx)
+            reg = region_of(t)
+            if reg:
+                f["winRegions"].add(reg)
+            if t.get("startdate"):
+                f["winYears"].add(int(str(t["startdate"])[:4]))
+
+players_out = []
+for page in sorted(facts):
+    if tier.get(page) == "unused":
+        continue
+    f = facts[page]
+    won_kinds = Counter(events[i]["kind"] for i in f["won"])
+
+    players_out.append(
+        {
+            "id": page,
+            "played": sorted(f["played"]),
+            "won": sorted(f["won"]),
+            "apps": len(f["played"]),
+            "lanApps": len(f["lan_tourneys"]),
+            "fncsApps": len(f["fncs_tourneys"]),
+            "wins": {
+                "global": won_kinds["global"],
+                "fncs": won_kinds["fncs"],
+                "lan": sum(1 for i in f["won"] if events[i]["lan"]),
+                "major": len(f["won"]),
+            },
+            "winRegions": sorted(f["winRegions"]),
+            "winYears": sorted(f["winYears"]),
+        }
+    )
+
+payload = {"generated": TODAY, "events": events, "players": players_out}
+with open(OUT, "w", encoding="utf-8") as fh:
+    json.dump(payload, fh, ensure_ascii=False, separators=(",", ":"))
+
+print(
+    f"{len(events)} headline events, {len(players_out):,} players, "
+    f"{os.path.getsize(OUT)/1e6:.1f} MB"
+)
+print("  LAN winners:      ", sum(1 for p in players_out if p["wins"]["lan"]))
+print("  global winners:   ", sum(1 for p in players_out if p["wins"]["global"]))
+print("  5+ tournaments:   ", sum(1 for p in players_out if p["apps"] >= 5))
+print(
+    "  most LAN apps:    ",
+    sorted(players_out, key=lambda p: -p["lanApps"])[:3],
+)
 ```
 
 ---
@@ -707,15 +756,3 @@ print('\nrewrote rankings.json —', len(boards), 'boards')
    changes the board shape, the slot rendering and the scoring.
 
 Worth doing, but it is a Tenaball feature rather than a data addition.
-
----
-
-## After running
-
-```bash
-npm run check:games
-```
-
-It plays all ten games to completion in Node and asserts the invariants each
-one depends on, including that every pool resolves to playable names. If a
-board or a pool comes out short it will say so.
