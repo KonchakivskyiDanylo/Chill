@@ -34,7 +34,8 @@ export type CriterionKind =
   | 'won-in-year'
   | 'played-event'
   | 'status'
-  | 'age';
+  | 'age'
+  | 'born';
 
 export interface PlayerCriterion {
   id: string;
@@ -70,13 +71,22 @@ export interface CriteriaOptions {
    * Liquipedia page and $102k in career prize money is not a quiz question.
    */
   maxOrgs?: number;
+  /**
+   * Add a criterion per birth year, e.g. "was born in 2005".
+   *
+   * Off by default and on for Connections, which asked for it. A year is a
+   * sharp, guessable group in a way "is under 18" is not — and it is the one
+   * identity fact besides nationality that a whole group can share without the
+   * group being about anybody's career.
+   */
+  birthYears?: boolean;
 }
 
 export function buildCriteria(
   { players, facts, orgs }: CriteriaSource,
   options: CriteriaOptions = {},
 ): PlayerCriterion[] {
-  const { minMatches = 4, maxShare = 0.5, maxOrgs = 10 } = options;
+  const { minMatches = 4, maxShare = 0.5, maxOrgs = 10, birthYears = false } = options;
   const out: PlayerCriterion[] = [];
 
   const add = (
@@ -109,6 +119,21 @@ export function buildCriteria(
     ['age:20-plus', 'is 20 or older', '20+', (p: RosterPlayer) => p.age !== null && p.age >= 20],
   ] as const) {
     add(id, 'age', label, short, test);
+  }
+
+  if (birthYears) {
+    const born = [
+      ...new Set(
+        players
+          .map((player) => player.birthDate?.slice(0, 4))
+          .filter((year): year is string => Boolean(year)),
+      ),
+    ].sort();
+    for (const year of born) {
+      add(`born:${year}`, 'born', `was born in ${year}`, `Born ${year}`, (p) =>
+        p.birthDate?.startsWith(year) ?? false,
+      );
+    }
   }
 
   // ---------------------------------------------------------------- orgs --

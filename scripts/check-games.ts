@@ -539,8 +539,9 @@ if (facts && orgs) {
 
   // ---- Connections
   let puzzles = 0;
+  let crossed = 0;
   for (let seed = 0; seed < 40; seed++) {
-    const puzzle = connections.generatePuzzle(source, teammates, `c-${seed}`);
+    const puzzle = connections.generatePuzzle(source, `c-${seed}`);
     if (!puzzle) continue;
     puzzles++;
     check(puzzle.board.length === 16, `connections: puzzle ${seed} has ${puzzle.board.length} tiles`);
@@ -555,12 +556,27 @@ if (facts && orgs) {
     check(game.status === 'won', `connections: puzzle ${seed} rejected its own groups`);
     check(game.mistakes === 0, `connections: puzzle ${seed} charged a mistake on perfect play`);
     check(connections.livesLeft(game) === connections.MAX_MISTAKES, `connections: puzzle ${seed} lost a life`);
+
+    // The promise the overlap rework has to keep: one way to split the sixteen.
+    const ways = connections.solutions(puzzle, source);
+    check(ways === 1, `connections: puzzle ${seed} splits ${ways} ways, not 1`);
+    // And the reason for the rework: somebody on the board fits two groups.
+    const traps = connections.overlap(puzzle, source);
+    check(
+      traps >= connections.MIN_TRAPS,
+      `connections: puzzle ${seed} has ${traps} players fitting two groups`,
+    );
+    crossed += traps;
   }
   check(puzzles >= 35, `connections: only ${puzzles} of 40 seeds produced a board`);
+  notes.push(
+    `connections: ${puzzles} of 40 seeds produced a board, ` +
+      `${(crossed / Math.max(puzzles, 1)).toFixed(1)} overlapping players each`,
+  );
 
   // A near miss must report how many belonged to one group.
   {
-    const puzzle = connections.generatePuzzle(source, teammates, 'near');
+    const puzzle = connections.generatePuzzle(source, 'near');
     if (puzzle) {
       let game = connections.createGame(puzzle);
       for (const player of puzzle.groups[0].players.slice(0, 3)) game = connections.toggle(game, player);

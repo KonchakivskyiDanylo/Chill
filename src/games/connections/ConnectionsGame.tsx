@@ -8,12 +8,10 @@ import type { Facts } from '@/data/liquipedia/facts';
 import type { Orgs } from '@/data/liquipedia/orgs';
 import type { Pools } from '@/data/liquipedia/pools';
 import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
-import type { Teammates } from '@/data/liquipedia/teammates';
 import { useFacts } from '@/data/liquipedia/useFacts';
 import { useOrgs } from '@/data/liquipedia/useOrgs';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
-import { useTeammates } from '@/data/liquipedia/useTeammates';
 import { useEventMode } from '@/games/shared/mode';
 import { resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { getGame } from '@/games/registry';
@@ -40,7 +38,6 @@ export default function ConnectionsGame() {
   const { roster, error: rosterError } = useRoster();
   const { facts, error: factsError } = useFacts();
   const { orgs, error: orgsError } = useOrgs();
-  const { teammates } = useTeammates();
   const { pools } = usePools();
 
   return (
@@ -49,7 +46,7 @@ export default function ConnectionsGame() {
       ready={Boolean(roster && facts && orgs)}
     >
       {roster && facts && orgs ? (
-        <Game roster={roster} facts={facts} orgs={orgs} teammates={teammates} pools={pools} />
+        <Game roster={roster} facts={facts} orgs={orgs} pools={pools} />
       ) : null}
     </LiquipediaGate>
   );
@@ -59,13 +56,11 @@ function Game({
   roster,
   facts,
   orgs,
-  teammates,
   pools,
 }: {
   roster: Roster;
   facts: Facts;
   orgs: Orgs;
-  teammates: Teammates | null;
   pools: Pools | null;
 }) {
   const [choice, setChoice] = usePoolChoice();
@@ -80,14 +75,14 @@ function Game({
   );
 
   const start = useCallback(() => {
-    const puzzle = generatePuzzle({ players, facts, orgs }, teammates);
+    const puzzle = generatePuzzle({ players, facts, orgs });
     if (!puzzle) {
       setError('Could not find four clean groups of four in this pool. Try a wider one.');
       return;
     }
     setError(null);
     setGame(createGame(puzzle));
-  }, [players, facts, orgs, teammates]);
+  }, [players, facts, orgs]);
 
   if (!game) {
     return (

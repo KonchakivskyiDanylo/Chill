@@ -40,7 +40,7 @@ export, and the derived files are built by the cells in
 | List | Easy / Hard | ~180 categories. 90s, +5s per correct answer, −3s per miss on Hard. Naming everyone ends the round as a win |
 | Griefer | All at once / One by one | Ten cards, four to six of which **fit** the rule, and the board never says how many. Cards show the handle only |
 | Tic Tac Toe | Easy / Hard | Type a player; the grid works out which cell they belong in. Easy allows 3 mistakes, Hard gives 9 guesses |
-| Connections | — | 16 players, 4 groups, 4 lives shown as hearts |
+| Connections | — | 16 players, 4 overlapping groups with one valid split, 4 lives shown as hearts |
 | Guess the Player | Exact / Direction | 6 attributes, 8 guesses |
 
 Eight of the ten share a **setup step** (`components/PoolSetup`), and it opens
@@ -91,7 +91,7 @@ All ten games read the **Liquipedia export** in
 | --- | --- | --- |
 | `players.json` | 5,678 playable | every game — identity, earnings, tier, FNCS wins |
 | `career_path.json` | 188 majors, 1,175 players | Career Path |
-| `teammates.json` | 39,038 pairs, 5,490 players, 50 kept each | Who Are Ya, Connections, List |
+| `teammates.json` | 39,038 pairs, 5,490 players, 50 kept each | Who Are Ya, List |
 | `orgs.json` | 979 orgs | Griefer, Tic Tac Toe, Connections, Tenaball |
 | `facts.json` | per-player career facts | Griefer, Tic Tac Toe, Connections, List, Who Are Ya |
 | `rankings.json` | ~290 precomputed leaderboards, plus the event names the paydays boards are answered from | Tenaball |
@@ -226,8 +226,11 @@ gracefully rather than dead-ending:
 - Tic Tac Toe boards are only offered if all nine cells can be filled with nine
   *different* players; during play, a move that would leave another cell
   unfillable is refused (and costs no mistake) instead of soft-locking.
-- Connections draws each group from its *exclusive* pool, so groups cannot
-  overlap and every intended group has one right answer.
+- Connections lets its groups overlap — a player who fits two connections is
+  the point of the game — and then proves the board has exactly one way to
+  split into four connected fours before showing it. It also rejects a board
+  where a connection that is *not* in play lands on exactly four players across
+  different groups, which is the "four French names that are not a group" trap.
 - Tenaball's tournament boards rank *placements*, so a duos or trios event puts
   the whole team in one slot and only fills it once every name is in. It skips
   an event where two teams share a place in the top eleven, where a player is

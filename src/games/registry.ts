@@ -276,7 +276,6 @@ export const GAMES: GameMeta[] = [
     rules: [
       'Cards show the player’s handle and nothing else: no flag, no org, no earnings.',
       'That is deliberate. A card carrying a Brazilian flag answers "competes in Brazil" for you, which made the old version a reading exercise rather than a knowledge one.',
-      'Rules are never about country or region, for the same reason — those are the two facts you could guess from a handle.',
       'Between four and six of the ten fit the rule, and the board never tells you how many. A stated count makes the last pick arithmetic instead of knowledge.',
     ],
     sections: [
@@ -296,6 +295,7 @@ export const GAMES: GameMeta[] = [
           'Career earnings above a threshold.',
           'Won a title in a given region, or in a given year.',
           'Played at a specific tournament — the globals and LANs, never a regional qualifier.',
+          'Country and region — in the draw now that the cards carry no flags.',
         ],
       },
       POOL_SECTION,
@@ -355,8 +355,8 @@ export const GAMES: GameMeta[] = [
       'You have four lives, shown as hearts. Every wrong group costs one.',
     ],
     rules: [
-      'Groups can be an organisation, a title, an earnings threshold, a year, a tournament they played, or the teammates of one player.',
-      'Every player belongs to exactly one of the four groups — the generator draws each from the pool that fits its group and none of the others.',
+      'A group is a country, a region, an organisation, a birth year, a title — FNCS, LAN, major — or an earnings threshold. Nothing more obscure than that.',
+      'Groups overlap on purpose: a player can fit two of the connections and still belong to only one group. That is the trap, and there is exactly one way to split the sixteen.',
       'A wrong guess tells you when three of your four belonged to one group, and says nothing otherwise.',
       'Nothing otherwise is deliberate: two of any four landing in the same group is close to chance on a sixteen-card board, so reporting it every time buried the one hint worth reading.',
     ],

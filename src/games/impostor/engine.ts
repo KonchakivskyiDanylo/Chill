@@ -32,17 +32,17 @@ export interface GameState {
 /**
  * The kinds of rule worth putting on a board.
  *
- * Deliberately excludes country and region. They are perfectly good rules and
- * they used to be almost the only ones available, which made the game a
- * flag-reading exercise rather than a knowledge one — and they are still the
- * two facts a player is most likely to be able to guess from a handle alone.
- * The rest all require actually knowing the player's career.
- *
- * They were briefly let back in on the grounds that the cards carry no flags
- * any more. Tried, and out again: the handle gives it away often enough that a
- * nationality board is a different, easier game than the other ten rules.
+ * Country and region were left out for a long time, and the reason has expired.
+ * They used to be almost the only rules available *and* the cards carried
+ * flags, so "every player here competes in Brazil" was solvable by looking
+ * rather than knowing. The cards are a bare handle now and there are ten other
+ * kinds of rule in the draw, so a nationality board is one rule in twelve
+ * rather than the game — and "which of these ten are French" is a genuine
+ * question once the flags are gone.
  */
 const USABLE = new Set([
+  'country',
+  'region',
   'org',
   'fncs-winner',
   'global-winner',
