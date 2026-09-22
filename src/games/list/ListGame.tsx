@@ -5,8 +5,11 @@ import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PlayerSearch } from '@/components/PlayerSearch';
 import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
 import type { Facts } from '@/data/liquipedia/facts';
+import { loadOrgs, type Orgs } from '@/data/liquipedia/orgs';
 import type { Pools } from '@/data/liquipedia/pools';
-import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
+import type { Roster } from '@/data/liquipedia/roster';
+import { loadTeammates, type Teammates } from '@/data/liquipedia/teammates';
+import type { Searchable } from '@/lib/text';
 import { useFacts } from '@/data/liquipedia/useFacts';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
@@ -50,13 +53,41 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
    * one list the all-time set stands in, which is what the note on the setup
    * screen is for.
    */
+  /*
+   * Organisations and teammate counts, loaded after the first paint.
+   *
+   * Between them they are 1.4 MB, and they buy two families of list — "has
+   * played for FaZe" and "has queued with Peterbot ten times" — that nobody is
+   * looking at in the first second. Same deal as Tenaball's `facts.json`: the
+   * categories appear when the files land, and a missing file costs those
+   * categories rather than the game.
+   */
+  const [extra, setExtra] = useState<{ orgs: Orgs | null; teammates: Teammates | null }>({
+    orgs: null,
+    teammates: null,
+  });
+  useEffect(() => {
+    let cancelled = false;
+    loadOrgs().then(
+      (orgs) => !cancelled && setExtra((was) => ({ ...was, orgs })),
+      () => {},
+    );
+    loadTeammates().then(
+      (teammates) => !cancelled && setExtra((was) => ({ ...was, teammates })),
+      () => {},
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const criteria = useMemo(() => {
     if (pool) {
       const scoped = buildPoolCriteria(pool, poolPlayers(roster, pools, event), facts);
       if (scoped.length > 0) return scoped;
     }
-    return buildCriteria(roster, facts, pools);
-  }, [pool, roster, facts, pools, event]);
+    return buildCriteria(roster, facts, pools, extra.orgs, extra.teammates);
+  }, [pool, roster, facts, pools, event, extra]);
 
   const [difficulty, setDifficulty] = useState<Difficulty>('easy');
   const [criterion, setCriterion] = useState<Criterion | null>(null);
@@ -66,7 +97,7 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
   const [finished, setFinished] = useState(false);
   /** Ended by the give-up button rather than by the clock. */
   const [gaveUp, setGaveUp] = useState(false);
-  const [found, setFound] = useState<RosterPlayer[]>([]);
+  const [found, setFound] = useState<Searchable[]>([]);
   const [timeLeft, setTimeLeft] = useState(START_SECONDS);
   const [feedback, setFeedback] = useState<{ tone: string; message: string } | null>(null);
   const deadlineRef = useRef<number>(0);
@@ -111,7 +142,7 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
     setTimeLeft(Math.max(0, (deadlineRef.current - Date.now()) / 1000));
   };
 
-  const guess = (player: RosterPlayer) => {
+  const guess = (player: Searchable) => {
     if (!running || !criterion) return;
 
     if (found.some((entry) => entry.id === player.id)) {
@@ -217,6 +248,8 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
   }
 
   const foundIds = new Set(found.map((player) => player.id));
+  // "players" for all but one list — see `Criterion.noun`.
+  const noun = criterion.noun ?? 'players';
   const missed = criterion.answers.filter((player) => !foundIds.has(player.id));
   const idle = !running && !finished;
 
@@ -248,7 +281,9 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
           <div className="card__title">Your list</div>
           <h2>{criterion.title}</h2>
           {criterion.subtitle ? <p className="small muted">{criterion.subtitle}</p> : null}
-          <p className="tiny faint">{criterion.answers.length} players fit.</p>
+          <p className="tiny faint">
+            {criterion.answers.length} {noun} fit.
+          </p>
         </section>
 
         {idle ? (
@@ -265,10 +300,10 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
              * about whether that name is on the list.
              */}
             <PlayerSearch
-              players={roster.players}
+              players={criterion.pool ?? roster.players}
               onPick={guess}
               exclude={foundIds}
-              placeholder="Name a player…"
+              placeholder={`Name a ${noun.replace(/ies$/, 'y').replace(/s$/, '')}…`}
               buttonLabel="Add"
               autoFocus
             />
@@ -447,13 +482,28 @@ function groupOf(criterion: Criterion): string {
   switch (kind) {
     case 'pool':
       return 'Qualified fields';
+    case 'both':
+    case 'every-global':
+    case 'finals-pair':
+      return 'Two events at once';
     case 'fncs':
     case 'fncs-wins':
+    case 'fncs-apps':
+    case 'fncs-back-to-back':
       return 'FNCS';
     case 'earnings':
+    case 'year-earnings':
       return 'Earnings';
     case 'won-in-year':
       return 'Year by year';
+    case 'country-fncs':
+    case 'country-earnings':
+    case 'countries-over':
+      return 'By country';
+    case 'org':
+      return 'Organisations';
+    case 'with':
+      return 'Teammates';
     default:
       return 'Titles';
   }

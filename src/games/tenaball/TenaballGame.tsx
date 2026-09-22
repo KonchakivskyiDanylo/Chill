@@ -19,11 +19,13 @@ import { poolPlayers } from '@/games/shared/pool';
 import type { Searchable } from '@/lib/text';
 import { useBestScore } from '@/lib/storage';
 import { getGame } from '@/games/registry';
+import { ordinal, plural } from '@/lib/format';
 import {
   applyGuess,
   createGame,
   giveUp,
   HARD_LIVES,
+  namedIn,
   slotsOf,
   type Difficulty,
   type GameState,
@@ -133,6 +135,7 @@ function Game({
         generated: rankings.generated,
         slots: rankings.slots,
         boards: [...rankings.boards, ...derivedBoards(roster.players)],
+        tournaments: rankings.tournaments,
       }),
     [rankings, roster],
   );
@@ -191,8 +194,16 @@ function Game({
       for (const row of [...game.board.rows, game.board.next]) names.add(row.key);
       return [...names].map((name) => ({ id: name, name }));
     }
+    if (game.board.entity === 'tournament') {
+      // The notebook's list already covers every answer; the union is the same
+      // belt-and-braces the org branch above wears, for a board built anywhere
+      // else — an event nobody can type is a slot nobody can fill.
+      const names = new Set(rankings.tournaments);
+      for (const row of [...game.board.rows, game.board.next]) names.add(row.key);
+      return [...names].map((name) => ({ id: name, name }));
+    }
     return roster.players;
-  }, [game, orgs, roster]);
+  }, [game, orgs, roster, rankings]);
 
   const scoreKey = game ? `tenaball:${game.board.id}:${game.difficulty}` : 'tenaball:none';
   const { best, submit: submitScore } = useBestScore(scoreKey);
@@ -245,6 +256,16 @@ function Game({
   const { board } = game;
   const slots = slotsOf(board);
   const finished = game.status !== 'playing';
+  /*
+   * Whether the value column says anything the slot number has not.
+   *
+   * On a tournament board the value *is* the finishing position, so every row
+   * would print its own rank back at itself. Asked of the board rather than of
+   * each row, because a board written before the notebook ranked placements has
+   * two players per position — 1st is rows 1 and 2 — and there half the numbers
+   * do carry information.
+   */
+  const showValues = slots.some((slot) => slot.row.display !== String(slot.rank));
 
   const guess = (entity: Searchable) => {
     const result = applyGuess(game, entity.id, entity.name);
@@ -253,8 +274,27 @@ function Game({
     // body re-renders forever.
     if (result.state.status !== 'playing') submitScore(result.state.found.size);
     switch (result.outcome.kind) {
-      case 'correct':
-        setFeedback({ tone: 'var(--success)', message: `${entity.name} — number ${result.outcome.rank}.` });
+      case 'correct': {
+        // A team slot closing is worth saying out loud; a one-name board has
+        // nothing to close, so it keeps the flatter wording it always had.
+        const rank = result.outcome.rank;
+        const team = slots[rank - 1].members.length > 1;
+        setFeedback({
+          tone: 'var(--success)',
+          message: team
+            ? `${entity.name} — that completes ${ordinal(rank)}.`
+            : `${entity.name} — number ${rank}.`,
+        });
+        break;
+      }
+      case 'partial':
+        setFeedback({
+          tone: 'var(--success)',
+          message: `${entity.name} — ${ordinal(result.outcome.rank)}. ${plural(
+            result.outcome.remaining,
+            'name',
+          )} to go on that one.`,
+        });
         break;
       case 'duplicate':
         setFeedback({ tone: 'var(--warning)', message: `${entity.name} is already on the board.` });
@@ -262,7 +302,9 @@ function Game({
       case 'tied':
         setFeedback({
           tone: 'var(--warning)',
-          message: `${entity.name} is level with 10th but ranked out by the tie rule — no penalty.`,
+          message: result.outcome.level
+            ? `${entity.name} is level with 10th but ranked out by the tie rule — no penalty.`
+            : `${entity.name} is 11th — just outside, so no penalty.`,
         });
         break;
       default:
@@ -280,33 +322,56 @@ function Game({
         </button>
       }
     >
-      <div className="stack">
+      {/* `tb-play` is what makes the round fit a laptop screen without
+          scrolling: it tightens the shared stats and stacking, and it is the
+          container the board measures to decide on two columns of five. */}
+      <div className="stack tb-play">
         <div className="stats">
           <Stat label="Found" value={`${game.found.size}/${slots.length}`} />
           {game.difficulty === 'hard' ? <Stat label="Lives" value={game.lives} /> : null}
           <Stat label="Best" value={best} />
         </div>
 
-        <section className="card">
-          <div className="card__title">{board.group}</div>
-          <h2>{board.title}</h2>
-          <p className="tiny faint" style={{ marginTop: 6 }}>
-            {board.tieRule}
-          </p>
+        <section className="card tb-head">
+          <div className="tb-head__row">
+            <span className="tb-head__group">{board.group}</span>
+            <h2 className="tb-head__title">{board.title}</h2>
+          </div>
+          <p className="tiny faint">{board.tieRule}</p>
         </section>
 
         <ol className="tb-list list-reset">
           {slots.map((slot) => {
-            const revealed = game.found.has(slot.rank) || finished;
-            const missed = finished && !game.found.has(slot.rank);
+            const named = namedIn(game, slot.rank);
+            const complete = game.found.has(slot.rank);
+            const missed = finished && !complete;
+            const value = showValues ? slot.row.display : '';
             return (
               <li
                 key={slot.rank}
-                className={`tb-slot${revealed ? ' tb-slot--filled' : ''}${missed ? ' tb-slot--missed' : ''}`}
+                className={`tb-slot${complete ? ' tb-slot--filled' : ''}${
+                  missed ? ' tb-slot--missed' : ''
+                }${!complete && !finished && named.size > 0 ? ' tb-slot--partial' : ''}`}
               >
                 <span className="tb-slot__rank">{slot.rank}</span>
-                <span className="tb-slot__name">{revealed ? slot.row.label : '—'}</span>
-                <span className="tb-slot__value">{revealed ? slot.row.display : ''}</span>
+                <span className="tb-slot__name">
+                  {slot.members.map((member) =>
+                    named.has(member.key) ? (
+                      <span key={member.key} className="tb-member">
+                        {member.label}
+                      </span>
+                    ) : finished ? (
+                      <span key={member.key} className="tb-member tb-member--revealed">
+                        {member.label}
+                      </span>
+                    ) : (
+                      <span key={member.key} className="tb-member tb-member--blank">
+                        —
+                      </span>
+                    ),
+                  )}
+                </span>
+                <span className="tb-slot__value">{complete || finished ? value : ''}</span>
               </li>
             );
           })}
@@ -346,7 +411,9 @@ function Game({
                   ? 'Name an organisation…'
                   : board.entity === 'country'
                     ? 'Name a country…'
-                    : 'Name a player…'
+                    : board.entity === 'tournament'
+                      ? 'Name a tournament…'
+                      : 'Name a player…'
               }
               buttonLabel="Enter"
               autoFocus

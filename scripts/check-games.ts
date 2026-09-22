@@ -19,7 +19,7 @@ import { loadTeammates } from '@/data/liquipedia/teammates';
 import { loadFacts } from '@/data/liquipedia/facts';
 import { loadOrgs } from '@/data/liquipedia/orgs';
 import { loadPools } from '@/data/liquipedia/pools';
-import { loadRankings } from '@/data/liquipedia/rankings';
+import { loadRankings, membersOf } from '@/data/liquipedia/rankings';
 import { deal } from '@/games/shared/rotation';
 import { GAMES, getGame } from '@/games/registry';
 import { buildCriteria, type CriteriaSource } from '@/games/shared/criteria';
@@ -331,22 +331,50 @@ if (rankings) {
     byGroup.set(board.group, (byGroup.get(board.group) ?? 0) + 1);
     check(board.rows.length === tenaball.SLOTS, `tenaball: ${board.id} has ${board.rows.length} rows`);
     check(Boolean(board.next?.key), `tenaball: ${board.id} has no 11th place for the tie rule`);
-    const keys = new Set(board.rows.map((row) => row.key));
-    check(keys.size === board.rows.length, `tenaball: ${board.id} repeats an entry`);
-    check(!keys.has(board.next.key), `tenaball: ${board.id} lists its 11th place inside the ten`);
 
-    // A perfect run fills every slot and never loses a life.
+    // Answers, not rows: a tournament board in duos ranks placements, so the
+    // ten rows hold twenty names and it is the *names* that have to be unique.
+    // One player answering for two slots would make the board unwinnable.
+    const answers = board.rows.flatMap((row) => membersOf(row).map((member) => member.key));
+    check(new Set(answers).size === answers.length, `tenaball: ${board.id} repeats an entry`);
+    const spare = membersOf(board.next).map((member) => member.key);
+    check(
+      !spare.some((key) => answers.includes(key)),
+      `tenaball: ${board.id} lists its 11th place inside the ten`,
+    );
+
+    // A paydays board is answered with an event name, and the only place the
+    // guess box can find one is the list the notebook ships. An answer missing
+    // from it is a slot that cannot be filled — the same bug the org boards had.
+    if (board.entity === 'tournament') {
+      const pool = new Set(rankings.tournaments);
+      check(pool.size > answers.length * 5, `tenaball: ${board.id} has no event list to search`);
+      check(
+        [...answers, ...spare].every((key) => pool.has(key)),
+        `tenaball: ${board.id} names an event the guess box cannot offer`,
+      );
+    }
+
+    // A perfect run fills every slot and never loses a life. A team row takes
+    // one guess per name and only closes on the last of them.
     let game = tenaball.createGame(board, 'hard');
     for (const row of board.rows) {
-      const result = tenaball.applyGuess(game, row.key, row.label);
-      check(result.outcome.kind === 'correct', `tenaball: ${board.id} rejected its own row "${row.label}"`);
-      game = result.state;
+      const members = membersOf(row);
+      members.forEach((member, index) => {
+        const result = tenaball.applyGuess(game, member.key, member.label);
+        const wanted = index === members.length - 1 ? 'correct' : 'partial';
+        check(
+          result.outcome.kind === wanted,
+          `tenaball: ${board.id} answered "${member.label}" with ${result.outcome.kind}, expected ${wanted}`,
+        );
+        game = result.state;
+      });
     }
     check(game.status === 'won', `tenaball: ${board.id} did not win on a perfect run`);
     check(game.lives === tenaball.HARD_LIVES, `tenaball: ${board.id} lost a life on a perfect run`);
 
     // The 11th must be a free near miss, not a mistake.
-    const near = tenaball.applyGuess(tenaball.createGame(board, 'hard'), board.next.key, board.next.label);
+    const near = tenaball.applyGuess(tenaball.createGame(board, 'hard'), spare[0], board.next.label);
     check(near.outcome.kind === 'tied', `tenaball: ${board.id} punished its own 11th place`);
     check(near.state.lives === tenaball.HARD_LIVES, `tenaball: ${board.id} charged a life for the 11th`);
   }
@@ -358,13 +386,36 @@ if (rankings) {
 
 // -------------------------------------------------------------------- 7. List
 if (facts) {
-  const criteria = buildListCriteria(roster, facts, pools);
+  // Orgs and teammates are optional to the game — it shows the lists they buy
+  // once the files land — so they are passed here to get those lists checked.
+  const criteria = buildListCriteria(roster, facts, pools, orgs, teammates);
   check(criteria.length > 0, 'list: no categories available');
+  const byGroup = new Map<string, number>();
+  const rosterIds = new Set(roster.players.map((player) => player.id));
   for (const criterion of criteria) {
+    const kind = criterion.id.split(':')[0];
+    byGroup.set(kind, (byGroup.get(kind) ?? 0) + 1);
     check(criterion.answers.length >= 8, `list: "${criterion.title}" has only ${criterion.answers.length}`);
     const ids = new Set(criterion.answers.map((p) => p.id));
-    check(ids.size === criterion.answers.length, `list: "${criterion.title}" repeats a player`);
-    notes.push(`list: ${criterion.title} — ${criterion.answers.length}`);
+    check(ids.size === criterion.answers.length, `list: "${criterion.title}" repeats an answer`);
+    // Every answer has to be typable in the box this list opens, or the round
+    // cannot be finished — the same rule Tenaball's boards live by.
+    const pool = new Set((criterion.pool ?? roster.players).map((entry) => entry.id));
+    const unreachable = criterion.answers.filter((answer) => !pool.has(answer.id));
+    check(
+      unreachable.length === 0,
+      `list: "${criterion.title}" cannot be typed: ${unreachable.slice(0, 3).map((a) => a.name).join(', ')}`,
+    );
+    if (!criterion.pool) {
+      check(
+        criterion.answers.every((answer) => rosterIds.has(answer.id)),
+        `list: "${criterion.title}" answers with somebody off the roster`,
+      );
+    }
+  }
+  notes.push(`list: ${criteria.length} categories`);
+  for (const [kind, count] of [...byGroup].sort((a, b) => b[1] - a[1])) {
+    notes.push(`  ${kind}: ${count}`);
   }
 }
 

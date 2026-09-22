@@ -6,6 +6,11 @@ import { buildCriteria, type CriteriaSource, type PlayerCriterion } from '@/game
 
 export type Mode = 'all-at-once' | 'one-by-one';
 
+/** Two rows of five. */
+export const BOARD_SIZE = 10;
+export const MIN_MEMBERS = 4;
+export const MAX_MEMBERS = 6;
+
 export interface Round {
   criterion: PlayerCriterion;
   /** Board order — the players who fit and the griefers, mixed. */
@@ -32,6 +37,10 @@ export interface GameState {
  * flag-reading exercise rather than a knowledge one — and they are still the
  * two facts a player is most likely to be able to guess from a handle alone.
  * The rest all require actually knowing the player's career.
+ *
+ * They were briefly let back in on the grounds that the cards carry no flags
+ * any more. Tried, and out again: the handle gives it away often enough that a
+ * nationality board is a different, easier game than the other ten rules.
  */
 const USABLE = new Set([
   'org',
@@ -78,26 +87,30 @@ function byKind(criteria: PlayerCriterion[], rng: ReturnType<typeof makeRng>): P
 
 export function createRound(source: CriteriaSource, seed: string = String(Date.now())): Round | null {
   const rng = makeRng(seed);
-  const criteria = buildCriteria(source, { minMatches: 4, maxShare: 0.4 }).filter((criterion) =>
-    USABLE.has(criterion.kind),
+  const criteria = buildCriteria(source, { minMatches: MIN_MEMBERS, maxShare: 0.4 }).filter(
+    (criterion) => USABLE.has(criterion.kind),
   );
   if (criteria.length === 0) return null;
 
   for (const criterion of byKind(criteria, rng)) {
     const outsiders = source.players.filter((player) => !criterion.test(player));
-    const boardSize = randInt(rng, 6, 8);
     /*
-     * Roughly half the board fits, and the board never says how many.
+     * Ten cards, four to six of which fit, and the board never says how many.
      *
-     * It used to be two or three of six-to-eight, printed above the cards as
-     * "find the 3". Both halves of that made the round easier than it looked:
-     * a known count turns the last pick into arithmetic, and a small count
-     * means most cards are griefers, so guessing is cheap. At half and unknown
-     * you have to actually judge every card.
+     * It used to be six to eight cards with half of them fitting, printed above
+     * them as "find the 3". Both halves of that made the round easier than it
+     * looked: a known count turns the last pick into arithmetic, and a small
+     * count means most cards are griefers, so guessing is cheap. Ten is two
+     * tidy rows of five and enough cards that four-of-ten and six-of-ten feel
+     * genuinely different from the outside.
      */
-    const memberCount = randInt(rng, Math.floor(boardSize / 2), Math.floor(boardSize / 2) + 1);
-    const grieferCount = boardSize - memberCount;
-    if (criterion.matches.length < memberCount || outsiders.length < grieferCount) continue;
+    // Six unless the rule cannot field six — a rule with five players to its
+    // name is still a good board, it is just never a six.
+    const most = Math.min(MAX_MEMBERS, criterion.matches.length);
+    if (most < MIN_MEMBERS) continue;
+    const memberCount = randInt(rng, MIN_MEMBERS, most);
+    const grieferCount = BOARD_SIZE - memberCount;
+    if (outsiders.length < grieferCount) continue;
 
     const members = sample(rng, criterion.matches, memberCount);
     const griefers = sample(rng, outsiders, grieferCount);

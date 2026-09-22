@@ -23,8 +23,26 @@ import { loadJson } from './files';
  * organisations by earnings" wants an org and "Top 10 countries by FNCS wins"
  * wants a country, so the board has to say which and the game picks the
  * matching resolver.
+ *
+ * `tournament` is the odd one: the paydays boards turn the question round and
+ * ask *where* a player's money came from, so the answer is an event. Those are
+ * the only boards whose answers are not somewhere else in the export already,
+ * which is why the payload ships a list of event names to search — see
+ * `tournaments` below.
  */
-export type EntityKind = 'player' | 'org' | 'country';
+export type EntityKind = 'player' | 'org' | 'country' | 'tournament';
+
+/**
+ * One nameable answer inside a row.
+ *
+ * A row is usually its own answer, and then it has no members. A tournament
+ * played in duos or trios is the exception: the row is a finishing position and
+ * the answer is the team that took it, which is two or three people.
+ */
+export interface BoardMember {
+  key: string;
+  label: string;
+}
 
 export interface BoardRow {
   /** Canonical id — a page name for players, an org id, a country name. */
@@ -34,6 +52,23 @@ export interface BoardRow {
   value: number;
   /** Preformatted, because only the notebook knows if this is money or a count. */
   display: string;
+  /**
+   * Everyone this row wants named, for a board whose answer is a team.
+   *
+   * Absent on every other board — and on a tournament board written before the
+   * notebook grew this column, which is why nothing may read it directly. Go
+   * through {@link membersOf}, which treats a member-less row as a team of one.
+   */
+  members?: BoardMember[];
+}
+
+/** A row's answers: its team, or the row itself. */
+export function membersOf(row: {
+  key: string;
+  label: string;
+  members?: BoardMember[];
+}): BoardMember[] {
+  return row.members?.length ? row.members : [{ key: row.key, label: row.label }];
 }
 
 export interface Board {
@@ -45,10 +80,10 @@ export interface Board {
   tieRule: string;
   rows: BoardRow[];
   /**
-   * 11th place. Used to spot a guess level with the cut-off and call it a near
+   * 11th place. Used to spot a guess that just missed the cut and call it a near
    * miss instead of a mistake — the rule the board already states.
    */
-  next: { key: string; label: string; value: number };
+  next: { key: string; label: string; value: number; members?: BoardMember[] };
   /** True for finishing positions, where 1 beats 2. */
   lowerIsBetter?: boolean;
 }
@@ -57,12 +92,22 @@ interface RawPayload {
   generated: string;
   slots: number;
   boards: Board[];
+  tournaments?: string[];
 }
 
 export class Rankings {
   readonly generated: string;
   readonly slots: number;
   readonly boards: Board[];
+  /**
+   * Event names the guess box can offer on a `tournament` board.
+   *
+   * Written by the notebook: every tier-1 and tier-2 event, short-named, plus
+   * any answer from outside those tiers. Deliberately far wider than the
+   * answers — a dropdown holding only the solution is a dropdown that solves
+   * the board for you.
+   */
+  readonly tournaments: string[];
 
   private readonly byId = new Map<string, Board>();
 
@@ -70,6 +115,7 @@ export class Rankings {
     this.generated = payload.generated;
     this.slots = payload.slots;
     this.boards = payload.boards;
+    this.tournaments = payload.tournaments ?? [];
     for (const board of this.boards) this.byId.set(board.id, board);
   }
 

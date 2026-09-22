@@ -1,11 +1,23 @@
-/* Four across at most: a board of eight read as a single long line of names on
-   a wide screen, which is a list rather than a grid to scan. */
+/* Five across, so the board of ten reads as two rows rather than a long line
+   of names — a shape you can scan twice. It falls to three and then two as the
+   screen narrows, which keeps the card wide enough for a long handle. */
 .imp-grid {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  max-width: 660px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  max-width: 760px;
   margin: 0 auto;
+}
+
+@media (max-width: 720px) {
+  .imp-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 460px) {
+  .imp-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /*

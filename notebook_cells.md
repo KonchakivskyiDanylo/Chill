@@ -1,23 +1,26 @@
 # Notebook cells to run
 
-Four cells, **in this order, top to bottom**. One kernel, started from the repo
+Five cells, **in this order, top to bottom**. One kernel, started from the repo
 root — `BASE` is a relative path. Cell 1 loads `placements.json` (154 MB,
-~4 s) and the other three reuse it.
+~4 s) and the rest reuse it.
 
 | cell | writes |
 | --- | --- |
 | 1 | — (loads the dump, classifies the tournaments) |
 | 2 | `rankings.json` |
 | 3 | `rankings.json` again, with four more boards |
-| 4 | `pools.json` |
+| 4 | `rankings.json` a third time, with sixty-six more |
+| 5 | `pools.json` |
 
-There is a fifth cell in an appendix at the bottom that rebuilds
+There is a sixth cell in an appendix at the bottom that rebuilds
 `facts.json`. **You do not need it** — nothing in the app has changed that
 depends on it, and it is the one cell where the `is_lan` question below
 actually changes the data.
 
-> **Cell 3 appends to `boards`.** Running it twice in one kernel duplicates the
-> four mode boards. If you need to redo it, run cell 2 again first.
+> **Cells 3 and 4 append to `boards`.** Running either twice in one kernel
+> duplicates its boards. If you need to redo one, run cell 2 again first and
+> then 3 and 4 in order — cell 4 writes the file last and is the only one that
+> writes the tournament-name list the paydays boards are answered from.
 
 This is transcribed from `notebook_cells.ipynb` verbatim, with three fixes
 that a clean run needs:
@@ -222,6 +225,13 @@ in the browser, and the boards only change when the export does.
 Defines `boards`, `board()`, `rank()`, `NAME`, `money` and `SLOTS`, which
 cell 3 reuses — so it has to run first.
 
+**Changed:** the tournament boards are now one row per *finishing position*
+rather than per player, each carrying the whole team in `members`. That is what
+lets a duos or trios board ask for both names, and it is also why FNCS 2025
+Global Championship appears for the first time — see the comment in that
+section. Expect **216 boards, Tournaments 8** where it used to say 215 and 7;
+nothing else moves.
+
 ```python
 OUT = f'{BASE}/rankings.json'
 YEARS = list(range(2018, 2027))
@@ -246,9 +256,25 @@ def rank(d, label_of):
     return sorted(((k, label_of(k), v) for k, v in d.items() if v > 0),
                   key=lambda e: (-e[2], e[1].lower()))
 
+def rank_fame(d, label_of=None, money_of=None):
+    """`rank`, but level counts fall to money before they fall to the alphabet.
+
+    On a count board the alphabet is a bad tiebreak and TIE_COUNT already
+    promised this one: nine of the ten slots on "Top 10 by FNCS wins" are 3s and
+    4s, and which of the 3s is tenth was decided by their initial. "The bigger
+    earner is higher" is a rule a player can act on. `money_of` is the career
+    column for a player, the org's prize money for an org, the country's total
+    for a country."""
+    # Resolved here rather than as defaults: both are defined below this.
+    label_of = label_of or NAME
+    money_of = money_of or (lambda k: career.get(k, 0))
+    return sorted(((k, label_of(k), v) for k, v in d.items() if v > 0),
+                  key=lambda e: (-e[2], -money_of(e[0]), e[1].lower()))
+
 NAME = lambda page: player_of[page]['id'] if page in player_of else page
 TIE_MONEY = 'Straight prize-money order. Exact ties are split by name.'
-TIE_COUNT = 'Players level on the count are ranked by career earnings.'
+TIE_COUNT = ('Players level on the count are ranked by career earnings, so the '
+             'bigger earner is higher. Exact ties are split by name.')
 
 # ---------------------------------------------------------- player: totals --
 earn      = Counter()   # from placements, so it can be sliced
@@ -293,11 +319,11 @@ board('earnings-no-wc', 'Players', 'Top 10 by earnings excluding the World Cup',
       'player', TIE_MONEY,
       rank(Counter({k: v - wc_earn[k] for k, v in earn.items()}), NAME), money)
 board('lan-apps', 'Players', 'Top 10 by LAN appearances', 'player', TIE_COUNT,
-      rank(lan_apps, NAME), count('LAN'))
+      rank_fame(lan_apps, NAME), count('LAN'))
 board('fncs-apps', 'Players', 'Top 10 by FNCS Finals appearances', 'player',
-      TIE_COUNT, rank(fncs_apps, NAME), count('final'))
+      TIE_COUNT, rank_fame(fncs_apps, NAME), count('final'))
 board('fncs-wins', 'Players', 'Top 10 by FNCS wins', 'player', TIE_COUNT,
-      rank(Counter({p['pagename']: p['fncs_wins'] for p in PLAYABLE}), NAME),
+      rank_fame(Counter({p['pagename']: p['fncs_wins'] for p in PLAYABLE}), NAME),
       count('title'))
 
 major_wins = Counter()
@@ -306,7 +332,7 @@ for t, r, m, pages in PLACED:
         for page, _ in pages:
             major_wins[page] += 1
 board('major-wins', 'Players', 'Top 10 by major tournament wins', 'player',
-      TIE_COUNT, rank(major_wins, NAME), count('win'))
+      TIE_COUNT, rank_fame(major_wins, NAME), count('win'))
 
 for y in YEARS:
     board(f'year-earnings:{y}', 'Players', f'Top 10 earners in {y}', 'player',
@@ -348,30 +374,66 @@ anchors = [p for p, _ in career.most_common(60)]
 for a in anchors:
     board(f'teammates:{a}', 'Teammates',
           f'Top 10 most frequent teammates of {NAME(a)}', 'player',
-          'Ranked by tournaments entered together.',
-          rank(mates[a], NAME), count('tournament'))
+          'Ranked by tournaments entered together. ' + TIE_COUNT,
+          rank_fame(mates[a], NAME), count('tournament'))
 
 # ----------------------------------------------------------- one tournament --
 # Offline events only, per your note: globals, World Cup, DreamHack, EWC.
+#
+# A row per finishing *position*, not per player. These events are played in
+# duos and trios, so 1st place is two or three people and the slot only fills
+# once every one of them has been named — which is what `members` carries.
+#
+# Ranking players instead is what used to lose whole events: at a trios Globals
+# the top three places are nine players, so 10th and 11th were both the
+# fourth-placed trio, the "no single right answer" guard fired and FNCS 2025
+# Global Championship shipped no board at all. By place there is no such tie,
+# and the trio is the answer rather than an accident of the alphabet.
+def team_name(pages):
+    """'aqua & nyhrox', 'Japko, panzer & Setty' — the names, alphabetical."""
+    names = sorted((NAME(p) for p in pages), key=str.lower)
+    return names[0] if len(names) == 1 else ' & '.join([', '.join(names[:-1]), names[-1]])
+
+def team_row(place, team):
+    pages = sorted(team, key=lambda pg: NAME(pg).lower())
+    return {'key': '|'.join(sorted(team)), 'label': team_name(team),
+            'value': place, 'display': f'{place}',
+            'members': [{'key': pg, 'label': NAME(pg)} for pg in pages]}
+
+# Straight off `placements` rather than PLACED, which drops the participants it
+# cannot resolve: a team missing a member is a slot nobody can close, and the
+# board has to be able to see that and refuse.
+lan_places = defaultdict(lambda: defaultdict(list))
+for row in placements:
+    n = row.get('tournament')
+    if n not in LANS:
+        continue
+    r = rank_of(row.get('placement'))
+    if r is None:
+        continue
+    lan_places[n][r].append([resolve(p.get('player') or '')
+                             for p in (row.get('participants') or [])])
+
 for n in sorted(LANS):
-    t = tour_of[n]
-    finishers = {}
-    for tt, r, m, pages in PLACED:
-        if tt['name'] != n or r is None:
-            continue
-        for page, _ in pages:
-            finishers[page] = min(finishers.get(page, 10**9), r)
-    ranked = sorted(((k, NAME(k), v) for k, v in finishers.items()),
-                    key=lambda e: (e[2], e[1].lower()))
-    if len(ranked) < SLOTS + 1 or ranked[SLOTS - 1][2] == ranked[SLOTS][2]:
-        continue                      # 10th and 11th tied — no single right answer
+    places = sorted(lan_places[n])[:SLOTS + 1]
+    teams = [lan_places[n][p][0] if len(lan_places[n][p]) == 1 else [] for p in places]
+    if len(places) < SLOTS + 1 or any(not t or not all(t) for t in teams):
+        continue     # fewer than 11 placements, two teams on one place, or a
+                     # member this export cannot name — see the note above
+    named = [pg for t in teams for pg in t]
+    if len(set(named)) != len(named):
+        continue     # the same player twice in the eleven — no single right answer
+    spare = team_row(places[SLOTS], teams[SLOTS])
+    del spare['display']             # the 11th is a near-miss test, never shown
+    solo = max(len(t) for t in teams) == 1
     boards.append({
         'id': f'tournament:{n}', 'group': 'Tournaments',
         'title': f'Top 10 at {n}', 'entity': 'player',
-        'tieRule': 'Ranked by finishing position at this event.',
-        'rows': [{'key': k, 'label': l, 'value': v, 'display': f'{v}'}
-                 for k, l, v in ranked[:SLOTS]],
-        'next': {'key': ranked[SLOTS][0], 'label': ranked[SLOTS][1], 'value': ranked[SLOTS][2]},
+        'tieRule': 'Ranked by finishing position at this event.' if solo else
+                   ('Ranked by finishing position at this event. Each place is a '
+                    'team, and it only fills once every player on it is named.'),
+        'rows': [team_row(p, t) for p, t in zip(places[:SLOTS], teams[:SLOTS])],
+        'next': spare,
         'lowerIsBetter': True,
     })
 
@@ -381,7 +443,9 @@ ORG = lambda k: org_name.get(k, k)
 board('org-earnings', 'Organisations', 'Top 10 organisations by total earnings',
       'org', TIE_MONEY, rank(org_earn, ORG), money)
 board('org-majors', 'Organisations', 'Top 10 organisations by major wins',
-      'org', 'Ranked by wins at Epic-run majors.', rank(org_majors, ORG), count('win'))
+      'org', 'Ranked by wins at Epic-run majors. Organisations level on the count '
+      'are ranked by their own prize money. Exact ties are split by name.',
+      rank_fame(org_majors, ORG, org_earn.get), count('win'))
 for y in YEARS:
     board(f'org-year-earnings:{y}', 'Organisations',
           f'Top 10 organisations by earnings in {y}', 'org', TIE_MONEY,
@@ -404,8 +468,10 @@ for p in PLAYABLE:
 board('country-total-earnings', 'Countries', 'Top 10 countries by player earnings',
       'country', TIE_MONEY, rank(country_total, CT), money)
 board('country-fncs-wins', 'Countries', 'Top 10 countries by FNCS wins',
-      'country', 'Every FNCS title won by a player of that nationality.',
-      rank(country_fncs, CT), count('title'))
+      'country', 'Every FNCS title won by a player of that nationality. Countries '
+      "level on the count are ranked by their players' total earnings. Exact ties "
+      'are split by name.',
+      rank_fame(country_fncs, CT, country_total.get), count('title'))
 for y in YEARS:
     board(f'country-year-earnings:{y}', 'Countries',
           f'Top 10 countries by earnings in {y}', 'country', TIE_MONEY,
@@ -461,10 +527,10 @@ duo     5384 players with earnings
 trio    4755 players with earnings
 squad   3256 players with earnings
 
-rewrote rankings.json — 219 boards
+rewrote rankings.json — 220 boards
 ```
 
-**215 boards in, 219 out: four added, none changed, none removed.** Running
+**216 boards in, 220 out: four added, none changed, none removed.** Running
 cells 2 and 3 does not move any existing board. The new ones open with Bugha on
 solo, aqua on duo — which is the right answer and a decent sign the split is
 working.
@@ -517,7 +583,459 @@ print('\nrewrote rankings.json —', len(boards), 'boards')
 
 ---
 
-## Cell 4 — `pools.json`
+## Cell 4 — sixty-six more categories
+
+**New.** The rest of the list: wins, streaks, ages, longest-running duos, the
+country boards split by who is still active, and a board answered with a
+*tournament* rather than a player. It appends to `boards` and rewrites
+`rankings.json`, so it runs after cells 2 and 3 and writes the file last.
+
+| boards | what they are |
+| --- | --- |
+| 11 | Players — tournaments won, LAN wins, top-5 finishes at FNCS finals, grand finals without a title, earners with no title, longest run of finals, longest run of titles, titles across chapters, youngest and oldest to win a major, oldest to win a first one |
+| 29 | By country — the same career-earnings board as before, active players only. Only countries with eleven active earners get one |
+| 1 | Teammates — longest-running duos, measured in consecutive majors together |
+| 5 | Countries — players past $100K, $300K, $500K and $1M, and earnings per resident |
+| 20 | Paydays — for each of the twenty biggest earners, the ten events they earned the most at |
+
+Three things in here are worth reading before you run it.
+
+**Chapters are derived, not typed in.** The FNCS stopped putting the chapter in
+its own name after 2022, so `chapter_at()` asks the export instead: thousands of
+community events are called `C6S2` or "Chapter 5 Season 1", and the chapter of
+any date is whatever the events around it call themselves. It comes out clean
+— Chapter 2 through 2021, 3 in 2022, 4 in 2023, 5 in 2024, 6 in 2025, 7 in
+2026 — and Season X falls to Chapter 1, the one chapter that predates the
+naming convention entirely.
+
+**Streaks count rounds, not events.** A "wave" is one round of FNCS grand
+finals: every region's final inside a week of each other, found by clustering
+the dates rather than parsing four generations of naming. A cluster of fewer
+than four regions is a one-off — a Global Championship, the 2022
+Invitational, the 2026 Summit — and is left out, so missing an event nobody
+could qualify for does not break anybody's run.
+
+**`is_lan` is not touched.** The LAN wins board wants more than the nine events
+that filter keeps, so it builds its own `OFFLINE` set for that one board. The
+shared filter still means what it meant, and `facts.json`, List, Griefer and Tic
+Tac Toe are unaffected.
+
+One number in here is not from Liquipedia: the per-capita board needs
+populations, and `POPULATION` is a hand-typed table of public 2024 estimates.
+The cell prints any country that has earnings but no population on file, so a
+future export cannot quietly drop one.
+
+Expected output — I ran all four cells against the real dump before writing
+this, with the writes redirected to a scratch directory:
+
+```
+286 boards, 639 tournament names, 0.32 MB
+Counter({'By country': 76, 'By region': 60, 'Teammates': 59, 'Players': 32,
+         'Countries': 20, 'Paydays': 20, 'Organisations': 11, 'Tournaments': 8})
+```
+
+**220 boards in, 286 out.** Nothing existing moves; `rankings.json` goes from
+0.21 MB to 0.32 MB, and it is loaded only when somebody opens Tenaball.
+
+```python
+import bisect
+from datetime import date as _date
+
+OUT = f'{BASE}/rankings.json'
+
+TIE_FAME = ('Level counts are split by career earnings, so of two players on the '
+            'same number the bigger earner ranks higher.')
+TIE_EXACT = 'Exact ties are split by name.'
+TIE_RICH = ('Countries level on count are ordered by total career earnings, '
+            'so the bigger-earning country ranks higher.')
+
+def phrase(one, many):
+    """`count` from cell 2 pluralises by adding an s, which gives "15 finishs"
+    and "26 in a rows". These boards spell both forms out."""
+    return lambda v: f'{v:,.0f} {one if v == 1 else many}'
+
+def day_of(t):
+    d = str(t.get('startdate') or '')[:10]
+    return d if re.match(r'^\d{4}-\d{2}-\d{2}$', d) else None
+def days_apart(a, b):
+    return (_date.fromisoformat(b) - _date.fromisoformat(a)).days
+
+# `rank_fame` comes from cell 2, where the count boards it was written for are.
+
+# ============================================================ player counts ==
+wins_any, wins_offline = Counter(), Counter()
+fncs_top5, fncs_apps_all = Counter(), Counter()
+
+# "LAN wins" wants more than the nine events `is_lan` keeps - that filter is
+# Epic-run tier-1 finals only, and it is deliberately left alone because
+# facts.json, List, Griefer and Tic Tac Toe are all built on it. This is a local
+# widening for one board: every offline main event in the top two tiers, which
+# is what people mean by a LAN and includes DreamHack, Gamers8 and the EWC.
+OFFLINE = {t['name'] for t in tournaments
+           if t.get('type') in ('Offline', 'Hybrid')
+           and t.get('liquipediatier') in (1, 2)
+           and t.get('liquipediatiertype') is None}
+
+for t, r, m, pages in PLACED:
+    n = t['name']
+    for page, _ in pages:
+        if r == 1:
+            wins_any[page] += 1
+            if n in OFFLINE:
+                wins_offline[page] += 1
+        if n in FNCS:
+            fncs_apps_all[page] += 1
+            if r is not None and r <= 5:
+                fncs_top5[page] += 1
+
+board('tournament-wins', 'Players', 'Top 10 by tournaments won', 'player',
+      'Every tournament on record, from a Global Championship to a $50 cup - '
+      'first place only. ' + TIE_FAME, rank_fame(wins_any), count('win'))
+board('lan-wins', 'Players', 'Top 10 by LAN wins', 'player',
+      'Offline main events in the top two tiers, so the Globals and the World '
+      'Cup but also DreamHack, Gamers8 and the Esports World Cup. ' + TIE_FAME,
+      rank_fame(wins_offline), count('win'))
+board('fncs-top5', 'Players', 'Top 10 by top-5 finishes at FNCS finals', 'player',
+      'Fifth or better at an FNCS grand final, counting every season and region. '
+      + TIE_FAME, rank_fame(fncs_top5), phrase('top-5 finish', 'top-5 finishes'))
+
+fncs_titles = {p['pagename']: p['fncs_wins'] for p in PLAYABLE}
+board('fncs-finals-no-title', 'Players',
+      'Top 10 by FNCS grand finals without ever winning one', 'player',
+      'Grand finals reached by players whose FNCS title count is still zero. '
+      'One win and you leave this board for good. ' + TIE_FAME,
+      rank_fame(Counter({k: v for k, v in fncs_apps_all.items() if not fncs_titles.get(k)})),
+      count('final'))
+board('earnings-no-fncs', 'Players', 'Top 10 earners who have never won an FNCS',
+      'player', 'Career prize money, among players with no FNCS title. ' + TIE_MONEY,
+      rank(Counter({k: v for k, v in career.items() if not fncs_titles.get(k)}), NAME), money)
+
+# ============================================== FNCS waves: streaks, chapters ==
+# A "wave" is one round of FNCS grand finals: every region's final inside a week
+# of each other. Read off the dates rather than the names, because the naming
+# changed four times (Season X, C2S1, FNCS 2023 - Major 1) and the dates did not.
+# A cluster smaller than four regions is a one-off - a Global Championship, the
+# 2022 Invitational, the 2026 Summit - and is left out, so missing an event
+# nobody could qualify for does not break a streak.
+_fncs_days = sorted((day_of(tour_of[n]), n) for n in FNCS if day_of(tour_of[n]))
+_clusters, _cur = [], []
+for _d, _n in _fncs_days:
+    if _cur and days_apart(_cur[-1][0], _d) > 7:
+        _clusters.append(_cur)
+        _cur = []
+    _cur.append((_d, _n))
+if _cur:
+    _clusters.append(_cur)
+WAVES = [c for c in _clusters if len(c) >= 4]
+wave_of = {n: i for i, c in enumerate(WAVES) for _, n in c}
+
+# Chapters come out of the export's own names: thousands of community events are
+# called "C6S2" or "Chapter 5 Season 1", so the chapter of any date is whatever
+# the events around it call themselves. Nothing is hardcoded, which matters
+# because the FNCS stopped putting the chapter in its own name after 2022.
+_CH_PREFIX, _CH_WORDS = re.compile(r'\bC(\d)S\d+\b'), re.compile(r'\bChapter\s+(\d+)\b', re.I)
+_marked = []
+for t in tournaments:
+    _m = _CH_PREFIX.search(str(t.get('name') or '')) or _CH_WORDS.search(str(t.get('name') or ''))
+    if _m and day_of(t):
+        _marked.append((day_of(t), int(_m.group(1))))
+_marked.sort()
+
+def chapter_at(day, window=45):
+    """The chapter the scene was in on `day`, by majority vote of the events
+    around it. Before the first event that names a chapter at all, it is the one
+    before that - Chapter 1 predates the convention."""
+    if day < _marked[0][0]:
+        return _marked[0][1] - 1
+    near = [c for d, c in _marked if abs(days_apart(d, day)) <= window]
+    return Counter(near).most_common(1)[0][0] if near else None
+
+played_waves, won_waves, chapters_won = defaultdict(set), defaultdict(set), defaultdict(set)
+for t, r, m, pages in PLACED:
+    w = wave_of.get(t['name'])
+    if w is None:
+        continue
+    ch = chapter_at(day_of(t))
+    for page, _ in pages:
+        played_waves[page].add(w)
+        if r == 1:
+            won_waves[page].add(w)
+            chapters_won[page].add(ch)
+
+def longest_run(seen, universe=None):
+    best = run = 0
+    for i in (universe if universe is not None else range(len(WAVES))):
+        run = run + 1 if i in seen else 0
+        best = max(best, run)
+    return best
+
+board('fncs-streak-finals', 'Players',
+      'Top 10 by consecutive FNCS grand finals qualified for', 'player',
+      "The longest run of FNCS grand finals in a row, counting every region's "
+      'own final as one round. Miss a round and the run starts again. ' + TIE_FAME,
+      rank_fame(Counter({p: longest_run(s) for p, s in played_waves.items()})),
+      phrase('final in a row', 'finals in a row'))
+board('fncs-streak-wins', 'Players', 'Top 10 by consecutive FNCS titles', 'player',
+      "Winning your region's grand final in consecutive rounds of the FNCS. "
+      + TIE_FAME,
+      rank_fame(Counter({p: longest_run(s) for p, s in won_waves.items()})),
+      phrase('title in a row', 'titles in a row'))
+board('fncs-chapters', 'Players', 'Top 10 by FNCS titles across different chapters',
+      'player',
+      'How many different chapters of Fortnite a player has won an FNCS in - '
+      'three titles in one chapter counts once. ' + TIE_FAME,
+      rank_fame(Counter({p: len(s) for p, s in chapters_won.items()})),
+      count('chapter'))
+
+# ==================================================== age at a major win =====
+birthday = {p['pagename']: str(p['birthdate'])[:10] for p in PLAYABLE
+            if p.get('birthdate') and re.match(r'^\d{4}-\d{2}-\d{2}$', str(p['birthdate'])[:10])}
+major_win_days = defaultdict(list)
+for t, r, m, pages in PLACED:
+    if t['name'] in MAJORS and r == 1 and day_of(t):
+        for page, _ in pages:
+            major_win_days[page].append(day_of(t))
+
+AGE_TEXT = {}        # whole days -> "13 years 103 days"
+
+def age_days(page, day):
+    """Age in whole days, so the order is the real one and only players who
+    share a birthday can tie.
+
+    The spelled-out form is worked out here, from the two real dates, and filed
+    under the day count: a year is not 365 days and rounding one is how a board
+    ends up claiming somebody won at "13 years 365 days"."""
+    born = birthday[page]
+    b, d = _date.fromisoformat(born), _date.fromisoformat(day)
+    y = d.year - b.year - ((d.month, d.day) < (b.month, b.day))
+    try:
+        anniversary = b.replace(year=b.year + y)
+    except ValueError:                      # born on 29 February
+        anniversary = _date(b.year + y, 3, 1)
+    days = (d - b).days
+    AGE_TEXT.setdefault(days, f'{y} years {(d - anniversary).days} days')
+    return days
+
+def spell_age(days):
+    return AGE_TEXT[days]
+
+_won = {p: sorted(ds) for p, ds in major_win_days.items() if p in birthday}
+first_win = {p: age_days(p, ds[0]) for p, ds in _won.items()}
+young_win = {p: min(age_days(p, d) for d in ds) for p, ds in _won.items()}
+old_win = {p: max(age_days(p, d) for d in ds) for p, ds in _won.items()}
+
+def by_age(d, oldest_first):
+    return sorted(((k, NAME(k), v) for k, v in d.items() if v > 0),
+                  key=lambda e: (-e[2] if oldest_first else e[2], e[1].lower()))
+
+board('youngest-major-win', 'Players', 'Top 10 youngest ever to win a major',
+      'player',
+      'Age on the first day of the event, for every Epic-run tier-1 final since '
+      'the World Cup. Players with no published birthday cannot be ranked. '
+      + TIE_EXACT, by_age(young_win, False), spell_age)
+board('oldest-major-win', 'Players', 'Top 10 oldest ever to win a major', 'player',
+      'The same list read from the other end: the oldest anyone has been on the '
+      'day they won an Epic-run tier-1 final. ' + TIE_EXACT,
+      by_age(old_win, True), spell_age)
+board('oldest-first-major-win', 'Players', 'Top 10 oldest to win a first major',
+      'player',
+      'Age at a maiden title rather than at any title, so a long wait counts and '
+      'a long career does not. ' + TIE_EXACT, by_age(first_win, True), spell_age)
+
+# ========================================== per-country, active players only ==
+# The all-time country boards above are monuments to the 2019 World Cup. These
+# ask who is winning money there now.
+active_pages = {p['pagename'] for p in PLAYABLE if str(p.get('status') or '').lower() == 'active'}
+_active_country = defaultdict(Counter)
+for page, v in career.items():
+    c = country_of_page.get(page)
+    if c and page in active_pages:
+        _active_country[c][page] = v
+for c, sub in sorted(_active_country.items()):
+    board(f'country-earnings-active:{c}', 'By country',
+          f'Top 10 career earnings - {c}, active players only', 'player',
+          'Career prize money, counting only players the export still lists as '
+          'active. Retired names are not answers here. ' + TIE_MONEY,
+          rank(sub, NAME), money)
+
+# ========================================== duos that lasted, major by major ==
+# A team board: the row is a pair, and it only fills once both are named.
+_major_days = sorted((day_of(tour_of[n]), n) for n in MAJORS if day_of(tour_of[n]))
+_mclusters, _cur = [], []
+for _d, _n in _major_days:
+    if _cur and days_apart(_cur[-1][0], _d) > 7:
+        _mclusters.append(_cur)
+        _cur = []
+    _cur.append((_d, _n))
+if _cur:
+    _mclusters.append(_cur)
+mwave_of = {n: i for i, c in enumerate(_mclusters) for _, n in c}
+
+pair_waves, solo_waves = defaultdict(set), defaultdict(set)
+for t, r, m, pages in PLACED:
+    w = mwave_of.get(t['name'])
+    if w is None:
+        continue
+    ids = sorted({pg for pg, _ in pages})
+    for pg in ids:
+        solo_waves[pg].add(w)
+    for a, b in itertools.combinations(ids, 2):
+        pair_waves[(a, b)].add(w)
+
+def together_run(pair, shared):
+    """Consecutive majors played side by side, counted over the majors either of
+    them entered. Sitting one out together does not break it; turning up with
+    somebody else does."""
+    a, b = pair
+    return longest_run(shared, sorted(solo_waves[a] | solo_waves[b]))
+
+_duos = sorted(((p, together_run(p, s)) for p, s in pair_waves.items() if len(s) >= 3),
+               key=lambda e: (-e[1], NAME(e[0][0]).lower(), NAME(e[0][1]).lower()))
+if len(_duos) >= SLOTS + 1:
+    def duo_row(pair, value):
+        a, b = sorted(pair, key=lambda pg: NAME(pg).lower())
+        return {'key': '|'.join(sorted(pair)), 'label': f'{NAME(a)} & {NAME(b)}',
+                'value': value, 'display': count('major')(value),
+                'members': [{'key': a, 'label': NAME(a)}, {'key': b, 'label': NAME(b)}]}
+    _spare = duo_row(*_duos[SLOTS])
+    _spare.pop('display')
+    boards.append({
+        'id': 'duo-longevity', 'group': 'Teammates',
+        'title': 'Top 10 longest-running duos, major by major', 'entity': 'player',
+        'tieRule': ('The longest run of consecutive majors a pair turned up to '
+                    'together, counting the majors either of them entered. Both '
+                    'names fill one slot. ' + TIE_EXACT),
+        'rows': [duo_row(p, v) for p, v in _duos[:SLOTS]],
+        'next': _spare,
+    })
+
+# =============================================== countries, counted and sized ==
+country_money = Counter()
+for page, v in career.items():
+    c = country_of_page.get(page)
+    if c:
+        country_money[c] += v
+
+for thr, word in ((100_000, '$100K'), (300_000, '$300K'), (500_000, '$500K'),
+                  (1_000_000, '$1M')):
+    c = Counter()
+    for page, v in career.items():
+        if v >= thr and country_of_page.get(page):
+            c[country_of_page[page]] += 1
+    board(f'country-over:{thr}', 'Countries',
+          f'Top 10 countries by players over {word} in career earnings', 'country',
+          f'How many individual players from each country have passed {word}. '
+          + TIE_RICH,
+          sorted(((k, k, v) for k, v in c.items() if v > 0),
+                 key=lambda e: (-e[2], -country_money[e[0]], e[1].lower())),
+          count('player'))
+
+# Resident populations, hand-entered from public 2024 estimates and rounded to
+# the nearest hundred thousand. Not from Liquipedia: the export has no such
+# column, and this is the one board that needs a number from outside it.
+# England, Scotland and Wales are separate nationalities in the export, so they
+# get separate populations rather than being folded into the United Kingdom.
+POPULATION = {
+    'United States': 340, 'Canada': 41.3, 'Brazil': 212, 'Mexico': 130, 'Argentina': 46,
+    'Chile': 19.8, 'Colombia': 52.3, 'Peru': 34.2, 'Uruguay': 3.4, 'Paraguay': 6.9,
+    'Ecuador': 18.1, 'Venezuela': 28.4, 'Bolivia': 12.4, 'Costa Rica': 5.2, 'Panama': 4.5,
+    'Guatemala': 18.1, 'El Salvador': 6.3, 'Honduras': 10.6, 'Nicaragua': 7,
+    'Dominican Republic': 11.4, 'Cuba': 11, 'Puerto Rico': 3.2, 'Trinidad and Tobago': 1.5,
+    'United Kingdom': 69.1, 'England': 57.1, 'Scotland': 5.5, 'Wales': 3.2,
+    'Northern Ireland': 1.9, 'Ireland': 5.4, 'France': 68.4, 'Germany': 84.6,
+    'Spain': 48.6, 'Italy': 58.9, 'Portugal': 10.6, 'Netherlands': 18, 'Belgium': 11.8,
+    'Luxembourg': 0.67, 'Switzerland': 8.9, 'Austria': 9.2, 'Denmark': 6, 'Norway': 5.6,
+    'Sweden': 10.6, 'Finland': 5.6, 'Iceland': 0.39, 'Poland': 36.7, 'Czechia': 10.9,
+    'Slovakia': 5.4, 'Hungary': 9.6, 'Romania': 19, 'Bulgaria': 6.4, 'Greece': 10.4,
+    'Croatia': 3.9, 'Slovenia': 2.1, 'Serbia': 6.6, 'Bosnia and Herzegovina': 3.2,
+    'North Macedonia': 1.8, 'Albania': 2.7, 'Montenegro': 0.62, 'Kosovo': 1.6,
+    'Malta': 0.56, 'Cyprus': 1.3, 'Estonia': 1.37, 'Latvia': 1.87, 'Lithuania': 2.86,
+    'Belarus': 9.1, 'Ukraine': 37.9, 'Russia': 144, 'Moldova': 2.5, 'Georgia': 3.7,
+    'Armenia': 3, 'Azerbaijan': 10.2, 'Kazakhstan': 20.3, 'Uzbekistan': 36.4,
+    'Turkey': 85.7, 'Israel': 9.8, 'Palestine': 5.5, 'Lebanon': 5.4, 'Jordan': 11.5,
+    'Syria': 24, 'Iraq': 45.5, 'Iran': 89.2, 'Yemen': 34.4, 'Saudi Arabia': 34,
+    'United Arab Emirates': 11, 'Kuwait': 4.9, 'Bahrain': 1.6, 'Qatar': 3, 'Oman': 5.3,
+    'Egypt': 114, 'Morocco': 37.8, 'Algeria': 46.3, 'Tunisia': 12.3, 'South Africa': 63,
+    'Nigeria': 227, 'Kenya': 56.4, 'Ghana': 34.4, 'Uganda': 49, 'Namibia': 3,
+    'Greenland': 0.057, 'India': 1441, 'China': 1411, 'Pakistan': 245, 'Bangladesh': 173,
+    'Sri Lanka': 21.9, 'Cambodia': 17.6, 'Japan': 123, 'South Korea': 51.7, 'Taiwan': 23.4,
+    'Hong Kong': 7.5, 'Singapore': 6, 'Malaysia': 34.6, 'Indonesia': 281,
+    'Philippines': 118, 'Vietnam': 100, 'Thailand': 71.7, 'Australia': 27.1,
+    'New Zealand': 5.3, 'Fiji': 0.93,
+}
+_nopop = sorted(c for c, v in country_money.items() if v > 0 and c not in POPULATION)
+if _nopop:
+    print('no population on file for:', _nopop)
+board('country-per-capita', 'Countries',
+      'Top 10 countries by earnings per resident', 'country',
+      "Career prize money won by that country's players, divided by its "
+      'population. Populations are public 2024 estimates typed in by hand - they '
+      'are not part of the Liquipedia export. ' + TIE_EXACT,
+      sorted(((c, c, country_money[c] / (POPULATION[c] * 1_000_000))
+              for c in country_money if c in POPULATION and country_money[c] > 0),
+             key=lambda e: (-e[2], e[1].lower())),
+      lambda v: f'${v:,.2f} per resident')
+
+# ================================================= the paydays of the famous ==
+# Answered with a tournament rather than a player, which is a first: the board
+# asks where the money came from. Names are shortened to the event rather than
+# the region's own page ("C3S1: FNCS", not "C3S1: FNCS - Grand Finals: NA East"),
+# because the region is not what anyone remembers and it is never the question.
+_REGION_TAIL = re.compile(
+    r'\s*[-:]\s*(NA East|NA West|NA Central|North America East|North America West|'
+    r'North America Central|North America|Europe|Asia|Brazil|Middle East|Oceania|'
+    r'World|Global)\s*$', re.I)
+_FINALS = re.compile(r'\s*[-:]?\s*Grand Finals?\s*[-:]?\s*', re.I)
+
+def short_event(name):
+    s, prev = name, None
+    while prev != s:
+        prev = s
+        s = _REGION_TAIL.sub('', s).strip().rstrip('-:').strip()
+        s = _FINALS.sub(' ', s).strip().rstrip('-:').strip()
+    return re.sub(r'\s{2,}', ' ', s)
+
+paydays = defaultdict(Counter)
+for t, r, m, pages in PLACED:
+    if m <= 0:
+        continue
+    for page, _ in pages:
+        paydays[page][short_event(t['name'])] += m
+for page, _ in career.most_common(20):
+    board(f'paydays:{page}', 'Paydays', f'Top 10 biggest paydays - {NAME(page)}',
+          'tournament',
+          f'The ten tournaments {NAME(page)} earned the most at, by prize money '
+          'from that one event. A regional final is named by the event rather '
+          'than the region. ' + TIE_EXACT,
+          sorted(((n, n, v) for n, v in paydays[page].items() if v > 0),
+                 key=lambda e: (-e[2], e[1].lower())),
+          money)
+
+# Everything answerable on a paydays board, so the guess box has somewhere to
+# search that is not the answer sheet. Tier 1-2 only: 735 names is a list, the
+# whole export is a phone book.
+TOURNAMENT_POOL = {short_event(t['name']) for t in tournaments
+                   if t.get('liquipediatier') in (1, 2)}
+# Plus any answer that falls outside those two tiers - a payday from a 2018
+# skirmish, mostly. An answer you cannot type is the same bug as a wrong answer.
+for b in boards:
+    if b['entity'] == 'tournament':
+        TOURNAMENT_POOL.update(r['key'] for r in b['rows'] + [b['next']])
+TOURNAMENT_POOL = sorted(TOURNAMENT_POOL)
+
+payload = {'generated': TODAY, 'slots': SLOTS, 'boards': boards,
+           'tournaments': TOURNAMENT_POOL}
+with open(OUT, 'w', encoding='utf-8') as fh:
+    json.dump(payload, fh, ensure_ascii=False, separators=(',', ':'))
+
+print(f'{len(boards)} boards, {len(TOURNAMENT_POOL)} tournament names, '
+      f'{os.path.getsize(OUT)/1e6:.2f} MB')
+print(Counter(b['group'] for b in boards))
+```
+
+---
+
+## Cell 5 — `pools.json`
 
 The event fields. A pool is a fixed list of players and nothing else: pick one
 on the home page and every game draws from that field until you leave it.
@@ -589,6 +1107,73 @@ World Cup 2019       100 entrants, 100 playable
 
 A line reading `!! ... not in tournaments.json — skipped` means the name in
 `WANTED` does not match the export exactly — check the double space.
+
+---
+
+## Cell 6 — `teammates.json`
+
+**New here, and the one file in the app that was not written by these cells.**
+It lived commented-out in `players_optimize.ipynb`; this is the same code with
+one number changed and cell 1's `resolve` in place of its own copy.
+
+`TOP` was 10, which was exactly what Who Are Ya needed when the game always
+revealed the same ten names. It now draws its ten clues out of a much bigger
+bag, and List asks questions like "everyone who has played ten or more
+tournaments with Peterbot" — fourteen players, four of whom were past the old
+cut. **`TOP = 50`.**
+
+The file goes from 0.68 MB to 1.15 MB. Fifty is effectively uncapped: at 100 it
+is 1.18 MB, because only 674 players have even thirty teammates on record.
+
+Expected output:
+
+```
+39,038 distinct pairs; 5,490 players with a teammate
+75,104 rows kept at TOP=50; 1.15 MB
+  players with 3+ teammates on file: 4,805
+  players with 10+ teammates on file: 2,683
+  players with 20+ teammates on file: 1,330
+  players with 50+ teammates on file: 185
+```
+
+```python
+OUT = f'{BASE}/teammates.json'
+TOP = 50          # was 10 — see the note above
+
+pair = Counter()
+for row in placements:
+    parts = row.get('participants') or []
+    if len(parts) < 2:
+        continue
+    # `resolve` drops anyone the roster marks unused, so a mate who cannot be
+    # shown or guessed never reaches the file in the first place.
+    pages = sorted({resolve(p.get('player') or '') for p in parts} - {None})
+    for a, b in itertools.combinations(pages, 2):
+        pair[(a, b)] += 1
+
+mates = defaultdict(list)
+for (a, b), n in pair.items():
+    mates[a].append([b, n])
+    mates[b].append([a, n])
+
+players_out = []
+for page, entries in mates.items():
+    entries.sort(key=lambda e: (-e[1], e[0]))
+    players_out.append({'id': page, 'mates': entries[:TOP]})
+players_out.sort(key=lambda p: p['id'])
+
+payload = {'generated': TODAY, 'top': TOP, 'players': players_out}
+with open(OUT, 'w', encoding='utf-8') as fh:
+    json.dump(payload, fh, ensure_ascii=False, separators=(',', ':'))
+
+kept = sum(len(p['mates']) for p in players_out)
+print(f'{len(pair):,} distinct pairs; {len(players_out):,} players with a teammate')
+print(f'{kept:,} rows kept at TOP={TOP}; {os.path.getsize(OUT)/1e6:.2f} MB')
+for n in (3, 10, 20, 50):
+    print(f'  players with {n}+ teammates on file: '
+          f'{sum(1 for p in players_out if len(p["mates"]) >= n):,}')
+print('Peterbot:', players_out[[p['id'] for p in players_out].index('Peterbot')]['mates'][:6])
+```
 
 ---
 
@@ -743,16 +1328,19 @@ print(
 
 ---
 
-## Still not built — team boards
+## Built — team boards
 
-"Top 10 at a tournament, in duos/trios, name both players" needs two things:
+"Top 10 at a tournament, in duos/trios, name both players" is the tournament
+section of cell 2, and it needed the two things this section used to list:
 
-1. **Data.** A row per placement carrying every participant.
-   `placements.json` already has `participants: [{player, team}]` and
-   `opponenttype`, so the cell would be straightforward.
-2. **An engine change.** `BoardRow` is one `key` and one `label`, and
-   `applyGuess` matches a guess against that single key. A duo row needs to
-   hold several keys and be *partially* filled — "1st: Bugha ✓ / ????" — which
-   changes the board shape, the slot rendering and the scoring.
+1. **Data.** A row per placement carrying every participant. `placements.json`
+   already had `participants: [{player, team}]`, so the cell writes each place
+   as one row with a `members: [{key, label}]` array beside the usual key.
+2. **An engine change.** `BoardRow.members` is optional and `applyGuess` now
+   matches a guess against *any* member of a row, filling the slot partially
+   until the last name lands. A board without the column — a `rankings.json`
+   written before this — still plays exactly as it did, because a row with no
+   members is read as a team of one.
 
-Worth doing, but it is a Tenaball feature rather than a data addition.
+The eleventh place is a team too, so naming anyone from it is the same free
+near miss it always was.

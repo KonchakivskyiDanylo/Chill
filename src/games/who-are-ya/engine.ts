@@ -1,6 +1,6 @@
 import type { TeammateClue } from '@/data/liquipedia/teammates';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
-import { makeRng, shuffle } from '@/lib/rng';
+import { makeRng, randInt, shuffle, type Rng } from '@/lib/rng';
 
 /** Pure logic for Who Are Ya? */
 
@@ -47,11 +47,40 @@ export function showsMatches(mode: Mode): boolean {
 }
 
 /**
+ * The ten clues a round is built from, drawn across the whole teammate list.
+ *
+ * It used to be `clues.slice(0, MAX_CLUES)` — the ten strongest, every time.
+ * With `teammates.json` keeping fifty per player that is now a choice rather
+ * than the only option, and it was the wrong one: the same secret player dealt
+ * the same ten names in the same order every time you met them, so a round was
+ * memorable rather than repeatable.
+ *
+ * The draw keeps the number one teammate — the duo partner is the fact that
+ * makes the chain solvable — and takes the other nine one per stratum across
+ * everyone else, so a hand looks like 1, 3, 9, 14, 19, 25, 30, 36, 41, 47. That
+ * is a spread by construction: you cannot be dealt the ten weakest, and the
+ * average clue sits where the average teammate sits.
+ */
+function draw(clues: readonly TeammateClue[], rng: Rng): TeammateClue[] {
+  if (clues.length <= MAX_CLUES) return [...clues];
+  const picked = [clues[0]];
+  const rest = clues.length - 1;
+  const bucket = rest / (MAX_CLUES - 1);
+  for (let i = 0; i < MAX_CLUES - 1; i++) {
+    const from = 1 + Math.floor(i * bucket);
+    const to = Math.min(clues.length - 1, Math.floor(1 + (i + 1) * bucket) - 1);
+    picked.push(clues[randInt(rng, from, Math.max(from, to))]);
+  }
+  return picked;
+}
+
+/**
  * A round on a secret player the caller has already chosen.
  *
  * `clues` must be that player's teammates most-shared first, which is how
- * `Teammates.cluesFor` returns them. Easy and Hard then walk them backwards so
- * the weakest hint lands first and the strongest last; Random shuffles.
+ * `Teammates.cluesFor` returns them. Ten are drawn from them (see `draw`);
+ * Easy and Hard then walk those backwards so the weakest hint lands first and
+ * the strongest last, and Random shuffles.
  */
 export function createGame(
   secret: RosterPlayer,
@@ -61,8 +90,8 @@ export function createGame(
 ): GameState | null {
   if (clues.length < MIN_CLUES) return null;
   const rng = makeRng(seed);
-  const top = clues.slice(0, MAX_CLUES);
-  const ordered = mode === 'random' ? shuffle(rng, top) : [...top].reverse();
+  const hand = draw(clues, rng);
+  const ordered = mode === 'random' ? shuffle(rng, hand) : [...hand].reverse();
   return { mode, secret, clues: ordered, revealed: 1, earned: 1, guesses: [], status: 'playing' };
 }
 

@@ -1,23 +1,56 @@
-.tb-slots {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+/*
+ * The board, sized to be read in one look.
+ *
+ * Ten rows, a header, the stats and the guess box used to run past the bottom
+ * of a laptop screen, which made the one thing the game is about — what is
+ * still missing — the thing you had to scroll for. So the rows are a flat 36px
+ * instead of a 52px card, and wherever the board is wide enough the ten run in
+ * two columns of five.
+ */
+.tb-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 5px;
+}
+
+/*
+ * Two columns when the *board* has room, not when the window does: at 960px
+ * with the games list open the page is only 645px wide, and a viewport query
+ * would have split the board anyway.
+ *
+ * 640px is measured, not guessed: the widest trio on the FNCS 2025 board wants
+ * 234px of names, and half of 640 leaves it 241 once the rank, the gaps and the
+ * placement are paid for.
+ */
+@container (min-width: 640px) {
+  .tb-list {
+    /* Column-major, so it reads 1–5 down the left and 6–10 down the right. */
+    grid-auto-flow: column;
+    grid-template-rows: repeat(5, auto);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 10px;
+  }
 }
 
 .tb-slot {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  border-radius: 10px;
+  gap: 10px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
   border: 1px dashed var(--border);
   background: var(--surface-2);
-  min-height: 52px;
+  min-height: 36px;
 }
 .tb-slot--filled {
   border-style: solid;
   border-color: rgba(34, 197, 94, 0.4);
   background: var(--success-soft);
+}
+/* Half a duo named: solid enough to read as progress, not as a finished row. */
+.tb-slot--partial {
+  border-style: solid;
+  border-color: rgba(234, 179, 8, 0.35);
 }
 .tb-slot--missed {
   border-color: rgba(239, 68, 68, 0.4);
@@ -25,7 +58,7 @@
 }
 
 .tb-slot__rank {
-  width: 26px;
+  width: 22px;
   flex: none;
   text-align: center;
   font-weight: 800;
@@ -33,61 +66,88 @@
   font-variant-numeric: tabular-nums;
 }
 
-.tb-slot__empty {
-  color: var(--text-faint);
-  letter-spacing: 0.15em;
-  font-weight: 700;
-}
-
 .tb-slot__value {
   font-weight: 700;
   white-space: nowrap;
-  font-size: 0.92rem;
+  font-size: 0.88rem;
+}
+
+/*
+ * The names in one slot.
+ *
+ * A duo or trio slot holds two or three of them, separated rather than run
+ * together, because "aqua · nyhrox" is one answer made of two names and
+ * "aqua nyhrox" reads like a handle nobody has.
+ */
+.tb-slot__name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 6px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.tb-member + .tb-member::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--text-faint);
+}
+.tb-member--blank {
+  color: var(--text-faint);
+  letter-spacing: 0.15em;
+}
+/* Shown only once the board is over: a name you did not get. */
+.tb-member--revealed {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* --------------------------------------------------------- the board head -- */
+
+.tb-head {
+  padding: 12px 14px;
+}
+.tb-head__row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-bottom: 4px;
+}
+.tb-head__group {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.tb-head__title {
+  font-size: 1.08rem;
+}
+
+/* ------------------------------------------------------- a round in play -- */
+
+/* Same components as every other game, half the vertical spend. */
+.tb-play {
+  /* The board's column query measures this, not the window. */
+  container-type: inline-size;
+  gap: 12px;
+}
+.tb-play .stat {
+  padding: 6px 12px;
+}
+.tb-play .stat__value {
+  font-size: 1.15rem;
 }
 
 @media (max-width: 460px) {
   .tb-slot {
     gap: 8px;
-    padding: 8px;
+    padding: 5px 8px;
   }
   .tb-slot__value {
-    font-size: 0.8rem;
+    font-size: 0.78rem;
   }
-}
-
-/* The tie rule, on the board rather than in a footnote. */
-.tb-tie {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 0;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--warning);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-}
-.tb-tie__label {
-  flex: none;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--warning);
-  line-height: 1.7;
-}
-
-/* Renamed from .tb-slots when the board became an <ol>. */
-.tb-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.tb-slot__name {
-  flex: 1;
-  min-width: 0;
-  font-weight: 700;
-  overflow-wrap: anywhere;
 }

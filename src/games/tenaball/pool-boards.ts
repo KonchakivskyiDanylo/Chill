@@ -66,19 +66,30 @@ export function poolBoards(
     ),
   );
 
-  const withAge = players.filter((p) => p.age !== null);
+  /*
+   * Youngest and oldest rank on the birth *date*, not the age in years.
+   *
+   * Age is a whole number, so a field of eighty players has four or five people
+   * showing 19 and the alphabet decided which of them was 10th — a tiebreak the
+   * board could state but nobody could reason about. The export publishes the
+   * day, and two players sharing one is rare, so the real order is available
+   * and the displayed age is just how it is rendered. Only an identical
+   * birthday falls through to the name.
+   */
+  const withAge = players.filter((p) => p.age !== null && p.birthDate);
+  const born = (p: RosterPlayer) => Date.parse(p.birthDate as string);
+  const years = (p: RosterPlayer) => plural(p.age as number, 'year');
+  const BIRTHDAY_NOTE =
+    'Age today, from published birthdays. Players with no birthday on record cannot be ranked and are not answers.';
+
   add(
     board(
       `${prefix}:youngest`,
       'Players',
       `${pool.label} — the 10 youngest`,
       'player',
-      `Age today, from published birthdays. Players with no birthday on record cannot be ranked and are not answers. ${TIE_ALPHA}`,
-      byValue(
-        withAge.map((p) => player(p, p.age as number, plural(p.age as number, 'year'))),
-        true,
-      ),
-      true,
+      `${BIRTHDAY_NOTE} Ranked on the date itself, so two players showing the same age are ordered by who was born later. Players born on the same day are ordered alphabetically.`,
+      byValue(withAge.map((p) => player(p, born(p), years(p)))),
     ),
   );
   add(
@@ -87,8 +98,12 @@ export function poolBoards(
       'Players',
       `${pool.label} — the 10 oldest`,
       'player',
-      `Age today, from published birthdays. Players with no birthday on record cannot be ranked and are not answers. ${TIE_ALPHA}`,
-      byValue(withAge.map((p) => player(p, p.age as number, plural(p.age as number, 'year')))),
+      `${BIRTHDAY_NOTE} Ranked on the date itself, so two players showing the same age are ordered by who was born earlier. Players born on the same day are ordered alphabetically.`,
+      byValue(
+        withAge.map((p) => player(p, born(p), years(p))),
+        true,
+      ),
+      true,
     ),
   );
 

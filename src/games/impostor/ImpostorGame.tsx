@@ -20,6 +20,8 @@ import {
   createGame,
   createRound,
   giveUp,
+  MAX_MEMBERS,
+  MIN_MEMBERS,
   pick,
   toggle,
   type GameState,
@@ -165,17 +167,18 @@ function Game({
         <section className="card">
           <div className="card__title">The rule</div>
           <h2>
-            Find the players who <span style={{ color: 'var(--primary)' }}>{round.criterion.label}</span>
+            Find every player who <span style={{ color: 'var(--primary)' }}>{round.criterion.label}</span>
           </h2>
           {/*
             No count, on purpose.
             "3 of these 8 do" made the last pick arithmetic rather than
             knowledge — once you had two you knew exactly how many were left and
-            could stop reading. Roughly half of any board fits; which half is
-            the whole game.
+            could stop reading. Between four and six of the ten fit; which of
+            them is the whole game.
           */}
           <p className="small muted" style={{ marginTop: 6 }}>
-            About half of these {round.board.length} do. The rest are griefers.
+            Between {MIN_MEMBERS} and {MAX_MEMBERS} of these {round.board.length} do. The rest
+            are griefers.
             {game.mode === 'all-at-once'
               ? ' Select them all, then hit Check.'
               : ' Pick them one at a time — a griefer ends the round.'}

@@ -67,6 +67,13 @@ export interface LiquipediaRow {
   /** Difficulty band, maintained in the dataset. `unused` never reaches a game. */
   tier: FameTier | 'unused';
   /**
+   * Prize money per calendar year, as `earnings_2019`, `earnings_2020`, …
+   *
+   * An index signature because the years are a moving set: an export taken
+   * next January carries an `earnings_2027` nothing had to be told about.
+   */
+  [year: `earnings_${number}`]: number | null | undefined;
+  /**
    * Difficulty band *within* `region`, maintained in the same notebook.
    *
    * `tier` ranks all 5,678 rows against each other, which is the right answer
@@ -98,6 +105,14 @@ export interface RosterPlayer {
   /** Age in whole years today, or null when no birth date is published. */
   age: number | null;
   earnings: number;
+  /**
+   * Prize money by calendar year, from the export's `earnings_YYYY` columns.
+   *
+   * A year with nothing published is simply absent. List reads it for
+   * "everyone who cleared $100k in 2023" — a question the export could always
+   * answer and nothing had ever asked it.
+   */
+  earningsByYear: Readonly<Record<number, number>>;
   /** False when no prize money is published, so the UI shows a dash not a zero. */
   earningsKnown: boolean;
   team: string | null;
@@ -180,6 +195,12 @@ export class Roster {
 
       const nationality = row.nationalities?.[0] ?? null;
       const earnings = row.earnings ?? 0;
+      const earningsByYear: Record<number, number> = {};
+      for (const [column, value] of Object.entries(row)) {
+        const year = /^earnings_(\d{4})$/.exec(column);
+        const amount = Number(value) || 0;
+        if (year && amount > 0) earningsByYear[Number(year[1])] = amount;
+      }
       this.players.push({
         id: row.pagename,
         name: row.id,
@@ -191,6 +212,7 @@ export class Roster {
         birthDate: row.birthdate ?? null,
         age: ageOn(row.birthdate ?? null, today),
         earnings,
+        earningsByYear,
         earningsKnown: earnings > 0,
         team: teamName(row.teampagename ?? null),
         status: row.status ? row.status.toLowerCase() : null,

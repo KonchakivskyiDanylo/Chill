@@ -181,6 +181,7 @@ export const GAMES: GameMeta[] = [
     rules: [
       'Teammates are ranked by how many tournaments the pair entered together, counted across every tournament in the export.',
       'A pair counts once per result they share, so two solo players at the same event are not teammates.',
+      'Ten clues are drawn from up to fifty teammates, spread across the whole list — so the same player deals a different hand each time. The number one teammate is always one of them.',
       'The answer needs at least three recorded teammates and five tournaments on record.',
       'Get it right and the rest of the clue list turns face up, dimmed, with the counts shown.',
     ],
@@ -213,16 +214,17 @@ export const GAMES: GameMeta[] = [
       'Hard: you start with 3 lives and every wrong guess costs one.',
       'Ties are handled per category, and the board says which rule is in play above the ten slots.',
       'Naming someone level with 10th but ranked out by the tie rule is a near miss: it is called out, and it never costs a life.',
+      'A tournament board ranks the finishing positions, so on a duos or trios event a slot is a whole team — it fills in as you name them and only locks once you have every one.',
     ],
     sections: [
       {
         title: 'Categories',
         items: [
-          'Over two hundred boards, grouped: players, regions, countries, tournaments, organisations.',
+          'Nearly three hundred boards, grouped: players, regions, countries, tournaments, organisations, paydays.',
           'Some are about the whole career — earnings, FNCS wins, LAN appearances. Some are about one year, one region, one country or one tournament.',
-          'Not every board wants a player. An organisations board wants org names and a countries board wants country names — the prompt above the input says which.',
+          'Not every board wants a player. An organisations board wants org names, a countries board wants country names, and a paydays board wants the tournament where the money was won — the prompt above the input says which.',
           'Hit Random for a board you did not choose, or search the list if you have one in mind.',
-          'In an event mode the two hundred are replaced by that field’s own boards — the ten biggest earners who qualified, the ten youngest, the countries that sent the most.',
+          'In an event mode all of them are replaced by that field’s own boards — the ten biggest earners who qualified, the ten youngest, the countries that sent the most.',
         ],
       },
       MODE_SECTION,
@@ -268,14 +270,14 @@ export const GAMES: GameMeta[] = [
     tagline: 'Spot the players who actually belong.',
     icon: '🕵️',
     intro: [
-      'You get a rule — "has played for NRG", "has won a LAN" — and a board of players. Two or three of them fit the rule. The rest are griefers.',
+      'You get a rule — "has played for NRG", "has won a LAN" — and a board of ten players. Four to six of them fit the rule. The rest are griefers.',
       'Find the ones who fit.',
     ],
     rules: [
       'Cards show the player’s handle and nothing else: no flag, no org, no earnings.',
       'That is deliberate. A card carrying a Brazilian flag answers "competes in Brazil" for you, which made the old version a reading exercise rather than a knowledge one.',
       'Rules are never about country or region, for the same reason — those are the two facts you could guess from a handle.',
-      'Roughly half of every board fits the rule, and the board never tells you how many. A stated count makes the last pick arithmetic instead of knowledge.',
+      'Between four and six of the ten fit the rule, and the board never tells you how many. A stated count makes the last pick arithmetic instead of knowledge.',
     ],
     sections: [
       {
