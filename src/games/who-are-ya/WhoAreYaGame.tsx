@@ -15,9 +15,9 @@ import { useFacts } from '@/data/liquipedia/useFacts';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import { useTeammates } from '@/data/liquipedia/useTeammates';
-import { deal, rotationKey } from '@/games/shared/rotation';
+import { rotationKey } from '@/games/shared/rotation';
 import { useEventMode } from '@/games/shared/mode';
-import { poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
+import { dealSecret, poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { playerMoney, plural } from '@/lib/format';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { getGame } from '@/games/registry';
@@ -112,7 +112,7 @@ function Game({
 
   const start = useCallback(() => {
     const key = rotationKey(meta.id, ...poolScope(event, choice));
-    const drawn = deal(players, readLocal<string[]>(key, []));
+    const drawn = dealSecret(players, readLocal<string[]>(key, []), pools, event, choice);
     if (!drawn) {
       setError(
         `No player in this pool has ${MIN_CLUES} recorded teammates and ${MIN_TOURNAMENTS} tournaments.`,
@@ -122,7 +122,7 @@ function Game({
     writeLocal(key, drawn.seen);
     setError(null);
     setGame(createGame(drawn.pick, cluesFor(drawn.pick.id), mode));
-  }, [players, event, choice, cluesFor, mode]);
+  }, [players, pools, event, choice, cluesFor, mode]);
 
   const note = <RosterNote what="Teammates" generated={teammates.generated} />;
 

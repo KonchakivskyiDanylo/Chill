@@ -20,7 +20,8 @@ import { loadFacts } from '@/data/liquipedia/facts';
 import { loadOrgs } from '@/data/liquipedia/orgs';
 import { loadPools } from '@/data/liquipedia/pools';
 import { loadRankings, membersOf } from '@/data/liquipedia/rankings';
-import { deal } from '@/games/shared/rotation';
+import { deal, dealWeighted } from '@/games/shared/rotation';
+import { DEFAULT_POOL, RANDOM_MIX } from '@/games/shared/pool';
 import { GAMES, getGame } from '@/games/registry';
 import { buildCriteria, type CriteriaSource } from '@/games/shared/criteria';
 import { makeRng, shuffle } from '@/lib/rng';
@@ -32,6 +33,8 @@ import * as career from '@/games/career-path/engine';
 import * as whoAreYa from '@/games/who-are-ya/engine';
 import * as tenaball from '@/games/tenaball/engine';
 import { buildCriteria as buildListCriteria } from '@/games/list/criteria';
+import { poolBoards } from '@/games/tenaball/pool-boards';
+import { derivedBoards } from '@/games/tenaball/derived-boards';
 import * as griefer from '@/games/impostor/engine';
 import * as ttt from '@/games/tic-tac-toe/engine';
 import * as connections from '@/games/connections/engine';
@@ -445,6 +448,28 @@ if (rankings) {
   check(byGroup.size >= 4, `tenaball: only ${byGroup.size} category groups`);
 }
 
+// Boards built in the browser — each event field's, and the derived all-time
+// ones — never let the alphabet decide who is 10th. A level cut means the
+// board is not built at all, and no rule may promise a split by name.
+{
+  const byId = new Map(roster.players.map((p) => [p.id, p]));
+  const built = [
+    ...derivedBoards(roster.players),
+    ...pools.pools.flatMap((pool) =>
+      poolBoards(pool, pool.players.flatMap((id) => byId.get(id) ?? []), facts, orgs),
+    ),
+  ];
+  for (const board of built) {
+    check(!/alphabet|by name/i.test(board.tieRule), `tenaball: ${board.id} still breaks ties by name`);
+    const tenth = board.rows[tenaball.SLOTS - 1];
+    // Level on the value is fine when the rule has something under it.
+    if (tenth.value === board.next.value) {
+      check(/earnings|born/i.test(board.tieRule), `tenaball: ${board.id} is level at the cut with no tiebreak`);
+    }
+  }
+  notes.push(`tenaball: ${built.length} boards built in the browser (derived + event fields)`);
+}
+
 // -------------------------------------------------------------------- 7. List
 if (facts) {
   // Orgs and teammates are optional to the game — it shows the lists they buy
@@ -541,10 +566,21 @@ if (facts && orgs) {
     // Placed players from outside the level's band. The band builds the board;
     // it must never decide who you are allowed to answer with.
     let outsiders = 0;
+    let nearNested = 0;
     for (let seed = 0; seed < 25; seed++) {
       const board = ttt.generateBoard({ facts, orgs }, pools, difficulty, `t-${difficulty}-${seed}`);
       if (!board) continue;
       boards++;
+      // No two axes nearly the same rule — "Won NA FNCS" beside "North America".
+      const axes = [...board.rows, ...board.cols];
+      for (let i = 0; i < axes.length; i++) {
+        for (let j = i + 1; j < axes.length; j++) {
+          const [small, large] =
+            axes[i].matches.length <= axes[j].matches.length ? [axes[i], axes[j]] : [axes[j], axes[i]];
+          const inside = small.matches.filter((p) => large.test(p)).length;
+          if (inside >= small.matches.length * ttt.NEAR_NESTED) nearNested++;
+        }
+      }
       // The level's promise: enough answers from its own band in every cell.
       for (const row of board.candidates) {
         for (const cell of row) {
@@ -605,6 +641,7 @@ if (facts && orgs) {
     if (difficulty !== 'hard') {
       check(outsiders > 0, `tic-tac-toe ${difficulty}: nobody from outside the band was ever placed`);
     }
+    check(nearNested === 0, `tic-tac-toe ${difficulty}: ${nearNested} pairs of near-identical axes`);
     notes.push(
       `tic-tac-toe ${difficulty}: ${boards}/25 boards over a ${answers.length}-player band, ` +
         `${autoPlaced} placed by typing alone, ${offers} asked which cell, ` +
@@ -612,14 +649,19 @@ if (facts && orgs) {
     );
   }
 
-  // Nobody reads "won in Europe" off a Globals any more.
+  // Nobody reads "won in Europe" off a Globals any more — and a Globals is not
+  // an FNCS title for the year either.
   {
     const all = buildCriteria({ players: roster.players, facts, orgs }, { minMatches: 1, maxShare: 1 });
     const eu = all.find((criterion) => criterion.id === 'won-fncs:Europe');
+    const y2023 = all.find((criterion) => criterion.id === 'won-fncs-in:2023');
     const cooper = roster.players.find((p) => p.name === 'Cooper' && facts.of(p.id).wins.global > 0);
     check(Boolean(eu), 'criteria: no "Won EU FNCS" rule');
     if (eu && cooper) {
       check(!eu.test(cooper), 'criteria: Cooper counts as an EU FNCS winner for the Copenhagen Globals');
+    }
+    if (y2023 && cooper) {
+      check(!y2023.test(cooper), 'criteria: Cooper counts as a 2023 FNCS winner for the Globals');
     }
   }
 
@@ -772,6 +814,73 @@ if (facts && orgs) {
     for (const player of wrong) game = gtp.submitGuess(game, player);
     check(game.status === 'lost', `guess-the-player: ${gtp.MAX_GUESSES} wrong guesses did not lose`);
   }
+}
+
+// ------------------------------------------------ 11b. Random's fame weighting
+// Deal 3,000 secrets the way Random does and count the tiers. Each tier is its
+// own no-repeat bag, so nobody may come round twice before their tier's bag
+// empties, and nobody twice in a row ever.
+{
+  const pool = gtp.answerable(roster.players);
+  let seen: string[] = [];
+  const counts: Record<string, number> = { easy: 0, medium: 0, hard: 0 };
+  const sinceRefill = new Map<string, Set<string>>();
+  let last = '';
+  let repeats = 0;
+  let backToBack = 0;
+  const draws = 3000;
+  for (let i = 0; i < draws; i++) {
+    const drawn = dealWeighted(pool, seen, (p) => p.tier, RANDOM_MIX, `mix-${i}`);
+    if (!drawn) break;
+    const tier = drawn.pick.tier;
+    counts[tier]++;
+    const bag = sinceRefill.get(tier) ?? new Set<string>();
+    if (drawn.wrapped) bag.clear();
+    if (bag.has(drawn.pick.id)) repeats++;
+    bag.add(drawn.pick.id);
+    sinceRefill.set(tier, bag);
+    if (drawn.pick.id === last) backToBack++;
+    last = drawn.pick.id;
+    seen = drawn.seen;
+  }
+  check(repeats === 0, `random mix: ${repeats} players came round twice inside one cycle`);
+  check(backToBack === 0, `random mix: ${backToBack} back-to-back repeats`);
+  for (const tier of ['easy', 'medium', 'hard'] as const) {
+    const share = counts[tier] / draws;
+    check(
+      Math.abs(share - RANDOM_MIX[tier]) < 0.04,
+      `random mix: ${tier} is ${Math.round(share * 100)}% of draws, meant to be ${RANDOM_MIX[tier] * 100}%`,
+    );
+  }
+  notes.push(
+    `random mix over ${draws} Guess the Player deals: ` +
+      `easy ${Math.round((counts.easy / draws) * 100)}%, medium ${Math.round((counts.medium / draws) * 100)}%, ` +
+      `hard ${Math.round((counts.hard / draws) * 100)}% (default choice is ${DEFAULT_POOL.mode})`,
+  );
+}
+
+// A guess with no published birthday reads as a blank, never as age 0.
+{
+  const secret = gtp.answerable(roster.players)[0];
+  const ageless = roster.players.find((p) => p.age === null);
+  if (secret && ageless) {
+    const age = gtp.compare(ageless, secret, 'direction').find((a) => a.key === 'age');
+    check(age?.display === '—' && !age.direction, `guess-the-player: ${ageless.name} with no birthday reads "${age?.display}"`);
+  }
+}
+
+// List: FNCS winners by region are the regional finals, not the venue of a LAN.
+if (facts) {
+  const lists = buildListCriteria(roster, facts, pools, orgs, teammates);
+  const na = lists.find((c) => c.id === 'fncs:North America');
+  const kami = roster.players.find((p) => p.name === 'Kami' && p.countryName === 'Poland');
+  if (na && kami) {
+    check(!na.answers.some((a) => a.id === kami.id), 'list: Kami is an NA FNCS winner for the Raleigh Invitational');
+  }
+  check(
+    !lists.some((c) => c.id.startsWith('won-in-year:') && /title/i.test(c.title)),
+    'list: a year list still asks for "a title"',
+  );
 }
 
 // ------------------------------------------------------------ 12. event pools

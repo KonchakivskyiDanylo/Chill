@@ -185,9 +185,9 @@ export function buildCriteria(
    * These used to be "Won in Europe" and "Won in 2023", counting any headline
    * win by where the event was held. That made Cooper a European winner for
    * taking the 2023 Globals in Copenhagen — true of the venue and of nothing a
-   * player would ever answer with. The region rule now asks about the regional
-   * FNCS alone ("Won EU FNCS"), and the year rule about FNCS finals, regional
-   * or global, rather than a bare "title".
+   * player would ever answer with. Both now ask about the regional FNCS alone
+   * — "Won EU FNCS", "Won FNCS in 2023" — and a Globals is not an FNCS title
+   * for either, which is how the FNCS count everywhere else reads it too.
    */
   const regions = [...new Set(players.flatMap((p) => facts.of(p.id).fncsWinRegions))];
   for (const region of regions) {
@@ -206,7 +206,7 @@ export function buildCriteria(
     add(
       `won-fncs-in:${year}`,
       'won-fncs-year',
-      `won an FNCS final in ${year}`,
+      `won a regional FNCS final in ${year}`,
       `Won FNCS in ${year}`,
       (p) => facts.of(p.id).fncsWinYears.includes(year),
     );
@@ -252,17 +252,25 @@ export function intersects(a: PlayerCriterion, b: PlayerCriterion): boolean {
  * "2+ FNCS titles", or "global champion" inside "LAN winner". Such a pair makes
  * a redundant row/column or a muddy Connections group, so generators reject
  * boards containing one.
+ *
+ * `share` below 1 also catches the pair that is *nearly* nested: at 0.9, a
+ * pair where nine in ten of the smaller set are in the larger. Exact
+ * implication let "Won NA FNCS" and "North America" onto one Tic Tac Toe board
+ * because a handful of NA winners now compete elsewhere — and the cell where
+ * they crossed was just "Won NA FNCS" asked twice.
  */
-export function isNested(a: PlayerCriterion, b: PlayerCriterion): boolean {
+export function isNested(a: PlayerCriterion, b: PlayerCriterion, share = 1): boolean {
   const [small, large] = a.matches.length <= b.matches.length ? [a, b] : [b, a];
-  return small.matches.length > 0 && small.matches.every((player) => large.test(player));
+  if (small.matches.length === 0) return false;
+  const inside = small.matches.filter((player) => large.test(player)).length;
+  return inside >= small.matches.length * share;
 }
 
-/** No pair among the given criteria may imply another. */
-export function hasNestedPair(criteria: PlayerCriterion[]): boolean {
+/** No pair among the given criteria may imply another — or nearly, below `share` 1. */
+export function hasNestedPair(criteria: PlayerCriterion[], share = 1): boolean {
   for (let i = 0; i < criteria.length; i++) {
     for (let j = i + 1; j < criteria.length; j++) {
-      if (isNested(criteria[i], criteria[j])) return true;
+      if (isNested(criteria[i], criteria[j], share)) return true;
     }
   }
   return false;

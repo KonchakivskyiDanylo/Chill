@@ -6,9 +6,9 @@ import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PoolSetup } from '@/components/PoolSetup';
 import { Banner } from '@/components/ui';
-import { deal, rotationKey } from '@/games/shared/rotation';
+import { rotationKey } from '@/games/shared/rotation';
 import { useEventMode } from '@/games/shared/mode';
-import { poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
+import { dealSecret, poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
 import type { Pools } from '@/data/liquipedia/pools';
 import { type Roster } from '@/data/liquipedia/roster';
 import { usePools } from '@/data/liquipedia/usePools';
@@ -130,13 +130,13 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
    */
   const newGame = useCallback(() => {
     const key = rotationKey(meta.id, ...poolScope(event, choice));
-    const drawn = deal(players, readLocal<string[]>(key, []));
+    const drawn = dealSecret(players, readLocal<string[]>(key, []), pools, event, choice);
     if (drawn) writeLocal(key, drawn.seen);
     setGame(drawn ? gameFor(drawn.pick) : null);
     setWrapped(drawn?.wrapped ?? false);
     setDraft('');
     setMessage(null);
-  }, [players, event, choice]);
+  }, [players, pools, event, choice]);
 
   const commit = useCallback(() => {
     if (!game || game.status !== 'playing') return;

@@ -81,7 +81,7 @@ export interface PlayerFacts {
    * every region in them, so they are left out — this is "won the EU FNCS".
    */
   fncsWinRegions: readonly string[];
-  /** Years this player won any FNCS final, regional or global. */
+  /** Years this player won a regional FNCS final — the same finals as above. */
   fncsWinYears: readonly number[];
 }
 
@@ -101,13 +101,16 @@ const NONE: PlayerFacts = {
 };
 
 /**
- * An FNCS final: a regional grand final, or a Global Championship.
+ * An FNCS title: a regional grand final, played online.
  *
- * `kind` alone does not say it — the World Cup is `global` too, and it was
- * never an FNCS — so the Global Championships are told apart by name.
+ * Not a Global Championship, the 2022 Invitational or the 2026 Summit, though
+ * all three carry the FNCS name. A Globals is its own title, and counting it
+ * here made Cooper an "FNCS winner in 2023" when the FNCS count every game
+ * shows — Wikipedia's, in `players.json` — has him on none. This keeps "Won
+ * FNCS in 2023" and "Won EU FNCS" about the same finals that count does.
  */
-function isFncs(event: RawEvent): boolean {
-  return event.kind === 'fncs' || (event.kind === 'global' && event.name.includes('FNCS'));
+function isRegionalFinal(event: RawEvent): boolean {
+  return event.kind === 'fncs' && !event.lan;
 }
 
 export class Facts {
@@ -126,14 +129,15 @@ export class Facts {
       year: Number(event.date.slice(0, 4)),
     }));
     for (const player of payload.players) {
-      const won = player.won.map((index) => payload.events[index]).filter(Boolean);
-      const regional = won.filter((event) => event.kind === 'fncs' && !event.lan && event.region);
+      const regional = player.won.map((index) => payload.events[index]).filter(
+        (event) => event && isRegionalFinal(event),
+      );
       this.byPlayer.set(player.id, {
         ...player,
-        fncsWinRegions: [...new Set(regional.map((event) => event.region as string))].sort(),
-        fncsWinYears: [
-          ...new Set(won.filter(isFncs).map((event) => Number(event.date.slice(0, 4)))),
+        fncsWinRegions: [
+          ...new Set(regional.flatMap((event) => (event.region ? [event.region] : []))),
         ].sort(),
+        fncsWinYears: [...new Set(regional.map((event) => Number(event.date.slice(0, 4))))].sort(),
       });
     }
   }

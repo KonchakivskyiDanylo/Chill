@@ -1,7 +1,7 @@
 import type { Board } from '@/data/liquipedia/rankings';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 import { money, plural } from '@/lib/format';
-import { board, byValue, TIE_ALPHA } from './board-builder';
+import { board, byValue, TIE_GROUP_EARNINGS } from './board-builder';
 
 /**
  * All-time boards the shipped set cannot carry, built from the roster in place.
@@ -42,7 +42,7 @@ export function derivedBoards(players: readonly RosterPlayer[]): Board[] {
       'Countries',
       'Top 10 countries by earnings — active players only',
       'country',
-      `Career earnings added up per country, counting only players the export still lists as active. Retired players are left out entirely, so this is not the all-time table. ${TIE_ALPHA}`,
+      `Career earnings added up per country, counting only players the export still lists as active. Retired players are left out entirely, so this is not the all-time table.`,
       byValue(
         [...byCountry]
           .filter(([, total]) => total > 0)
@@ -70,13 +70,14 @@ export function derivedBoards(players: readonly RosterPlayer[]): Board[] {
       'Countries',
       'Top 10 countries by active players',
       'country',
-      `How many players each country still has competing, as the export lists them. ${TIE_ALPHA}`,
+      `How many players each country still has competing, as the export lists them. ${TIE_GROUP_EARNINGS}`,
       byValue(
         [...heads].map(([name, count]) => ({
           key: name,
           label: name,
           value: count,
           display: plural(count, 'player'),
+          tiebreak: byCountry.get(name) ?? 0,
         })),
       ),
     ),

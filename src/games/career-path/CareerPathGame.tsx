@@ -13,9 +13,9 @@ import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
 import { useMajors } from '@/data/liquipedia/useMajors';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
-import { deal, rotationKey } from '@/games/shared/rotation';
+import { rotationKey } from '@/games/shared/rotation';
 import { useEventMode } from '@/games/shared/mode';
-import { poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
+import { dealSecret, poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { moneyShort, ordinal, playerMoney, plural } from '@/lib/format';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { getGame } from '@/games/registry';
@@ -74,7 +74,7 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
 
   const start = useCallback(() => {
     const key = rotationKey(meta.id, ...poolScope(event, choice));
-    const drawn = deal(players, readLocal<string[]>(key, []));
+    const drawn = dealSecret(players, readLocal<string[]>(key, []), pools, event, choice);
     if (!drawn) {
       setError(`No player in this pool has ${majors.minAppearances} majors on record.`);
       return;
@@ -82,7 +82,7 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
     writeLocal(key, drawn.seen);
     setError(null);
     setGame(createGame(drawn.pick, majors.resultsFor(drawn.pick.id), mode, majors));
-  }, [players, event, choice, majors, mode]);
+  }, [players, pools, event, choice, majors, mode]);
 
   const note = <RosterNote what="Results" generated={majors.generated} />;
 

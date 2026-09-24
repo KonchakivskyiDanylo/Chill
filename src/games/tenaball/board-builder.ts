@@ -21,10 +21,21 @@ export interface Ranked {
   label: string;
   value: number;
   display: string;
+  /**
+   * What decides a tie on `value`, bigger first — career earnings for a
+   * player, combined earnings for a country or an org. Absent where the value
+   * is already money, and a tie there is a tie.
+   */
+  tiebreak?: number;
 }
 
-export const TIE_ALPHA =
-  'Level values are ordered alphabetically, so 10th is the last name in the tie.';
+/** The tie rule for a player board counted in anything but money. */
+export const TIE_EARNINGS =
+  'Players level on the count are ranked by career earnings, so the bigger earner is higher.';
+
+/** The same, for boards whose rows are countries or organisations. */
+export const TIE_GROUP_EARNINGS =
+  'Level counts are split by the combined career earnings of the players behind them.';
 
 /**
  * A board, or nothing.
@@ -43,6 +54,12 @@ export function board(
   lowerIsBetter?: boolean,
 ): Board | null {
   if (ranked.length < NEEDED) return null;
+  // Level with the 11th on everything the board ranks by: no single right
+  // answer for the last slot. The board used to hand it to whichever name came
+  // first in the alphabet, which is a rule nobody can play; now it is not
+  // offered at all, the way the notebook drops a tournament whose tenth and
+  // eleventh places are shared.
+  if (level(ranked[SLOTS - 1], ranked[SLOTS])) return null;
   const rows: BoardRow[] = ranked.slice(0, SLOTS);
   const next = ranked[SLOTS];
   return {
@@ -58,21 +75,23 @@ export function board(
 }
 
 /**
- * Sort descending on `value`, breaking ties by label.
+ * Sort on `value`, descending unless `ascending`, then on `tiebreak`, bigger
+ * first.
  *
- * Alphabetical is not a fair tiebreak so much as a stated one: the board prints
- * its tie rule above the slots, and "level values are ordered by name" is a
- * rule a player can act on, where an arbitrary export order is not.
- *
- * `localeCompare` rather than `<`, because half the handles in this scene are
- * lowercase and code-point order puts every one of them after every capitalised
- * name — which would make the stated rule a lie at exactly the moment a player
- * relies on it to work out who is tenth.
+ * Ties used to fall to the label. It was at least a stated rule — "level
+ * values are ordered alphabetically" — but not one anybody can play: on "top
+ * 10 by FNCS wins" the 3s outnumber the slots, and which of them is tenth came
+ * down to an initial. Earnings is a rule a player can reason about. What is
+ * still level after it is left level — `board` refuses a cut that falls there,
+ * and anywhere else in the ten the order is only where a slot is drawn.
  */
 export function byValue(ranked: Ranked[], ascending = false): Ranked[] {
   return ranked.sort(
     (a, b) =>
-      (ascending ? a.value - b.value : b.value - a.value) ||
-      a.label.localeCompare(b.label, 'en', { sensitivity: 'base' }),
+      (ascending ? a.value - b.value : b.value - a.value) || (b.tiebreak ?? 0) - (a.tiebreak ?? 0),
   );
+}
+
+function level(a: Ranked, b: Ranked): boolean {
+  return a.value === b.value && (a.tiebreak ?? 0) === (b.tiebreak ?? 0);
 }

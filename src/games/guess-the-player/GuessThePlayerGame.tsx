@@ -15,9 +15,9 @@ import { useFacts } from '@/data/liquipedia/useFacts';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import { useTeammates } from '@/data/liquipedia/useTeammates';
-import { deal, rotationKey } from '@/games/shared/rotation';
+import { rotationKey } from '@/games/shared/rotation';
 import { useEventMode } from '@/games/shared/mode';
-import { poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
+import { dealSecret, poolPlayers, poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { playerMoney } from '@/lib/format';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { getGame } from '@/games/registry';
@@ -120,12 +120,22 @@ function Game({
     () => resolvePool(roster, pools, event, choice, answerable, 20),
     [roster, pools, event, choice],
   );
+  /*
+   * Who the guess box takes: anyone, the way Tic Tac Toe does. It used to be
+   * `players`, the pool the secret is drawn from, so on Hard you could not
+   * guess Bugha to read his row — and a name missing from the list told you it
+   * was not the answer. In an event mode it is the field, as everywhere else.
+   */
+  const guessable = useMemo(() => {
+    const field = poolPlayers(roster, pools, event);
+    return field.length > 0 ? field : roster.players;
+  }, [roster, pools, event]);
 
   const start = useCallback(() => {
     // A no-repeat cycle per pool, so the same secret does not come round twice
     // in an evening. See `games/shared/rotation.ts`.
     const key = rotationKey(meta.id, ...poolScope(event, choice));
-    const drawn = deal(players, readLocal<string[]>(key, []));
+    const drawn = dealSecret(players, readLocal<string[]>(key, []), pools, event, choice);
     if (!drawn) {
       setError('No player in this pool has a published birthday and earnings figure.');
       return;
@@ -133,7 +143,7 @@ function Game({
     writeLocal(key, drawn.seen);
     setError(null);
     setGame(gameFor(drawn.pick, mode, extras));
-  }, [players, event, choice, mode, extras]);
+  }, [players, pools, event, choice, mode, extras]);
 
   if (!game) {
     return (
@@ -206,7 +216,7 @@ function Game({
         {!finished ? (
           <div className="stack-sm">
             <PlayerSearch
-              players={players}
+              players={guessable}
               onPick={(player) => setGame(submitGuess(game, player))}
               exclude={guessedIds}
               autoFocus

@@ -3,6 +3,7 @@ import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
 import type { RegionChoice } from '@/components/RegionPicker';
 import { useLocalState } from '@/lib/storage';
 import { DIFFICULTIES, type Difficulty } from './difficulty';
+import { deal, dealWeighted, type Deal } from './rotation';
 
 /**
  * Who a game may ask about.
@@ -165,6 +166,38 @@ export function resolvePool(
     return DIFFICULTIES.flatMap((level) => roster.exactly(level, { region, eligible: filter }));
   }
   return roster.playersFor(difficulty, { minimum, region, eligible: filter });
+}
+
+/**
+ * How Random splits its secret players across the fame tiers.
+ *
+ * Random used to draw evenly from everyone eligible, and everyone eligible is
+ * mostly the Hard tier: 80% of Fortnitedle's answers, 71% of Guess the
+ * Player's. Four rounds in five were a name nobody had heard of, which made
+ * the default setting a letter puzzle rather than a Fortnite one. Now half the
+ * rounds are household names, a third regulars and the rest deep cuts, so the
+ * surprise is still there without being the whole game.
+ */
+export const RANDOM_MIX: Readonly<Record<Difficulty, number>> = { easy: 0.5, medium: 0.35, hard: 0.15 };
+
+/**
+ * Deals the next secret player for a game that has one.
+ *
+ * Random weights the draw by tier (see `RANDOM_MIX`). Everything else deals
+ * evenly: an event field is the field, a chosen tier is one tier, and Choose →
+ * Any promises "no ranking applied" and keeps it.
+ */
+export function dealSecret<T extends RosterPlayer>(
+  players: readonly T[],
+  seen: readonly string[],
+  pools: Pools | null,
+  event: string | null,
+  choice: PoolChoice,
+): Deal<T> | null {
+  if (!pools?.get(event) && choice.mode === 'random') {
+    return dealWeighted(players, seen, (player) => player.tier, RANDOM_MIX);
+  }
+  return deal(players, seen);
 }
 
 /** Exactly this tier under the current choice, with no widening — what a card counts. */

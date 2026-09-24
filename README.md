@@ -60,8 +60,11 @@ player from a **no-repeat rotation** (`games/shared/rotation.ts`): the pool
 empties before anyone comes round again, and the new cycle never opens with
 whoever closed the last one. The cycle is keyed by everything that changes who
 is in the bag (`poolScope`) and lives in `localStorage`, so it survives a
-reload. (Higher or Lower already never repeats inside a run; the rest deal a
-whole board rather than one player.)
+reload. On Random each fame tier is its own bag and the draw picks the tier
+first — half Easy, a third Medium, the rest Hard (`RANDOM_MIX` in
+`games/shared/pool.ts`) — because an even draw over everyone eligible was 70–80%
+Hard-tier players nobody had heard of. (Higher or Lower already never repeats
+inside a run; the rest deal a whole board rather than one player.)
 
 Every game has a **Give up** button next to its guess controls while a round is
 running — not in the title bar, where it sat beside "New game" and was too easy

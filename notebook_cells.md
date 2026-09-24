@@ -238,13 +238,30 @@ YEARS = list(range(2018, 2027))
 SLOTS = 10
 
 boards = []
+LEVEL_AT_CUT = []   # boards left out because 10th and 11th could not be split
+
+def level(a, b):
+    """Equal on the value and on every tiebreak after it."""
+    return a[2] == b[2] and a[3:] == b[3:]
+
 def board(bid, group, title, entity, tie, ranked, fmt):
-    """`ranked` is [(key, label, value)] already sorted best-first."""
+    """`ranked` is [(key, label, value)] or [(key, label, value, tiebreak...)],
+    already sorted best-first.
+
+    A board whose 10th and 11th are level on everything it ranks by has no
+    single right answer for the last slot, and is not written. Those used to be
+    split by name - "exact ties are split by name" - which is a rule a player
+    can read but not play. Everywhere else in the ten a level pair is only a
+    question of which slot is drawn first, so the name still orders them there
+    and nothing says so."""
     if len(ranked) < SLOTS + 1:
         return
+    if level(ranked[SLOTS - 1], ranked[SLOTS]):
+        LEVEL_AT_CUT.append(bid)
+        return
     rows = [{'key': k, 'label': l, 'value': round(v, 2), 'display': fmt(v)}
-            for k, l, v in ranked[:SLOTS]]
-    k, l, v = ranked[SLOTS]
+            for k, l, v, *_ in ranked[:SLOTS]]
+    k, l, v, *_ = ranked[SLOTS]
     boards.append({'id': bid, 'group': group, 'title': title, 'entity': entity,
                    'tieRule': tie, 'rows': rows,
                    'next': {'key': k, 'label': l, 'value': round(v, 2)}})
@@ -268,13 +285,15 @@ def rank_fame(d, label_of=None, money_of=None):
     # Resolved here rather than as defaults: both are defined below this.
     label_of = label_of or NAME
     money_of = money_of or (lambda k: career.get(k, 0))
-    return sorted(((k, label_of(k), v) for k, v in d.items() if v > 0),
-                  key=lambda e: (-e[2], -money_of(e[0]), e[1].lower()))
+    # The money rides along as a fourth field so `board` can tell a level count
+    # that money settles from one it does not.
+    return sorted(((k, label_of(k), v, money_of(k)) for k, v in d.items() if v > 0),
+                  key=lambda e: (-e[2], -e[3], e[1].lower()))
 
 NAME = lambda page: player_of[page]['id'] if page in player_of else page
-TIE_MONEY = 'Straight prize-money order. Exact ties are split by name.'
+TIE_MONEY = 'Straight prize-money order.'
 TIE_COUNT = ('Players level on the count are ranked by career earnings, so the '
-             'bigger earner is higher. Exact ties are split by name.')
+             'bigger earner is higher.')
 
 # ---------------------------------------------------------- player: totals --
 earn      = Counter()   # from placements, so it can be sliced
@@ -444,7 +463,7 @@ board('org-earnings', 'Organisations', 'Top 10 organisations by total earnings',
       'org', TIE_MONEY, rank(org_earn, ORG), money)
 board('org-majors', 'Organisations', 'Top 10 organisations by major wins',
       'org', 'Ranked by wins at Epic-run majors. Organisations level on the count '
-      'are ranked by their own prize money. Exact ties are split by name.',
+      'are ranked by their own prize money.',
       rank_fame(org_majors, ORG, org_earn.get), count('win'))
 for y in YEARS:
     board(f'org-year-earnings:{y}', 'Organisations',
@@ -469,8 +488,7 @@ board('country-total-earnings', 'Countries', 'Top 10 countries by player earning
       'country', TIE_MONEY, rank(country_total, CT), money)
 board('country-fncs-wins', 'Countries', 'Top 10 countries by FNCS wins',
       'country', 'Every FNCS title won by a player of that nationality. Countries '
-      "level on the count are ranked by their players' total earnings. Exact ties "
-      'are split by name.',
+      "level on the count are ranked by their players' total earnings.",
       rank_fame(country_fncs, CT, country_total.get), count('title'))
 for y in YEARS:
     board(f'country-year-earnings:{y}', 'Countries',
@@ -571,7 +589,7 @@ for key, word in MODES:
           f'Top 10 by {word} earnings', 'player',
           f'Prize money won in {word} events only. A player appears on several '
           f'of these boards — the money is split by the format each result was '
-          f'played in. Exact ties are split by name.',
+          f'played in.',
           rank(mode_earn[key], NAME), money)
     print(f'{word:<6} {len(mode_earn[key]):>5} players with earnings')
 
@@ -645,7 +663,6 @@ OUT = f'{BASE}/rankings.json'
 
 TIE_FAME = ('Level counts are split by career earnings, so of two players on the '
             'same number the bigger earner ranks higher.')
-TIE_EXACT = 'Exact ties are split by name.'
 TIE_RICH = ('Countries level on count are ordered by total career earnings, '
             'so the bigger-earning country ranks higher.')
 
@@ -831,16 +848,16 @@ def by_age(d, oldest_first):
 board('youngest-major-win', 'Players', 'Top 10 youngest ever to win a major',
       'player',
       'Age on the first day of the event, for every Epic-run tier-1 final since '
-      'the World Cup. Players with no published birthday cannot be ranked. '
-      + TIE_EXACT, by_age(young_win, False), spell_age)
+      'the World Cup. Players with no published birthday cannot be ranked.',
+      by_age(young_win, False), spell_age)
 board('oldest-major-win', 'Players', 'Top 10 oldest ever to win a major', 'player',
       'The same list read from the other end: the oldest anyone has been on the '
-      'day they won an Epic-run tier-1 final. ' + TIE_EXACT,
+      'day they won an Epic-run tier-1 final.',
       by_age(old_win, True), spell_age)
 board('oldest-first-major-win', 'Players', 'Top 10 oldest to win a first major',
       'player',
       'Age at a maiden title rather than at any title, so a long wait counts and '
-      'a long career does not. ' + TIE_EXACT, by_age(first_win, True), spell_age)
+      'a long career does not.', by_age(first_win, True), spell_age)
 
 # ========================================== per-country, active players only ==
 # The all-time country boards above are monuments to the 2019 World Cup. These
@@ -889,9 +906,17 @@ def together_run(pair, shared):
     a, b = pair
     return longest_run(shared, sorted(solo_waves[a] | solo_waves[b]))
 
+# Level runs fall to the pair's combined career earnings before the names.
+_pair_money = lambda pair: sum(career.get(pg, 0) for pg in pair)
 _duos = sorted(((p, together_run(p, s)) for p, s in pair_waves.items() if len(s) >= 3),
-               key=lambda e: (-e[1], NAME(e[0][0]).lower(), NAME(e[0][1]).lower()))
-if len(_duos) >= SLOTS + 1:
+               key=lambda e: (-e[1], -_pair_money(e[0]), NAME(e[0][0]).lower(),
+                              NAME(e[0][1]).lower()))
+_duo_level = len(_duos) >= SLOTS + 1 and (
+    _duos[SLOTS - 1][1] == _duos[SLOTS][1]
+    and _pair_money(_duos[SLOTS - 1][0]) == _pair_money(_duos[SLOTS][0]))
+if _duo_level:
+    LEVEL_AT_CUT.append('duo-longevity')
+if len(_duos) >= SLOTS + 1 and not _duo_level:
     def duo_row(pair, value):
         a, b = sorted(pair, key=lambda pg: NAME(pg).lower())
         return {'key': '|'.join(sorted(pair)), 'label': f'{NAME(a)} & {NAME(b)}',
@@ -904,7 +929,8 @@ if len(_duos) >= SLOTS + 1:
         'title': 'Top 10 longest-running duos, major by major', 'entity': 'player',
         'tieRule': ('The longest run of consecutive majors a pair turned up to '
                     'together, counting the majors either of them entered. Both '
-                    'names fill one slot. ' + TIE_EXACT),
+                    'names fill one slot. Pairs level on the run are ranked by '
+                    'their combined career earnings.'),
         'rows': [duo_row(p, v) for p, v in _duos[:SLOTS]],
         'next': _spare,
     })
@@ -926,8 +952,8 @@ for thr, word in ((100_000, '$100K'), (300_000, '$300K'), (500_000, '$500K'),
           f'Top 10 countries by players over {word} in career earnings', 'country',
           f'How many individual players from each country have passed {word}. '
           + TIE_RICH,
-          sorted(((k, k, v) for k, v in c.items() if v > 0),
-                 key=lambda e: (-e[2], -country_money[e[0]], e[1].lower())),
+          sorted(((k, k, v, country_money[k]) for k, v in c.items() if v > 0),
+                 key=lambda e: (-e[2], -e[3], e[1].lower())),
           count('player'))
 
 # Resident populations, hand-entered from public 2024 estimates and rounded to
@@ -970,7 +996,7 @@ board('country-per-capita', 'Countries',
       'Top 10 countries by earnings per resident', 'country',
       "Career prize money won by that country's players, divided by its "
       'population. Populations are public 2024 estimates typed in by hand - they '
-      'are not part of the Liquipedia export. ' + TIE_EXACT,
+      'are not part of the Liquipedia export.',
       sorted(((c, c, country_money[c] / (POPULATION[c] * 1_000_000))
               for c in country_money if c in POPULATION and country_money[c] > 0),
              key=lambda e: (-e[2], e[1].lower())),
@@ -996,19 +1022,28 @@ def short_event(name):
     return re.sub(r'\s{2,}', ' ', s)
 
 paydays = defaultdict(Counter)
+# When each shortened event last paid out, so two level paydays can be split by
+# date rather than by name: C2S7 and FNCS 2023 - Major 3 paid Kami the same.
+payday_last = defaultdict(dict)
 for t, r, m, pages in PLACED:
     if m <= 0:
         continue
     for page, _ in pages:
-        paydays[page][short_event(t['name'])] += m
+        name = short_event(t['name'])
+        paydays[page][name] += m
+        day = day_of(t)
+        when = _date.fromisoformat(day).toordinal() if day else 0
+        payday_last[page][name] = max(when, payday_last[page].get(name, 0))
 for page, _ in career.most_common(20):
     board(f'paydays:{page}', 'Paydays', f'Top 10 biggest paydays - {NAME(page)}',
           'tournament',
           f'The ten tournaments {NAME(page)} earned the most at, by prize money '
           'from that one event. A regional final is named by the event rather '
-          'than the region. ' + TIE_EXACT,
-          sorted(((n, n, v) for n, v in paydays[page].items() if v > 0),
-                 key=lambda e: (-e[2], e[1].lower())),
+          'than the region. Level paydays are ordered by date, the more recent '
+          'first.',
+          sorted(((n, n, v, payday_last[page].get(n, 0)) for n, v in paydays[page].items()
+                  if v > 0),
+                 key=lambda e: (-e[2], -e[3], e[1].lower())),
           money)
 
 # Everything answerable on a paydays board, so the guess box has somewhere to
@@ -1030,6 +1065,7 @@ with open(OUT, 'w', encoding='utf-8') as fh:
 
 print(f'{len(boards)} boards, {len(TOURNAMENT_POOL)} tournament names, '
       f'{os.path.getsize(OUT)/1e6:.2f} MB')
+print(f'{len(LEVEL_AT_CUT)} boards left out, level at the cut:', LEVEL_AT_CUT)
 print(Counter(b['group'] for b in boards))
 ```
 
@@ -1173,6 +1209,134 @@ for n in (3, 10, 20, 50):
     print(f'  players with {n}+ teammates on file: '
           f'{sum(1 for p in players_out if len(p["mates"]) >= n):,}')
 print('Peterbot:', players_out[[p['id'] for p in players_out].index('Peterbot')]['mates'][:6])
+```
+
+---
+
+## Check — FNCS winners vs major winners
+
+**Read-only: writes nothing.** Run it any time after cell 1. It compares the
+two ways the games decide "has won an FNCS":
+
+- `fncs_wins` in `players.json` — the count matched in from Wikipedia. Drives
+  "FNCS winner", "2+ FNCS titles" and Higher or Lower's FNCS Wins.
+- `wins.major` in `facts.json` — a 1st place at one of Liquipedia's majors.
+  Drives "Major winner", "Won EU FNCS" and "Won FNCS in 2023".
+
+It prints who is in one and not the other, why (the part of `is_major` that
+turns their FNCS wins away), and who is in both but counted differently.
+
+Run against the dump on 24 Sep 2026 it printed:
+
+```
+FNCS winners 284   major winners 250   both 245
+only FNCS 39   only major 5
+reasons, across all their FNCS 1sts:
+   42  tier 2, console/mobile/twitch bracket
+   38  console/mobile/twitch bracket
+   11  tier 2
+    2  tier 4
+    1  tier 3
+=== In both, but counted differently: 17 players ===
+```
+
+```python
+# FNCS winners vs major winners — read-only, writes nothing. Run after cell 1.
+#
+#   "FNCS winner" = players.json `fncs_wins` > 0   (the count matched in from Wikipedia)
+#   "Major winner" = facts.json `wins.major` > 0   (a 1st place at one of Liquipedia's majors:
+#                    tier 1, no tier type, organised by Epic, from the 2019 World Cup on,
+#                    not console/mobile/twitch — plus the LANs)
+facts_payload = json.load(open(f'{BASE}/facts.json', encoding='utf-8'))
+EVENTS = facts_payload['events']
+FACTS = {p['id']: p for p in facts_payload['players']}
+
+fncs_winners = {p['pagename'] for p in PLAYABLE if (p.get('fncs_wins') or 0) > 0}
+major_winners = {page for page, f in FACTS.items() if f['wins']['major'] > 0}
+both = fncs_winners & major_winners
+only_fncs = fncs_winners - major_winners
+only_major = major_winners - fncs_winners
+print(f'FNCS winners {len(fncs_winners)}   major winners {len(major_winners)}   both {len(both)}')
+print(f'only FNCS {len(only_fncs)}   only major {len(only_major)}\n')
+
+
+def why_not_major(t):
+    """Which part of is_major() turns this tournament away."""
+    reasons = []
+    if t['liquipediatier'] != 1:
+        reasons.append(f"tier {t['liquipediatier']}")
+    if t['liquipediatiertype'] is not None:
+        reasons.append(f"tier type {t['liquipediatiertype']!r}")
+    if not is_epic(t):
+        reasons.append('not organised by Epic')
+    if (t['startdate'] or '') < '2019-07-26':
+        reasons.append('before the 2019 World Cup')
+    if re.search(r'console|mobile|twitch', t['name'], re.I):
+        reasons.append('console/mobile/twitch bracket')
+    return ', '.join(reasons) or 'counts as a major'
+
+
+# Every 1st place each player has in a tournament with "FNCS" in its name.
+fncs_firsts = defaultdict(list)
+for t, r, money, pages in PLACED:
+    if r == 1 and 'FNCS' in t['name']:
+        for page, _team in pages:
+            fncs_firsts[page].append(t)
+
+
+def majors_won(page):
+    return [EVENTS[i]['short'] for i in FACTS.get(page, {}).get('won', [])]
+
+
+# --- 1. Wikipedia says FNCS winner, Liquipedia's majors have no win ----------
+rows = []
+for page in sorted(only_fncs, key=lambda pg: -(player_of[pg].get('earnings') or 0)):
+    p = player_of[page]
+    firsts = fncs_firsts.get(page, [])
+    rows.append({
+        'player': p['id'],
+        'page': page,
+        'fncs_wins (Wikipedia)': p.get('fncs_wins'),
+        'tier': p['tier'],
+        'earnings': p.get('earnings'),
+        'FNCS 1sts on Liquipedia': len(firsts),
+        'those 1sts, and why they are not majors': '; '.join(
+            f"{t['name']} ({why_not_major(t)})" for t in firsts
+        ) or '— none: Liquipedia has no FNCS win for them at all',
+    })
+only_fncs_df = pd.DataFrame(rows)
+print('=== FNCS winner by Wikipedia, no major win by Liquipedia ===')
+print(only_fncs_df.to_string(index=False, max_colwidth=140))
+
+# Why, summarised: the reason is_major gave for each of those 1sts.
+reason_counts = Counter(
+    why_not_major(t) for page in only_fncs for t in fncs_firsts.get(page, [])
+)
+print('\nreasons, across all their FNCS 1sts:')
+for reason, n in reason_counts.most_common():
+    print(f'  {n:>3}  {reason}')
+print(f"  {sum(1 for pg in only_fncs if not fncs_firsts.get(pg))} players with no FNCS 1st on Liquipedia at all")
+
+# --- 2. Liquipedia major win, no FNCS title on Wikipedia ---------------------
+print('\n=== Major winner by Liquipedia, no FNCS title by Wikipedia ===')
+print(pd.DataFrame([
+    {'player': player_of[pg]['id'], 'tier': player_of[pg]['tier'], 'majors won': '; '.join(majors_won(pg))}
+    for pg in sorted(only_major)
+]).to_string(index=False, max_colwidth=140))
+
+# --- 3. In both sets, but the two sources count a different number ----------
+# Liquipedia's FNCS count: won majors whose name says FNCS (regional finals,
+# Globals, the Invitational, the Summit).
+rows = []
+for page in sorted(both):
+    wiki = player_of[page].get('fncs_wins') or 0
+    liq = sum(1 for i in FACTS[page]['won'] if 'FNCS' in EVENTS[i]['name'])
+    if wiki != liq:
+        rows.append({'player': player_of[page]['id'], 'Wikipedia': wiki, 'Liquipedia FNCS majors won': liq,
+                     'Liquipedia list': '; '.join(EVENTS[i]['short'] for i in FACTS[page]['won'] if 'FNCS' in EVENTS[i]['name'])})
+print(f'\n=== In both, but counted differently: {len(rows)} players ===')
+if rows:
+    print(pd.DataFrame(rows).to_string(index=False, max_colwidth=140))
 ```
 
 ---

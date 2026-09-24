@@ -210,7 +210,7 @@ export function PoolSetup({
             </div>
           ) : (
             <p className="small muted" style={{ margin: 0 }}>
-              Any player, any region, any level. Hit Choose to narrow it down.
+              Any region, any level — leaning towards names you know. Hit Choose to narrow it down.
             </p>
           )}
         </section>

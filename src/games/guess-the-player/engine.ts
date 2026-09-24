@@ -130,7 +130,6 @@ export function compare(
   mode: FeedbackMode,
   extras: Extras = {},
 ): AttributeResult[] {
-  const guessAge = guess.age ?? 0;
   const secretAge = secret.age ?? 0;
 
   // Career earnings always show a direction: exact matching on a six-figure
@@ -166,7 +165,11 @@ export function compare(
       display: guess.status === 'active' ? 'Active' : 'Retired',
       state: (guess.status === 'active') === (secret.status === 'active') ? 'hit' : 'miss',
     },
-    numericResult('age', 'Age', String(guessAge), guessAge, secretAge, mode),
+    // Any player can be guessed, and nearly half the roster has no published
+    // birthday. That is a blank, not an age of nought — no match, no arrow.
+    guess.age === null
+      ? { key: 'age', label: 'Age', display: '—', state: 'miss' }
+      : numericResult('age', 'Age', String(guess.age), guess.age, secretAge, mode),
     earnings,
     numericResult('fncsWins', 'FNCS wins', String(guess.fncsWins), guess.fncsWins, secret.fncsWins, mode),
   ];

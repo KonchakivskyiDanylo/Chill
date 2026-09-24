@@ -44,7 +44,7 @@ export interface GameMeta {
 const POOL_SECTION: RuleSection = {
   title: 'Who you get asked about',
   items: [
-    'Random 🎲 — any player at all, from household names to one-off qualifiers. This is the default, and Start works without touching anything.',
+    'Random 🎲 — anyone can come up, but it leans towards names you know: half the rounds are Easy-band players, a third Medium, the rest Hard. This is the default, and Start works without touching anything.',
     'Choose 🎛️ — narrow it by region, difficulty and whether the player is still competing. Whatever you pick is remembered, here and in every other game.',
     'Region — play one region’s scene only. Difficulty is then ranked inside that region, so Easy means “well known in Asia”, not “well known worldwide”.',
     'Difficulty — Easy 🟢, Medium 🟡 and Hard 🔴 are bands of career earnings, and each card tells you the band it covers.',
@@ -267,7 +267,8 @@ export const GAMES: GameMeta[] = [
         items: [
           'Qualified fields — everyone who made it to the FNCS Globals, or to the Esports World Cup.',
           'FNCS grand final winners, split by region, because Europe’s winners and North America’s are two different memories.',
-          'LAN winners — anyone who has won an offline tournament in the top two tiers.',
+          'LAN winners — major LANs only: the World Cup, the Globals and Epic’s other offline finals.',
+          'Major tournament winners, year by year — Epic’s tier-1 finals: FNCS grand finals, the Globals, the World Cup and Epic’s LANs.',
           'In an event mode the lists are all about that field instead: everyone who qualified, the qualifiers from one region or country, the ones who have won an FNCS and the ones who never have.',
         ],
       },
@@ -305,7 +306,7 @@ export const GAMES: GameMeta[] = [
           'Organisations — has played for a given org, at any point, not just today.',
           'Titles — has won an FNCS, a LAN, a global championship, or two or more FNCS titles.',
           'Career earnings above a threshold.',
-          'Won their region’s FNCS — “has won the EU FNCS” — or won an FNCS final in a given year. A Globals counts for the year, never for the region it was held in.',
+          'Won their region’s FNCS — “has won the EU FNCS” — or won an FNCS in a given year. Regional finals only: a Globals is its own title and counts for neither.',
           'Played at a specific tournament — the globals and LANs, never a regional qualifier.',
           'Country and region — in the draw now that the cards carry no flags.',
         ],
@@ -391,7 +392,8 @@ export const GAMES: GameMeta[] = [
       'Columns: region, country, status, age, career earnings, FNCS wins, FNCS finals played, and whether your guess has played with the secret player.',
       'Together is green when the two have entered 10 or more tournaments as teammates. A red cell still shows how many they did play, if any.',
       'Career earnings always show a direction, because exact-matching a six-figure number would never land.',
-      'Only players with a published birthday and earnings figure can be the answer, so no column is ever blank.',
+      'You can guess anyone, not just players from the pool the secret was drawn from. A guess with no published birthday shows — for age.',
+      'Only players with a published birthday and earnings figure can be the answer, so the secret never has a blank.',
     ],
     sections: [
       {

@@ -2,7 +2,7 @@ import type { Facts } from '@/data/liquipedia/facts';
 import type { Orgs } from '@/data/liquipedia/orgs';
 import type { Pool } from '@/data/liquipedia/pools';
 import { Rankings, type Board } from "@/data/liquipedia/rankings";
-import { board, byValue, SLOTS, TIE_ALPHA, type Ranked } from "./board-builder";
+import { board, byValue, SLOTS, TIE_EARNINGS, TIE_GROUP_EARNINGS, type Ranked } from './board-builder';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 import { money, plural } from '@/lib/format';
 
@@ -49,6 +49,14 @@ export function poolBoards(
     label: p.name,
     value,
     display,
+    tiebreak: p.earnings,
+  });
+  /** A money board: the value is the earnings, so there is nothing under it. */
+  const earner = (p: RosterPlayer): Ranked => ({
+    key: p.id,
+    label: p.name,
+    value: p.earnings,
+    display: money(p.earnings),
   });
 
   add(
@@ -57,12 +65,8 @@ export function poolBoards(
       'Players',
       `${pool.label} — top 10 by career earnings`,
       'player',
-      `Career prize money across every tournament on record, not just ${pool.label}. ${TIE_ALPHA}`,
-      byValue(
-        players
-          .filter((p) => p.earningsKnown)
-          .map((p) => player(p, p.earnings, money(p.earnings))),
-      ),
+      `Career prize money across every tournament on record, not just ${pool.label}.`,
+      byValue(players.filter((p) => p.earningsKnown).map(earner)),
     ),
   );
 
@@ -73,12 +77,17 @@ export function poolBoards(
    * showing 19 and the alphabet decided which of them was 10th — a tiebreak the
    * board could state but nobody could reason about. The export publishes the
    * day, and two players sharing one is rare, so the real order is available
-   * and the displayed age is just how it is rendered. Only an identical
-   * birthday falls through to the name.
+   * and the displayed age is just how it is rendered. A shared birthday is a
+   * real tie and is left as one: no tiebreak, so `board` drops the board if
+   * it lands on the cut.
    */
   const withAge = players.filter((p) => p.age !== null && p.birthDate);
-  const born = (p: RosterPlayer) => Date.parse(p.birthDate as string);
-  const years = (p: RosterPlayer) => plural(p.age as number, 'year');
+  const born = (p: RosterPlayer): Ranked => ({
+    key: p.id,
+    label: p.name,
+    value: Date.parse(p.birthDate as string),
+    display: plural(p.age as number, 'year'),
+  });
   const BIRTHDAY_NOTE =
     'Age today, from published birthdays. Players with no birthday on record cannot be ranked and are not answers.';
 
@@ -88,8 +97,8 @@ export function poolBoards(
       'Players',
       `${pool.label} — the 10 youngest`,
       'player',
-      `${BIRTHDAY_NOTE} Ranked on the date itself, so two players showing the same age are ordered by who was born later. Players born on the same day are ordered alphabetically.`,
-      byValue(withAge.map((p) => player(p, born(p), years(p)))),
+      `${BIRTHDAY_NOTE} Ranked on the date itself, so two players showing the same age are ordered by who was born later.`,
+      byValue(withAge.map(born)),
     ),
   );
   add(
@@ -98,11 +107,8 @@ export function poolBoards(
       'Players',
       `${pool.label} — the 10 oldest`,
       'player',
-      `${BIRTHDAY_NOTE} Ranked on the date itself, so two players showing the same age are ordered by who was born earlier. Players born on the same day are ordered alphabetically.`,
-      byValue(
-        withAge.map((p) => player(p, born(p), years(p))),
-        true,
-      ),
+      `${BIRTHDAY_NOTE} Ranked on the date itself, so two players showing the same age are ordered by who was born earlier.`,
+      byValue(withAge.map(born), true),
       true,
     ),
   );
@@ -113,7 +119,7 @@ export function poolBoards(
       'Players',
       `${pool.label} — top 10 by FNCS wins`,
       'player',
-      `FNCS grand finals won across every season and region. ${TIE_ALPHA}`,
+      `FNCS grand finals won across every season and region. ${TIE_EARNINGS}`,
       byValue(
         players.filter((p) => p.fncsWins > 0).map((p) => player(p, p.fncsWins, plural(p.fncsWins, 'win'))),
       ),
@@ -127,7 +133,7 @@ export function poolBoards(
         'Players',
         `${pool.label} — top 10 by tournaments played`,
         'player',
-        `Every tournament in the export, not just this field's. ${TIE_ALPHA}`,
+        `Every tournament in the export, not just this field's. ${TIE_EARNINGS}`,
         byValue(
           players
             .map((p) => player(p, facts.of(p.id).apps, plural(facts.of(p.id).apps, 'tournament')))
@@ -141,7 +147,7 @@ export function poolBoards(
         'Players',
         `${pool.label} — top 10 by LAN appearances`,
         'player',
-        `Offline tournaments in the top two tiers. ${TIE_ALPHA}`,
+        `Major LANs only — the World Cup, the Globals and Epic’s other offline finals. ${TIE_EARNINGS}`,
         byValue(
           players
             .map((p) => player(p, facts.of(p.id).lanApps, plural(facts.of(p.id).lanApps, 'LAN')))
@@ -169,13 +175,14 @@ export function poolBoards(
       'Countries',
       `${pool.label} — top 10 countries by players in the field`,
       'country',
-      `How many of the field each country sent. ${TIE_ALPHA}`,
+      `How many of the field each country sent. ${TIE_GROUP_EARNINGS}`,
       byValue(
         [...countries].map(([name, entry]) => ({
           key: name,
           label: name,
           value: entry.players,
           display: plural(entry.players, 'player'),
+          tiebreak: entry.earnings,
         })),
       ),
     ),
@@ -186,7 +193,7 @@ export function poolBoards(
       'Countries',
       `${pool.label} — top 10 countries by the field's career earnings`,
       'country',
-      `The career earnings of this field, added up per country. ${TIE_ALPHA}`,
+      `The career earnings of this field, added up per country.`,
       byValue(
         [...countries].map(([name, entry]) => ({
           key: name,
@@ -200,17 +207,21 @@ export function poolBoards(
 
   // ------------------------------------------------------ organisations --
   if (orgs) {
-    const inField = new Set(players.map((p) => p.id));
+    const inField = new Map(players.map((p) => [p.id, p]));
     const counted = orgs.orgs
-      .map((org) => ({
-        // Display name, not the page id: that is how the shipped org boards are
-        // keyed and what the guess box resolves to. See `searchPool`.
-        key: org.name,
-        label: org.name,
-        value: org.current.filter((id) => inField.has(id)).length,
-      }))
-      .filter((row) => row.value > 0)
-      .map((row) => ({ ...row, display: plural(row.value, 'player') }));
+      .map((org) => {
+        const here = org.current.flatMap((id) => inField.get(id) ?? []);
+        return {
+          // Display name, not the page id: that is how the shipped org boards
+          // are keyed and what the guess box resolves to. See `searchPool`.
+          key: org.name,
+          label: org.name,
+          value: here.length,
+          display: plural(here.length, 'player'),
+          tiebreak: here.reduce((sum, p) => sum + p.earnings, 0),
+        };
+      })
+      .filter((row) => row.value > 0);
 
     add(
       board(
@@ -218,7 +229,7 @@ export function poolBoards(
         'Organisations',
         `${pool.label} — top 10 organisations by players in the field`,
         'org',
-        `Counted from each player's current organisation, so a player with no org counts for nobody. ${TIE_ALPHA}`,
+        `Counted from each player's current organisation, so a player with no org counts for nobody. ${TIE_GROUP_EARNINGS}`,
         byValue(counted),
       ),
     );

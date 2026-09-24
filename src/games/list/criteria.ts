@@ -69,14 +69,14 @@ export function buildCriteria(
   // ----------------------------------------------------- FNCS by region --
   // Split, because "every FNCS winner ever" is a 280-name list and neither
   // region's regulars help you with the other's.
+  //
+  // The regional finals only. This used to take any FNCS-branded event by
+  // where it was held, so the 2022 Invitational in Raleigh put Kami and Setty,
+  // both Polish, on the North America list. Same bug as Cooper's "won in
+  // Europe" for the Copenhagen Globals, and the same fix: `fncsWinRegions`.
   const fncsRegions = new Map<string, RosterPlayer[]>();
   for (const player of roster.players) {
-    const regions = new Set<string>();
-    for (const index of facts.of(player.id).won) {
-      const event = facts.events[index];
-      if (event?.kind === 'fncs' && event.region) regions.add(event.region);
-    }
-    for (const region of regions) {
+    for (const region of facts.of(player.id).fncsWinRegions) {
       const list = fncsRegions.get(region);
       if (list) list.push(player);
       else fncsRegions.set(region, [player]);
@@ -91,7 +91,10 @@ export function buildCriteria(
     'lan-winners',
     'Players who have won a LAN',
     roster.players.filter((player) => facts.of(player.id).wins.lan > 0),
-    'Any offline tournament in the top two tiers',
+    // This said "any offline tournament in the top two tiers", which is the
+    // wider definition one Tenaball board uses. This list is the strict one, so
+    // a DreamHack winner was refused under a description that invited them.
+    'Major LANs only: the World Cup, the Globals and Epic’s other offline finals',
   );
 
   // ------------------------------------------------- qualified for both --
@@ -146,11 +149,20 @@ export function buildCriteria(
    * finished top ten, not as a column anything can filter. "Everyone who
    * cleared $300k in 2021" therefore needs a notebook run; this is the version
    * the shipped data can answer honestly.
+   *
+   * These asked for "a title", which could mean anything down to a cash cup,
+   * under a hint reading "any tournament win on record" — when the list only
+   * ever held Epic's tier-1 finals. They now say what they are.
    */
   const winYears = [...new Set(roster.players.flatMap((p) => facts.of(p.id).winYears))].sort();
   for (const year of winYears) {
     const winners = roster.players.filter((player) => facts.of(player.id).winYears.includes(year));
-    add(`won-in-year:${year}`, `Players who won a title in ${year}`, winners, 'Any tournament win on record');
+    add(
+      `won-in-year:${year}`,
+      `Players who won a major tournament in ${year}`,
+      winners,
+      'Epic’s tier-1 finals: FNCS grand finals, the Globals, the World Cup and Epic’s LANs',
+    );
   }
 
   // ============================================================ two events ==
@@ -384,11 +396,17 @@ function fncsRounds(facts: Facts): HeadlineEvent[][] {
   return rounds.filter((round) => round.length >= 4);
 }
 
-/** Consecutive grand finals in one region, newest last. */
+/**
+ * Consecutive grand finals in one region, newest last.
+ *
+ * Regional finals only. The 2026 Summit is an FNCS event with a region on it
+ * — where it was held — so it sat between two European finals and split the
+ * real pair in two, each half labelled "two FNCS grand finals in a row".
+ */
 function consecutiveFinals(facts: Facts): [HeadlineEvent, HeadlineEvent][] {
   const byRegion = new Map<string, HeadlineEvent[]>();
   for (const event of facts.events) {
-    if (event.kind !== 'fncs' || !event.region) continue;
+    if (event.kind !== 'fncs' || event.lan || !event.region) continue;
     const list = byRegion.get(event.region);
     if (list) list.push(event);
     else byRegion.set(event.region, [event]);
@@ -467,7 +485,7 @@ export function buildPoolCriteria(
     `${prefix}:lan`,
     `${pool.label} qualifiers who have won a LAN`,
     players.filter((player) => facts.of(player.id).wins.lan > 0),
-    `${field} — any offline tournament in the top two tiers`,
+    `${field} — major LANs only: the World Cup, the Globals and Epic’s other offline finals`,
   );
   add(
     `${prefix}:no-fncs`,
