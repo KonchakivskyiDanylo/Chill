@@ -1,3 +1,4 @@
+import { ref, type GamePayloads, type Outcome } from '@/analytics/types';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 import { moneyShort } from '@/lib/format';
 
@@ -214,4 +215,13 @@ export function giveUp(state: GameState): GameState {
 
 export function guessesLeft(state: GameState): number {
   return MAX_GUESSES - state.rows.length;
+}
+
+/** The round as the analytics record it. Lost with guesses left means given up. */
+export function record(state: GameState): { outcome: Outcome; r: GamePayloads['guess-the-player'] } {
+  return {
+    outcome:
+      state.status === 'won' ? 'won' : state.rows.length >= MAX_GUESSES ? 'lost' : 'gave-up',
+    r: { secret: ref(state.secret), guesses: state.rows.map((row) => ref(row.player)) },
+  };
 }

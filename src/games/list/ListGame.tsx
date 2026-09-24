@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
@@ -98,6 +99,24 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
   /** Ended by the give-up button rather than by the clock. */
   const [gaveUp, setGaveUp] = useState(false);
   const [found, setFound] = useState<Searchable[]>([]);
+
+  useRoundRecorder('list', finished && criterion !== null, () => {
+    const list = criterion!;
+    return {
+      title: `List — ${list.title}`,
+      data: facts.generated,
+      setup: { event, level: difficulty },
+      outcome: gaveUp ? 'gave-up' : found.length >= list.answers.length ? 'won' : 'lost',
+      r: {
+        list: { id: list.id, name: list.title },
+        total: list.answers.length,
+        found: found.map((entry) => ({ id: entry.id, name: entry.name })),
+        missed: list.answers
+          .filter((answer) => !found.some((entry) => entry.id === answer.id))
+          .map((answer) => answer.name),
+      },
+    };
+  });
   const [timeLeft, setTimeLeft] = useState(START_SECONDS);
   const [feedback, setFeedback] = useState<{ tone: string; message: string } | null>(null);
   const deadlineRef = useRef<number>(0);

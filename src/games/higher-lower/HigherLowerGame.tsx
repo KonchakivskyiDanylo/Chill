@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRoundRecorder } from '@/analytics/client';
 import { Link } from 'react-router-dom';
 import { formatDate, GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
@@ -30,6 +31,7 @@ import {
   type Category,
   type Difficulty,
   type GameState,
+  record as roundRecord,
 } from './engine';
 import './higher-lower.css';
 
@@ -120,6 +122,17 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   const [category, setCategory] = useState<Category>('earnings');
   const [difficulty, setDifficulty] = useLocalState<Difficulty>('higher-lower:level', 'easy');
   const [game, setGame] = useState<GameState | null>(null);
+
+  useRoundRecorder(
+    'higher-lower',
+    game !== null && (game.status === 'gameover' || game.status === 'cleared'),
+    () => ({
+      title: `Higher or Lower — ${game!.category}, ${game!.score} in a row`,
+      data: EXPORT_DATE,
+      setup: { event, level: game!.difficulty, category: game!.category },
+      ...roundRecord(game!),
+    }),
+  );
   const [error, setError] = useState<string | null>(null);
 
   // Keyed by the level alone now that it is the only setting. Scores from the

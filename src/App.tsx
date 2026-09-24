@@ -1,9 +1,15 @@
-import { Suspense } from 'react';
+import { lazy, Suspense } from 'react';
 import { Link, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { getGame } from '@/games/registry';
 import { Credits } from '@/pages/Credits';
 import { Home } from '@/pages/Home';
+
+/**
+ * Not linked from anywhere: it is the site owner's page, behind a password.
+ * Lazy, so its code is never part of what a player downloads.
+ */
+const Analytics = lazy(() => import('@/pages/Analytics'));
 
 /**
  * No data provider.
@@ -43,6 +49,14 @@ export function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/credits" element={<Credits />} />
+        <Route
+          path="/analytics"
+          element={
+            <Suspense fallback={<div className="page center muted">Loading…</div>}>
+              <Analytics />
+            </Suspense>
+          }
+        />
         <Route path="/game/:slug" element={<GamePage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

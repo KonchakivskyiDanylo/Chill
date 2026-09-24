@@ -1,3 +1,4 @@
+import type { GamePayloads, Outcome } from '@/analytics/types';
 import { membersOf, type Board, type BoardMember, type BoardRow } from '@/data/liquipedia/rankings';
 
 /** Pure logic for Tenaball. */
@@ -146,5 +147,28 @@ export function applyGuess(
       status: lives <= 0 ? 'lost' : 'playing',
     },
     outcome: { kind: 'wrong' },
+  };
+}
+
+/**
+ * The board as the analytics record it: every answer on it, found or not,
+ * which is what "most and least guessable" is counted from. On a team row
+ * each name counts on its own — half a duo is half the knowledge.
+ *
+ * Only Hard can be lost; a board that ends unsolved any other way was given up.
+ */
+export function record(state: GameState): { outcome: Outcome; r: GamePayloads['tenaball'] } {
+  return {
+    outcome: state.status === 'won' ? 'won' : state.lives <= 0 ? 'lost' : 'gave-up',
+    r: {
+      board: { id: state.board.id, name: state.board.title },
+      answers: slotsOf(state.board).flatMap((slot) =>
+        slot.members.map((member) => ({
+          name: member.label,
+          found: namedIn(state, slot.rank).has(member.key),
+        })),
+      ),
+      wrong: state.wrong,
+    },
   };
 }

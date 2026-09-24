@@ -1,5 +1,6 @@
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 import { makeRng, randInt, sample, shuffle } from '@/lib/rng';
+import { ref, type GamePayloads, type Outcome } from '@/analytics/types';
 import { buildCriteria, type CriteriaSource, type PlayerCriterion } from '@/games/shared/criteria';
 
 /** Pure logic for Griefer. */
@@ -27,6 +28,8 @@ export interface GameState {
   status: 'playing' | 'won' | 'lost';
   /** The pick that ended a one-by-one round, for the result message. */
   mistake: RosterPlayer | null;
+  /** Set by `giveUp`: a lost round is otherwise the same whether checked or abandoned. */
+  gaveUp?: true;
 }
 
 /**
@@ -169,7 +172,7 @@ export function pick(state: GameState, player: RosterPlayer): GameState {
 
 /** Ends the round unsolved, so the board can be revealed. */
 export function giveUp(state: GameState): GameState {
-  return state.status === 'playing' ? { ...state, status: 'lost' } : state;
+  return state.status === 'playing' ? { ...state, status: 'lost', gaveUp: true } : state;
 }
 
 /** How many players who fit the rule are still to be found. */
@@ -178,4 +181,26 @@ export function membersLeft(state: GameState): number {
     state.round.memberIds.size -
     [...state.selected].filter((id) => state.round.memberIds.has(id)).length
   );
+}
+
+/**
+ * The round as the analytics record it: every card, whether it fit and
+ * whether it was picked. A griefer picked, or a fit left alone, is the
+ * "misunderstanding" the dashboard counts per rule and per player. In one by
+ * one the mistake that ended the round counts as picked.
+ */
+export function record(state: GameState): { outcome: Outcome; r: GamePayloads['impostor'] } {
+  const picked = new Set(state.selected);
+  if (state.mistake) picked.add(state.mistake.id);
+  return {
+    outcome: state.status === 'won' ? 'won' : state.gaveUp ? 'gave-up' : 'lost',
+    r: {
+      rule: { id: state.round.criterion.id, name: state.round.criterion.label },
+      cards: state.round.board.map((player) => ({
+        player: ref(player),
+        fits: state.round.memberIds.has(player.id),
+        picked: picked.has(player.id),
+      })),
+    },
+  };
 }

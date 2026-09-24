@@ -1,3 +1,4 @@
+import { ref, type GamePayloads, type Outcome } from '@/analytics/types';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 import type { Difficulty } from '@/games/shared/difficulty';
 import { makeRng, pick, type Rng } from '@/lib/rng';
@@ -272,6 +273,12 @@ export interface GameState {
   status: Status;
   lastAnswer: Answer | null;
   /**
+   * Every pair answered this run, and how. Read by the analytics only — the
+   * per-pair and per-player hit rates that could one day choose the pairs by
+   * how often people actually get them right.
+   */
+  history: { shown: RosterPlayer; hidden: RosterPlayer; answer: Answer; correct: boolean }[];
+  /**
    * Seed for this run. Each round derives its own RNG from it, so pairing is
    * reproducible from the run seed and the score alone and nothing has to carry
    * a mutable generator through the state.
@@ -316,6 +323,7 @@ export function createGame(
     score: 0,
     status: 'playing',
     lastAnswer: null,
+    history: [],
     seed,
   };
 }
@@ -344,6 +352,7 @@ export function submitAnswer(state: GameState, answer: Answer): GameState {
   const correct = isCorrect(state, answer);
   return {
     ...state,
+    history: [...state.history, { shown: state.current, hidden: state.challenger, answer, correct }],
     lastAnswer: answer,
     score: correct ? state.score + 1 : state.score,
     status: correct ? 'revealed' : 'gameover',
@@ -390,5 +399,27 @@ export function nextRound(state: GameState): GameState {
     shown: new Set(state.shown).add(challenger.id),
     lastAnswer: null,
     status: 'playing',
+  };
+}
+
+/**
+ * The run as the analytics record it.
+ *
+ * `cleared` is its own outcome: the pool ran dry, which is a win. A game over
+ * with no answer given is the Give up button.
+ */
+export function record(state: GameState): { outcome: Outcome; r: GamePayloads['higher-lower'] } {
+  return {
+    outcome:
+      state.status === 'cleared' ? 'cleared' : state.lastAnswer === null ? 'gave-up' : 'lost',
+    r: {
+      score: state.score,
+      pairs: state.history.map((pair) => ({
+        shown: ref(pair.shown),
+        hidden: ref(pair.hidden),
+        answer: pair.answer,
+        correct: pair.correct,
+      })),
+    },
   };
 }

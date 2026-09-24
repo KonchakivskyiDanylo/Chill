@@ -4,8 +4,24 @@
     {
       "name": "offspawn",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 5173
+    },
+    {
+      "name": "offspawn-server",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--import",
+        "tsx",
+        "server/index.ts"
+      ],
+      "port": 3000,
+      "env": {
+        "ADMIN_OPEN": "1"
+      }
     }
   ]
 }

@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { poolSetup, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
@@ -26,6 +27,7 @@ import {
   toggle,
   type GameState,
   type Mode,
+  record as roundRecord,
 } from './engine';
 import './impostor.css';
 
@@ -77,6 +79,13 @@ function Game({
   const [event] = useEventMode();
   const [mode, setMode] = useState<Mode>('all-at-once');
   const [game, setGame] = useState<GameState | null>(null);
+
+  useRoundRecorder('impostor', game !== null && game.status !== 'playing', () => ({
+    title: `Griefer — ${game!.round.criterion.label}`,
+    data: facts.generated,
+    setup: poolSetup(event, choice, game!.mode),
+    ...roundRecord(game!),
+  }));
   const [error, setError] = useState<string | null>(null);
   /** One-by-one only: the card awaiting confirmation. */
   const [pending, setPending] = useState<RosterPlayer | null>(null);

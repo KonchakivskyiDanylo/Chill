@@ -79,6 +79,12 @@ export function Footer() {
           is not affiliated with or endorsed by Epic Games, Liquipedia or any team shown here.
         </p>
 
+        {/* The site sends one thing about you: how each round you finish went. Say so. */}
+        <p className="tiny faint">
+          Finished rounds are counted anonymously — which game, which board, how it went — to see which
+          puzzles are too hard or too easy. No accounts, no tracking cookies, nothing that identifies you.
+        </p>
+
         <nav className="site-footer__links" aria-label="Site information">
           <Link to="/credits">Credits &amp; data licence</Link>
         </nav>

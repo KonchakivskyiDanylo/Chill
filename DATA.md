@@ -132,11 +132,16 @@ liquipedia_data/clean_data/fortnite/
   transfers.json     40,119 roster moves (not used yet)
 ```
 
-`liquipedia_data/` is gitignored **except** `players.json`, which is committed
-so the site builds anywhere. It is 3.7 MB, 310 KB gzipped. `career_path.json`
-(152 KB) and `teammates.json` (1.1 MB) are small enough to commit too and
-should be, or a fresh clone cannot build; add the matching `!` lines to
-`.gitignore`. `placements.json` at 154 MB stays ignored.
+`liquipedia_data/` is gitignored **except** the seven files the site reads —
+`players`, `career_path`, `teammates`, `orgs`, `facts`, `rankings` and `pools`,
+about 6 MB together — because a deploy builds from the repo and a clone
+without them has no games. `placements.json` at 154 MB, `tournaments.json`,
+`transfers.json` and `teams.json` stay ignored.
+
+Until 24 Sep 2026 this paragraph said `players.json` was already committed.
+It never was: `.gitignore` excluded the whole folder and then tried to
+re-include single files with `!` lines, which git does not allow inside an
+excluded folder. The rules now open each folder level in turn.
 
 ### What the notebook derives from `placements.json`
 

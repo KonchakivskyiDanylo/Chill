@@ -20,6 +20,9 @@ npm run dev          # http://localhost:5173
 | `npm run build` | Typecheck + production build to `dist/` |
 | `npm run typecheck` | TypeScript only |
 | `npm run check:games` | Drives all ten games through a full round headlessly. Career Path and Who Are Ya report SKIPPED until their generated files exist |
+| `npm run api` | The server (`server/`), for the analytics and support endpoints. Run beside `npm run dev`; `/api` is proxied to it |
+| `npm start` | The production server: `dist/` plus the API. What Heroku runs |
+| `npm run check:server` | Starts the server on a spare port with a throwaway store and checks every endpoint |
 
 The `etl:*`, `audit` and `check:data` scripts are gone, along with the
 316-player Wikipedia import they maintained. Every game reads the Liquipedia
@@ -248,6 +251,48 @@ gracefully rather than dead-ending:
 - Tenaball never punishes a player who is level with 10th but ranked out by the
   tie rule: the guess is called out as a near miss and costs no life. The rule in
   force is printed above the ten slots, because it differs per category.
+
+## Analytics and support
+
+The site records one thing: how each round went, when it ends. One record per
+finished round (`src/analytics/types.ts` has the exact shape), sent to the
+site's own server — no third-party script, no cookie for players, no device
+id, and the server does not store IP addresses. Totals are global. Rounds are
+only sent from a production build, so local play does not pollute the numbers.
+
+The 💬 button in the header opens a support form (wrong data, bug, new
+category, suggestion) that can attach the round just played. Uncaught browser
+errors are reported the same way.
+
+Everything lands on **`#/analytics`**, a password-protected page linked from
+nowhere: rounds per game and per day, how each game was set up, and per game
+the numbers that matter for tuning it — which clue solved a Career Path, which
+Tenaball answers nobody finds, which Griefer cards get misread, which Tic Tac
+Toe cells stay empty. It is computed from the stored rounds on every load
+(`src/analytics/aggregate.ts`), so it is always live.
+
+The server (`server/index.ts`) has no framework and one dependency, `pg`. It
+stores to Postgres when `DATABASE_URL` is set and to `server/.data/` otherwise.
+
+| env | meaning |
+| --- | --- |
+| `DATABASE_URL` | Postgres. Heroku sets it when the add-on is attached |
+| `ADMIN_PASSWORD` | the `#/analytics` password. Without it the admin routes are off |
+| `SESSION_SECRET` | optional, signs the login cookie (defaults to the password) |
+| `ADMIN_OPEN=1` | local only: the dashboard with no password. Ignored when `NODE_ENV=production` |
+
+### Deploying to Heroku
+
+```bash
+heroku create offspawn
+heroku addons:create heroku-postgresql:essential-0
+heroku config:set ADMIN_PASSWORD=choose-a-long-one
+git push heroku main
+```
+
+Heroku installs, runs `npm run build`, and starts `npm start` (see `Procfile`).
+The generated data files have to be committed for the build to see them — the
+`.gitignore` lists exactly which.
 
 ## Branding
 

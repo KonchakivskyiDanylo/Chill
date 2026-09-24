@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
@@ -32,6 +33,7 @@ import {
   type Cell,
   type Difficulty,
   type GameState,
+  record as roundRecord,
 } from './engine';
 import './tic-tac-toe.css';
 
@@ -100,6 +102,13 @@ function Game({
   const [event] = useEventMode();
   const [difficulty, setDifficulty] = useState<Difficulty>('easy');
   const [game, setGame] = useState<GameState | null>(null);
+
+  useRoundRecorder('tic-tac-toe', game !== null && game.status !== 'playing', () => ({
+    title: `Tic Tac Toe — ${game!.difficulty}`,
+    data: facts.generated,
+    setup: { event, level: game!.difficulty },
+    ...roundRecord(game!),
+  }));
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ tone: string; message: string } | null>(null);
   /** Set when more than one cell would take this player and keep the board winnable. */

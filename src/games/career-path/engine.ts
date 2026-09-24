@@ -1,5 +1,7 @@
+import { ref, type GamePayloads, type Outcome } from '@/analytics/types';
 import type { MajorResult } from '@/data/liquipedia/majors';
 import type { FameTier, RosterPlayer } from '@/data/liquipedia/roster';
+import { ordinal } from '@/lib/format';
 import { makeRng, shuffle, type Rng } from '@/lib/rng';
 
 /** Pure logic for Career Path. */
@@ -28,6 +30,13 @@ export interface GameState {
    */
   earned: number;
   guesses: RosterPlayer[];
+  /**
+   * Everything the player did, in order, and which clue was newest when they
+   * did it: a guess, or a null for "reveal next clue". `guesses` alone cannot
+   * say whether clue four was skipped or guessed past, and "Peterbot was found
+   * right after the 2024 Globals" is exactly that question.
+   */
+  steps: { clue: number; guess: RosterPlayer | null }[];
   status: 'playing' | 'won' | 'lost';
 }
 
@@ -267,6 +276,7 @@ export function createGame(
     revealed: 1,
     earned: 1,
     guesses: [],
+    steps: [],
     status: 'playing',
   };
 }
@@ -276,17 +286,18 @@ export function submitGuess(state: GameState, guess: RosterPlayer): GameState {
   if (state.guesses.some((g) => g.id === guess.id)) return state;
 
   const guesses = [...state.guesses, guess];
+  const steps = [...state.steps, { clue: state.revealed - 1, guess }];
   // Winning turns the rest of the clue list face up. Getting it in three means
   // seven results you never saw, and they are the payoff for getting it in
   // three — the career you just identified from a quarter of the evidence.
   if (guess.id === state.secret.id) {
-    return { ...state, guesses, revealed: state.clues.length, status: 'won' };
+    return { ...state, guesses, steps, revealed: state.clues.length, status: 'won' };
   }
 
   // A wrong guess burns a clue; running out of clues ends the round.
-  if (state.revealed >= state.clues.length) return { ...state, guesses, status: 'lost' };
+  if (state.revealed >= state.clues.length) return { ...state, guesses, steps, status: 'lost' };
   const revealed = state.revealed + 1;
-  return { ...state, guesses, revealed, earned: revealed };
+  return { ...state, guesses, steps, revealed, earned: revealed };
 }
 
 /** Voluntarily reveal the next clue without guessing. */
@@ -294,7 +305,8 @@ export function revealNext(state: GameState): GameState {
   if (state.status !== 'playing') return state;
   if (state.revealed >= state.clues.length) return state;
   const revealed = state.revealed + 1;
-  return { ...state, revealed, earned: revealed };
+  const steps = [...state.steps, { clue: state.revealed - 1, guess: null }];
+  return { ...state, steps, revealed, earned: revealed };
 }
 
 /** Ends the round unsolved, with every remaining clue turned face up. */
@@ -305,4 +317,45 @@ export function giveUp(state: GameState): GameState {
 
 export function cluesLeft(state: GameState): number {
   return state.clues.length - state.revealed;
+}
+
+/**
+ * The round as the analytics record it — see `analytics/types.ts`.
+ *
+ * A clue is named by its tournament, not its position: every hand is drawn
+ * fresh, so "clue 4" means a different event each time Peterbot comes up, and
+ * "after the 2024 Globals" is the thing worth counting.
+ */
+export function record(state: GameState): { outcome: Outcome; r: GamePayloads['career-path'] } {
+  return {
+    outcome: clueOutcome(state),
+    r: {
+      secret: ref(state.secret),
+      clues: state.clues.map(({ result }) => ({
+        id: result.tournament.name,
+        name: `${result.tournament.shortName} — ${ordinal(result.placement)}`,
+      })),
+      steps: state.steps.map((step) => ({
+        clue: step.clue,
+        guess: step.guess ? ref(step.guess) : null,
+        correct: step.guess?.id === state.secret.id,
+      })),
+    },
+  };
+}
+
+/**
+ * Won, lost on the last clue, or given up.
+ *
+ * `giveUp` and running out both end on `lost`, so the steps tell them apart:
+ * running out is a wrong guess while the final clue was showing.
+ */
+export function clueOutcome(state: {
+  status: 'playing' | 'won' | 'lost';
+  clues: unknown[];
+  steps: { clue: number; guess: { id: string } | null }[];
+}): Outcome {
+  if (state.status === 'won') return 'won';
+  const last = state.steps[state.steps.length - 1];
+  return last?.guess && last.clue === state.clues.length - 1 ? 'lost' : 'gave-up';
 }

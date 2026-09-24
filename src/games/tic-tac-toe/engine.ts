@@ -1,3 +1,4 @@
+import { ref, type GamePayloads, type Outcome } from '@/analytics/types';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 import { makeRng, sample } from '@/lib/rng';
 import {
@@ -384,4 +385,29 @@ export function giveUp(state: GameState): GameState {
 export function solutionFor(state: GameState, row: number, col: number): RosterPlayer[] {
   const usedIds = new Set([...state.filled.values()].map((player) => player.id));
   return state.board.candidates[row][col].filter((player) => !usedIds.has(player.id)).slice(0, 3);
+}
+
+/**
+ * The board as the analytics record it: the six rules and who went where.
+ * Cells are counted by the pair of rules, not the position, so "Won EU FNCS ×
+ * FaZe" adds up across every board it appears on.
+ */
+export function record(state: GameState): { outcome: Outcome; r: GamePayloads['tic-tac-toe'] } {
+  const outOfGuesses =
+    state.difficulty === 'hard'
+      ? HARD_GUESSES - state.guesses < SIZE * SIZE - state.filled.size
+      : state.mistakes >= MAX_MISTAKES;
+  const rule = (criterion: PlayerCriterion) => ({ id: criterion.id, name: criterion.short });
+  return {
+    outcome: state.status === 'won' ? 'won' : outOfGuesses ? 'lost' : 'gave-up',
+    r: {
+      rows: state.board.rows.map(rule),
+      cols: state.board.cols.map(rule),
+      placed: [...state.filled].map(([key, player]) => {
+        const [row, col] = key.split(',').map(Number);
+        return { row, col, player: ref(player) };
+      }),
+      mistakes: state.mistakes,
+    },
+  };
 }

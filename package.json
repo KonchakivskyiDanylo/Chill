@@ -5,23 +5,31 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "api": "tsx watch server/index.ts",
     "build": "tsc --noEmit && vite build",
+    "start": "tsx server/index.ts",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "check:games": "tsx scripts/check-games.ts"
+    "check:games": "tsx scripts/check-games.ts",
+    "check:server": "tsx scripts/check-server.ts"
   },
   "dependencies": {
+    "pg": "^8.23.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.2"
+    "react-router-dom": "^6.26.2",
+    "tsx": "^4.23.13"
   },
   "devDependencies": {
     "@types/node": "^22.20.2",
+    "@types/pg": "^8.23.1",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.2",
-    "tsx": "^4.23.13",
     "typescript": "^5.6.3",
     "vite": "^5.4.9"
+  },
+  "engines": {
+    "node": "24.x"
   }
 }

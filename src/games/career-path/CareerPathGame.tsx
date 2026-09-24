@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { poolSetup, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { CountryBadge } from '@/components/CountryBadge';
@@ -27,6 +28,7 @@ import {
   submitGuess,
   type GameState,
   type Mode,
+  record as roundRecord,
 } from './engine';
 import './career-path.css';
 
@@ -62,6 +64,13 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
   const [event] = useEventMode();
   const [mode, setMode] = useState<Mode>('order');
   const [game, setGame] = useState<GameState | null>(null);
+
+  useRoundRecorder('career-path', game !== null && game.status !== 'playing', () => ({
+    title: `Career Path — ${game!.secret.name}`,
+    data: majors.generated,
+    setup: poolSetup(event, choice, game!.mode),
+    ...roundRecord(game!),
+  }));
   const [error, setError] = useState<string | null>(null);
 
   /** Everyone the game could ever ask about — what the search box covers. */

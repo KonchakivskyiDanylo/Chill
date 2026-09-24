@@ -1,3 +1,4 @@
+import { ref, type GamePayloads, type Outcome } from '@/analytics/types';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 import { makeRng, pick, randInt, sample, shuffle, type Rng } from '@/lib/rng';
 import {
@@ -45,6 +46,12 @@ export interface GameState {
   status: 'playing' | 'won' | 'lost';
   /** How many of the last four belonged to one group, when it was not four. */
   near: number | null;
+  /**
+   * Every four submitted, in order. The analytics read the wrong ones: which
+   * players get filed under the wrong connection is the Connections version
+   * of Griefer's "misunderstood" list.
+   */
+  attempts: { ids: string[]; correct: boolean }[];
 }
 
 /**
@@ -350,7 +357,7 @@ function connectionsOf(puzzle: Puzzle, source: CriteriaSource): PlayerCriterion[
 }
 
 export function createGame(puzzle: Puzzle): GameState {
-  return { puzzle, solved: [], selected: [], mistakes: 0, status: 'playing', near: null };
+  return { puzzle, solved: [], selected: [], mistakes: 0, status: 'playing', near: null, attempts: [] };
 }
 
 export function toggle(state: GameState, player: RosterPlayer): GameState {
@@ -374,6 +381,7 @@ export function submit(state: GameState): GameState {
   const selectedIds = new Set(state.selected);
 
   const exact = unsolved.find((group) => group.players.every((player) => selectedIds.has(player.id)));
+  const attempts = [...state.attempts, { ids: [...state.selected], correct: Boolean(exact) }];
   if (exact) {
     const solved = [...state.solved, exact];
     return {
@@ -382,6 +390,7 @@ export function submit(state: GameState): GameState {
       selected: [],
       status: solved.length === GROUP_COUNT ? 'won' : 'playing',
       near: null,
+      attempts,
     };
   }
 
@@ -406,6 +415,7 @@ export function submit(state: GameState): GameState {
     selected: [],
     status: mistakes >= MAX_MISTAKES ? 'lost' : 'playing',
     near: best >= GROUP_SIZE - 1 ? best : null,
+    attempts,
   };
 }
 
@@ -421,4 +431,19 @@ export function unsolvedGroups(state: GameState): Group[] {
 /** Lives remaining, for the hearts row. */
 export function livesLeft(state: GameState): number {
   return Math.max(0, MAX_MISTAKES - state.mistakes);
+}
+
+/** The round as the analytics record it. Lost with lives left means given up. */
+export function record(state: GameState): { outcome: Outcome; r: GamePayloads['connections'] } {
+  return {
+    outcome:
+      state.status === 'won' ? 'won' : state.mistakes >= MAX_MISTAKES ? 'lost' : 'gave-up',
+    r: {
+      groups: state.puzzle.groups.map((group) => ({
+        rule: { id: group.id, name: group.label },
+        players: group.players.map(ref),
+      })),
+      attempts: state.attempts.map((attempt) => ({ players: attempt.ids, correct: attempt.correct })),
+    },
+  };
 }

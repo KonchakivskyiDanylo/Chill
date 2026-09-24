@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { EXPORT_DATE } from '@/data/liquipedia/roster';
+import { poolSetup, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { CountryBadge } from '@/components/CountryBadge';
 import { GiveUpButton } from '@/components/GiveUpButton';
@@ -29,6 +31,7 @@ import {
   submitGuess,
   type GameState,
   type TileState,
+  record as roundRecord,
 } from './engine';
 import './wordle.css';
 
@@ -109,6 +112,13 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   const [choice, setChoice] = usePoolChoice();
   const [event] = useEventMode();
   const [game, setGame] = useState<GameState | null>(null);
+
+  useRoundRecorder('wordle', game !== null && game.status !== 'playing', () => ({
+    title: `Fortnitedle — ${game!.secret.name}`,
+    data: EXPORT_DATE,
+    setup: poolSetup(event, choice),
+    ...roundRecord(game!),
+  }));
   const [draft, setDraft] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   /** Set when a round opened a fresh cycle, so the board can say so. */

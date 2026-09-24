@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
+import { EXPORT_DATE } from '@/data/liquipedia/roster';
+import { poolSetup, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { CountryBadge } from '@/components/CountryBadge';
@@ -33,6 +35,7 @@ import {
   type Extras,
   type FeedbackMode,
   type GameState,
+  record as roundRecord,
 } from './engine';
 import './guess-the-player.css';
 
@@ -114,6 +117,13 @@ function Game({
   const [event] = useEventMode();
   const [mode, setMode] = useState<FeedbackMode>('direction');
   const [game, setGame] = useState<GameState | null>(null);
+
+  useRoundRecorder('guess-the-player', game !== null && game.status !== 'playing', () => ({
+    title: `Guess the Player — ${game!.secret.name}`,
+    data: EXPORT_DATE,
+    setup: poolSetup(event, choice, game!.mode),
+    ...roundRecord(game!),
+  }));
   const [error, setError] = useState<string | null>(null);
 
   const players = useMemo(

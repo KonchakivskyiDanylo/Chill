@@ -4,6 +4,7 @@ import { useLocalState } from '@/lib/storage';
 import { ModeChip } from './EventMode';
 import { Footer } from './Footer';
 import { SideNav } from './SideNav';
+import { SupportButton } from './Support';
 
 type Theme = 'dark' | 'light';
 
@@ -94,6 +95,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <div className="spacer" />
           {/* Only renders when an event mode is in force — see `EventMode`. */}
           <ModeChip />
+          <SupportButton />
           <button
             type="button"
             className="icon-btn"

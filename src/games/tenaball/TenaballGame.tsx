@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
@@ -29,6 +30,7 @@ import {
   slotsOf,
   type Difficulty,
   type GameState,
+  record as roundRecord,
 } from './engine';
 import { derivedBoards } from './derived-boards';
 import { poolRankings } from './pool-boards';
@@ -72,6 +74,13 @@ function Game({
 }) {
   const [difficulty, setDifficulty] = useState<Difficulty>('easy');
   const [game, setGame] = useState<GameState | null>(null);
+
+  useRoundRecorder('tenaball', game !== null && game.status !== 'playing', () => ({
+    title: `Tenaball — ${game!.board.title}`,
+    data: rankings.generated,
+    setup: { event, level: game!.difficulty },
+    ...roundRecord(game!),
+  }));
   const [query, setQuery] = useState('');
   const [feedback, setFeedback] = useState<{ tone: string; message: string } | null>(null);
 

@@ -1,3 +1,4 @@
+import { ref, type GamePayloads, type Outcome } from '@/analytics/types';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 import { makeRng } from '@/lib/rng';
 import { normalizeName } from '@/lib/text';
@@ -216,4 +217,13 @@ export function keyboardState(state: GameState): Map<string, TileState> {
     if (rank[best.get(char) ?? 'absent'] < rank.correct) best.set(char, 'correct');
   }
   return best;
+}
+
+/** The round as the analytics record it. Lost with guesses left means given up. */
+export function record(state: GameState): { outcome: Outcome; r: GamePayloads['wordle'] } {
+  return {
+    outcome:
+      state.status === 'won' ? 'won' : state.guesses.length >= MAX_GUESSES ? 'lost' : 'gave-up',
+    r: { secret: ref(state.secret), guesses: state.guesses.length },
+  };
 }

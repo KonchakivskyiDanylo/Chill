@@ -911,6 +911,12 @@ _pair_money = lambda pair: sum(career.get(pg, 0) for pg in pair)
 _duos = sorted(((p, together_run(p, s)) for p, s in pair_waves.items() if len(s) >= 3),
                key=lambda e: (-e[1], -_pair_money(e[0]), NAME(e[0][0]).lower(),
                               NAME(e[0][1]).lower()))
+# One duo per player: their longest. Kami ran with Setty and with charyy, and
+# with both pairs in the eleven, naming Kami answered two slots at once - the
+# same "a player listed twice" the tournament boards are skipped for.
+_seen_pages = set()
+_duos = [e for e in _duos
+         if not (_seen_pages & set(e[0])) and not _seen_pages.update(e[0])]
 _duo_level = len(_duos) >= SLOTS + 1 and (
     _duos[SLOTS - 1][1] == _duos[SLOTS][1]
     and _pair_money(_duos[SLOTS - 1][0]) == _pair_money(_duos[SLOTS][0]))

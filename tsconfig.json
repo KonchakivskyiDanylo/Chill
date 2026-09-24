@@ -21,5 +21,5 @@
       "@data/*": ["liquipedia_data/clean_data/fortnite/*"]
     }
   },
-  "include": ["src", "scripts", "vite.config.ts"]
+  "include": ["src", "scripts", "server", "vite.config.ts"]
 }

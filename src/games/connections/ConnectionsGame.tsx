@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { poolSetup, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
@@ -27,6 +28,7 @@ import {
   unsolvedGroups,
   type GameState,
   type Group,
+  record as roundRecord,
 } from './engine';
 import './connections.css';
 
@@ -66,6 +68,13 @@ function Game({
   const [choice, setChoice] = usePoolChoice();
   const [event] = useEventMode();
   const [game, setGame] = useState<GameState | null>(null);
+
+  useRoundRecorder('connections', game !== null && game.status !== 'playing', () => ({
+    title: 'Connections',
+    data: facts.generated,
+    setup: poolSetup(event, choice),
+    ...roundRecord(game!),
+  }));
   const [error, setError] = useState<string | null>(null);
 
   const eligible = useMemo(() => facts.eligible(3), [facts]);

@@ -1260,3 +1260,12 @@ textarea {
 .link-btn:hover {
   color: var(--text);
 }
+
+/* The support form's hidden field — present for bots, invisible to people. */
+.support-trap {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}

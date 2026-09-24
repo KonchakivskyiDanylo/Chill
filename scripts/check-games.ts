@@ -25,6 +25,14 @@ import { DEFAULT_POOL, RANDOM_MIX } from '@/games/shared/pool';
 import { GAMES, getGame } from '@/games/registry';
 import { buildCriteria, type CriteriaSource } from '@/games/shared/criteria';
 import { makeRng, shuffle } from '@/lib/rng';
+import { aggregate } from '@/analytics/aggregate';
+import {
+  MAX_RECORD_BYTES,
+  RECORD_VERSION,
+  type GameId,
+  type RoundRecord,
+  type Stored,
+} from '@/analytics/types';
 import { matchPlayer, suggestPlayers } from '@/lib/text';
 
 import * as hl from '@/games/higher-lower/engine';
@@ -881,6 +889,184 @@ if (facts) {
     !lists.some((c) => c.id.startsWith('won-in-year:') && /title/i.test(c.title)),
     'list: a year list still asks for "a title"',
   );
+}
+
+// --------------------------------------------------------- 13. analytics records
+// One real round per game through its own engine, recorded the way the game
+// records it, then aggregated — so a record that stops matching what the
+// dashboard reads fails here rather than on the live page.
+{
+  const stored: Stored<RoundRecord>[] = [];
+  const keep = <G extends GameId>(
+    game: G,
+    made: { outcome: RoundRecord['outcome']; r: RoundRecord<G>['r'] },
+    setup: RoundRecord['setup'] = {},
+  ) => {
+    const body = { v: RECORD_VERSION, game, app: 'check', data: 'check', setup, ...made } as RoundRecord;
+    const size = JSON.stringify(body).length;
+    check(size < MAX_RECORD_BYTES, `analytics: a ${game} record is ${size} bytes`);
+    stored.push({ id: stored.length + 1, at: new Date().toISOString(), body });
+  };
+  const pool = gtp.answerable(roster.players);
+  const [secret, other] = [pool[0], pool[1]];
+
+  // Fortnitedle: one wrong guess, then the answer.
+  {
+    let game = wordle.gameFor(secret);
+    const first = wordle.submitGuess(game, 'Q'.repeat(game.answer.length));
+    if (first.ok) game = first.state;
+    const second = wordle.submitGuess(game, game.answer);
+    if (second.ok) game = second.state;
+    const made = wordle.record(game);
+    check(made.outcome === 'won' && made.r.guesses === 2, `analytics: fortnitedle recorded ${made.outcome} in ${made.r.guesses}`);
+    keep('wordle', made, { pick: 'random' });
+  }
+
+  // Guess the Player: given up after one guess.
+  {
+    const game = gtp.giveUp(gtp.submitGuess(gtp.gameFor(secret, 'direction'), other));
+    const made = gtp.record(game);
+    check(made.outcome === 'gave-up', `analytics: guess-the-player give-up recorded as ${made.outcome}`);
+    keep('guess-the-player', made);
+  }
+
+  // Career Path: skip, wrong guess, right guess — and a second round given up.
+  if (majors) {
+    const who = majors.eligible(roster.players).find((p) => majors.resultsFor(p.id).length >= 6)!;
+    let game = career.createGame(who, majors.resultsFor(who.id), 'order', majors, 'analytics')!;
+    game = career.revealNext(game);
+    game = career.submitGuess(game, other.id === who.id ? secret : other);
+    game = career.submitGuess(game, who);
+    const made = career.record(game);
+    check(made.outcome === 'won', `analytics: career-path win recorded as ${made.outcome}`);
+    check(
+      made.r.steps.map((s) => (s.guess ? (s.correct ? 'right' : 'wrong') : 'skip')).join() === 'skip,wrong,right',
+      `analytics: career-path steps read ${JSON.stringify(made.r.steps)}`,
+    );
+    check(
+      made.r.steps.map((s) => s.clue).join() === '0,1,2',
+      'analytics: career-path steps name the wrong clues',
+    );
+    keep('career-path', made, { pick: 'custom', region: 'Europe', mode: 'order' });
+    const quit = career.record(career.giveUp(career.createGame(who, majors.resultsFor(who.id), 'order', majors, 'q')!));
+    check(quit.outcome === 'gave-up', `analytics: career-path give-up recorded as ${quit.outcome}`);
+    keep('career-path', quit);
+  }
+
+  // Who Are Ya: out of clues is a loss, not a give-up.
+  if (teammates && facts) {
+    const byId = new Map(roster.players.map((p) => [p.id, p]));
+    const who = roster.players.find((p) => teammates.cluesFor(p.id, byId).length >= 3)!;
+    let game = whoAreYa.createGame(who, teammates.cluesFor(who.id, byId), 'easy', 'analytics')!;
+    const wrongs = roster.players.filter((p) => p.id !== who.id);
+    for (let i = 0; game.status === 'playing'; i++) game = whoAreYa.submitGuess(game, wrongs[i]);
+    const made = whoAreYa.record(game);
+    check(made.outcome === 'lost', `analytics: who-are-ya running out recorded as ${made.outcome}`);
+    keep('who-are-ya', made);
+  }
+
+  // Tenaball: the first row found, then given up.
+  if (rankings) {
+    const board = rankings.boards[0];
+    let game = tenaball.createGame(board, 'easy');
+    for (const member of membersOf(board.rows[0])) game = tenaball.applyGuess(game, member.key, member.label).state;
+    game = tenaball.giveUp(game);
+    const made = tenaball.record(game);
+    check(made.outcome === 'gave-up', `analytics: tenaball give-up recorded as ${made.outcome}`);
+    check(
+      made.r.answers.filter((a) => a.found).length === membersOf(board.rows[0]).length,
+      'analytics: tenaball recorded the wrong answers as found',
+    );
+    keep('tenaball', made, { level: 'easy' });
+  }
+
+  // List has no engine; the record is built in the component, so build one the same way.
+  keep('list', {
+    outcome: 'lost',
+    r: { list: { id: 'check', name: 'Check list' }, total: 3, found: [{ id: secret.id, name: secret.name }], missed: ['A', 'B'] },
+  });
+
+  if (facts && orgs) {
+    const source: CriteriaSource = {
+      players: roster.playersFor('medium', { minimum: 200, eligible: facts.eligible(3) }),
+      facts,
+      orgs,
+    };
+
+    // Griefer: one griefer picked and checked — a loss, with the misread on file.
+    const round = griefer.createRound(source, 'analytics')!;
+    const outsider = round.board.find((p) => !round.memberIds.has(p.id))!;
+    const lost = griefer.check(griefer.toggle(griefer.createGame(round, 'all-at-once'), outsider));
+    const made = griefer.record(lost);
+    check(made.outcome === 'lost', `analytics: griefer loss recorded as ${made.outcome}`);
+    check(
+      made.r.cards.some((c) => c.player.id === outsider.id && c.picked && !c.fits),
+      'analytics: griefer did not record the picked griefer',
+    );
+    keep('impostor', made, { mode: 'all-at-once' });
+
+    // Tic Tac Toe: one player placed, then given up.
+    const answers = roster.exactly('easy', { eligible: facts.eligible(3) });
+    const board = ttt.generateBoard({ facts, orgs }, { answers, accepted: roster.players }, 'easy', 'analytics')!;
+    let game = ttt.createGame(board, 'easy');
+    const first = board.candidates[0][0][0];
+    const placed = ttt.submit(game, first);
+    game = placed.outcome.kind === 'choose' ? ttt.place(game, placed.outcome.cells[0], first).state : placed.state;
+    const tt = ttt.record(ttt.giveUp(game));
+    check(tt.outcome === 'gave-up' && tt.r.placed.length === 1, `analytics: tic-tac-toe recorded ${tt.outcome}, ${tt.r.placed.length} placed`);
+    keep('tic-tac-toe', tt, { level: 'easy' });
+
+    // Connections: one wrong four, then given up.
+    const puzzle = connections.generatePuzzle(source, 'analytics')!;
+    let cgame = connections.createGame(puzzle);
+    const mixed = [...puzzle.groups[0].players.slice(0, 3), puzzle.groups[1].players[0]];
+    for (const p of mixed) cgame = connections.toggle(cgame, p);
+    cgame = connections.giveUp(connections.submit(cgame));
+    const cm = connections.record(cgame);
+    check(
+      cm.outcome === 'gave-up' && cm.r.attempts.length === 1 && !cm.r.attempts[0].correct,
+      `analytics: connections recorded ${cm.outcome} with ${cm.r.attempts.length} attempts`,
+    );
+    keep('connections', cm);
+  }
+
+  // Higher or Lower: one right, one wrong.
+  {
+    let game = hl.createGame(roster.players, 'earnings', 'easy', 'analytics')!;
+    game = hl.nextRound(hl.submitAnswer(game, hl.correctAnswer(game)));
+    game = hl.submitAnswer(game, hl.correctAnswer(game) === 'higher' ? 'lower' : 'higher');
+    const made = hl.record(game);
+    check(
+      made.outcome === 'lost' && made.r.score === 1 && made.r.pairs.length === 2,
+      `analytics: higher-lower recorded ${made.outcome}, score ${made.r.score}, ${made.r.pairs.length} pairs`,
+    );
+    keep('higher-lower', made, { level: 'easy', category: 'earnings' });
+  }
+
+  // A malformed row must cost itself, not the dashboard.
+  stored.push({ id: 999, at: new Date().toISOString(), body: { game: 'tenaball', r: null } as unknown as RoundRecord });
+
+  const dash = aggregate(stored);
+  const played = (id: GameId) => dash.games.find((g) => g.game === id)?.rounds ?? 0;
+  check(played('wordle') === 1, `analytics: dashboard counts ${played('wordle')} fortnitedle rounds`);
+  check(dash.wordle[0]?.solved === 1 && dash.wordle[0]?.avgGuesses === 2, 'analytics: fortnitedle row is wrong');
+  if (majors) {
+    check(played('career-path') === 2, `analytics: dashboard counts ${played('career-path')} career-path rounds`);
+    const row = dash.careerPath[0];
+    const solvedAt = row?.clues.find((c) => c.solved === 1);
+    check(Boolean(solvedAt) && row.solved === 1 && row.avgClues === 3, 'analytics: career-path clue breakdown is wrong');
+    const setup = dash.games.find((g) => g.game === 'career-path')!.setups.find((s) => s.field === 'region');
+    check(setup?.values[0]?.label === 'Europe', 'analytics: setup counts lost the region');
+  }
+  if (rankings) check(dash.tenaball[0]?.gaveUp === 1, 'analytics: tenaball give-up not counted');
+  check(dash.list[0]?.answers.length === 3, 'analytics: list answers not counted from found + missed');
+  if (facts && orgs) {
+    check(dash.griefer.misreads.length > 0, 'analytics: griefer misreads empty');
+    check(dash.ticTacToe.length === 9, `analytics: tic-tac-toe has ${dash.ticTacToe.length} cells, not 9`);
+    check(dash.connections.misgrouped.length === 4, 'analytics: connections misgrouped players not counted');
+  }
+  check(dash.higherLower.pairs.length === 2, 'analytics: higher-lower pairs not counted');
+  notes.push(`analytics: ${stored.length} records across ${dash.games.filter((g) => g.rounds).length} games aggregate cleanly`);
 }
 
 // ------------------------------------------------------------ 12. event pools

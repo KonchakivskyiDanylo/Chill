@@ -1,3 +1,5 @@
+import { ref, type GamePayloads, type Outcome } from '@/analytics/types';
+import { clueOutcome } from '@/games/career-path/engine';
 import type { TeammateClue } from '@/data/liquipedia/teammates';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 import { makeRng, randInt, shuffle, type Rng } from '@/lib/rng';
@@ -38,6 +40,8 @@ export interface GameState {
    */
   earned: number;
   guesses: RosterPlayer[];
+  /** Every guess and every skip, with the clue showing at the time — as in Career Path. */
+  steps: { clue: number; guess: RosterPlayer | null }[];
   status: 'playing' | 'won' | 'lost';
 }
 
@@ -92,7 +96,16 @@ export function createGame(
   const rng = makeRng(seed);
   const hand = draw(clues, rng);
   const ordered = mode === 'random' ? shuffle(rng, hand) : [...hand].reverse();
-  return { mode, secret, clues: ordered, revealed: 1, earned: 1, guesses: [], status: 'playing' };
+  return {
+    mode,
+    secret,
+    clues: ordered,
+    revealed: 1,
+    earned: 1,
+    guesses: [],
+    steps: [],
+    status: 'playing',
+  };
 }
 
 export function submitGuess(state: GameState, guess: RosterPlayer): GameState {
@@ -100,21 +113,23 @@ export function submitGuess(state: GameState, guess: RosterPlayer): GameState {
   if (state.guesses.some((g) => g.id === guess.id)) return state;
 
   const guesses = [...state.guesses, guess];
+  const steps = [...state.steps, { clue: state.revealed - 1, guess }];
   // Winning shows the rest of the clue list — the teammates the round was
   // holding back, not every teammate on record. Ten names you can read against
   // the ones you were given; the full career list was a different question.
   if (guess.id === state.secret.id) {
-    return { ...state, guesses, revealed: state.clues.length, status: 'won' };
+    return { ...state, guesses, steps, revealed: state.clues.length, status: 'won' };
   }
-  if (state.revealed >= state.clues.length) return { ...state, guesses, status: 'lost' };
+  if (state.revealed >= state.clues.length) return { ...state, guesses, steps, status: 'lost' };
   const revealed = state.revealed + 1;
-  return { ...state, guesses, revealed, earned: revealed };
+  return { ...state, guesses, steps, revealed, earned: revealed };
 }
 
 export function revealNext(state: GameState): GameState {
   if (state.status !== 'playing' || state.revealed >= state.clues.length) return state;
   const revealed = state.revealed + 1;
-  return { ...state, revealed, earned: revealed };
+  const steps = [...state.steps, { clue: state.revealed - 1, guess: null }];
+  return { ...state, steps, revealed, earned: revealed };
 }
 
 /** Ends the round unsolved, with every remaining teammate revealed. */
@@ -125,4 +140,20 @@ export function giveUp(state: GameState): GameState {
 
 export function cluesLeft(state: GameState): number {
   return state.clues.length - state.revealed;
+}
+
+/** The round as the analytics record it. A clue is the teammate, not the slot. */
+export function record(state: GameState): { outcome: Outcome; r: GamePayloads['who-are-ya'] } {
+  return {
+    outcome: clueOutcome(state),
+    r: {
+      secret: ref(state.secret),
+      clues: state.clues.map((clue) => ref(clue.player)),
+      steps: state.steps.map((step) => ({
+        clue: step.clue,
+        guess: step.guess ? ref(step.guess) : null,
+        correct: step.guess?.id === state.secret.id,
+      })),
+    },
+  };
 }

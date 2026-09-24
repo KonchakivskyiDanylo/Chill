@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { poolSetup, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { CountryBadge } from '@/components/CountryBadge';
@@ -32,6 +33,7 @@ import {
   submitGuess,
   type GameState,
   type Mode,
+  record as roundRecord,
 } from './engine';
 
 const meta = getGame('who-are-ya')!;
@@ -82,6 +84,13 @@ function Game({
   const [event] = useEventMode();
   const [mode, setMode] = useState<Mode>('easy');
   const [game, setGame] = useState<GameState | null>(null);
+
+  useRoundRecorder('who-are-ya', game !== null && game.status !== 'playing', () => ({
+    title: `Who Are Ya? — ${game!.secret.name}`,
+    data: teammates.generated,
+    setup: poolSetup(event, choice, game!.mode),
+    ...roundRecord(game!),
+  }));
   const [error, setError] = useState<string | null>(null);
 
   const byId = useMemo(() => new Map(roster.players.map((player) => [player.id, player])), [roster]);
