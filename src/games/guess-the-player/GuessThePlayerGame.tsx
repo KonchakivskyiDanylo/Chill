@@ -7,10 +7,14 @@ import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { PlayerSearch } from '@/components/PlayerSearch';
 import { PoolSetup } from '@/components/PoolSetup';
 import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
+import type { Facts } from '@/data/liquipedia/facts';
 import type { Pools } from '@/data/liquipedia/pools';
 import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
+import type { Teammates } from '@/data/liquipedia/teammates';
+import { useFacts } from '@/data/liquipedia/useFacts';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
+import { useTeammates } from '@/data/liquipedia/useTeammates';
 import { deal, rotationKey } from '@/games/shared/rotation';
 import { useEventMode } from '@/games/shared/mode';
 import { poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
@@ -24,7 +28,9 @@ import {
   guessesLeft,
   MAX_GUESSES,
   submitGuess,
+  TOGETHER_MIN,
   type AttributeResult,
+  type Extras,
   type FeedbackMode,
   type GameState,
 } from './engine';
@@ -39,34 +45,71 @@ const COLUMNS: { key: string; label: string }[] = [
   { key: 'status', label: 'Status' },
   { key: 'age', label: 'Age' },
   { key: 'earnings', label: 'Earnings' },
-  { key: 'fncsWins', label: 'FNCS' },
+  { key: 'fncsWins', label: 'FNCS wins' },
+  { key: 'fncsFinals', label: 'FNCS finals' },
+  { key: 'together', label: 'Together' },
 ];
 
 const MODES: { id: FeedbackMode; label: string; hint: string }[] = [
   {
     id: 'exact',
     label: 'Exact',
-    hint: 'Age and FNCS wins are right or wrong, nothing in between. Earnings still use direction.',
+    hint: 'Age and the FNCS counts are right or wrong, nothing in between. Earnings still use direction.',
   },
   {
     id: 'direction',
     label: 'Direction',
-    hint: 'Arrows show whether the secret player is higher or lower, with a warm band when you are close.',
+    hint: 'Arrows on every number show whether the secret player is higher or lower.',
   },
 ];
+
+/** The optional columns, for whichever of their files have arrived. */
+function extrasFrom(facts: Facts | null, teammates: Teammates | null): Extras {
+  return {
+    fncsFinals: facts ? (id) => facts.of(id).fncsApps : undefined,
+    together: teammates ? (a, b) => teammates.together(a, b) : undefined,
+  };
+}
 
 export default function GuessThePlayerGame() {
   const { roster, error } = useRoster();
   const { pools } = usePools();
+  /*
+   * Not gated on, unlike the roster. Both files are generated and a missing one
+   * is a supported state: the round then plays without that column rather than
+   * not at all. Start waits for each to either arrive or fail.
+   */
+  const { facts, error: factsError } = useFacts();
+  const { teammates, error: teammatesError } = useTeammates();
+  const settled = Boolean((facts || factsError) && (teammates || teammatesError));
+  const extras = useMemo(() => extrasFrom(facts, teammates), [facts, teammates]);
 
   return (
     <LiquipediaGate error={error} ready={Boolean(roster)}>
-      {roster ? <Game roster={roster} pools={pools} /> : null}
+      {roster ? (
+        <Game
+          roster={roster}
+          pools={pools}
+          extras={extras}
+          settled={settled}
+        />
+      ) : null}
     </LiquipediaGate>
   );
 }
 
-function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
+function Game({
+  roster,
+  pools,
+  extras,
+  settled,
+}: {
+  roster: Roster;
+  pools: Pools | null;
+  extras: Extras;
+  /** Whether the optional files have finished loading, one way or the other. */
+  settled: boolean;
+}) {
   const [choice, setChoice] = usePoolChoice();
   const [event] = useEventMode();
   const [mode, setMode] = useState<FeedbackMode>('direction');
@@ -89,8 +132,8 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
     }
     writeLocal(key, drawn.seen);
     setError(null);
-    setGame(gameFor(drawn.pick, mode));
-  }, [players, event, choice, mode]);
+    setGame(gameFor(drawn.pick, mode, extras));
+  }, [players, event, choice, mode, extras]);
 
   if (!game) {
     return (
@@ -104,7 +147,8 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
             onChange={setChoice}
             eligible={answerable}
             onStart={start}
-            startLabel="Start"
+            startLabel={settled ? 'Start' : 'Loading…'}
+            canStart={settled}
             extra={
               <section className="card stack">
                 <div className="card__title">Feedback style</div>
@@ -134,6 +178,13 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
 
   const finished = game.status !== 'playing';
   const guessedIds = new Set(game.rows.map((row) => row.player.id));
+  const columns = COLUMNS.filter(
+    (column) =>
+      (column.key !== 'fncsFinals' || game.extras.fncsFinals) &&
+      (column.key !== 'together' || game.extras.together),
+  );
+  // Guess, then one column per attribute this round compares.
+  const attributes = columns.length - 1;
 
   return (
     <GameShell
@@ -168,8 +219,14 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
 
         {game.rows.length > 0 ? (
           <div className="scroll-x">
-            <div className="gp-table">
-              {COLUMNS.map((column) => (
+            <div
+              className="gp-table"
+              style={{
+                gridTemplateColumns: `minmax(120px, 1.3fr) repeat(${attributes}, minmax(66px, 1fr))`,
+                minWidth: 125 + attributes * 71,
+              }}
+            >
+              {columns.map((column) => (
                 <div key={column.key} className="gp-th">
                   {column.label}
                 </div>
@@ -181,7 +238,8 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
           </div>
         ) : (
           <p className="center muted small">
-            Guess any player to get comparisons on region, country, status, age, earnings and FNCS wins.
+            Guess any player to compare them with the secret one — where they are from, how old,
+            what they have earned and won, and whether the two have played together.
           </p>
         )}
 
@@ -213,14 +271,16 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
         <section className="card stack-sm">
           <div className="card__title">Reading the feedback</div>
           <div className="row small">
-            <span className="gp-swatch gp-swatch--hit" /> exact match
-            <span className="gp-swatch gp-swatch--close" /> close
+            <span className="gp-swatch gp-swatch--hit" /> match
             <span className="gp-swatch gp-swatch--miss" /> no match
           </div>
           <p className="tiny faint">
             {game.mode === 'exact'
-              ? 'Exact mode: age and FNCS wins show no arrows — they either match or they do not. Career earnings still show direction.'
-              : 'Direction mode: ▲ means the secret player is higher, ▼ means lower. Amber means you are within 2 years, 1 title or 20% of the earnings.'}
+              ? 'Exact mode: age and the FNCS counts show no arrows — they either match or they do not. Career earnings still show direction.'
+              : 'Direction mode: ▲ means the secret player is higher, ▼ means lower.'}
+            {game.extras.together
+              ? ` Together turns green when your guess and the secret player have entered ${TOGETHER_MIN} or more tournaments as teammates.`
+              : ''}
           </p>
         </section>
       </div>

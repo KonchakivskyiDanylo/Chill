@@ -1,6 +1,6 @@
 import type { MajorResult } from '@/data/liquipedia/majors';
-import type { RosterPlayer } from '@/data/liquipedia/roster';
-import { makeRng, sample, shuffle } from '@/lib/rng';
+import type { FameTier, RosterPlayer } from '@/data/liquipedia/roster';
+import { makeRng, shuffle, type Rng } from '@/lib/rng';
 
 /** Pure logic for Career Path. */
 
@@ -32,54 +32,211 @@ export interface GameState {
 }
 
 /**
- * How much a result says about a career.
+ * What the clue picker needs to know about everyone else.
  *
- * Two things make a result worth showing: the event was big, and the player
- * did well. A 91st at a regional qualifier is true and tells you nothing —
- * which was the old game's problem, since it walked the whole career in order
- * and most careers are mostly noise.
- *
- * Prize pool on a log scale so a $15M World Cup outranks a $100k major without
- * drowning it; placement on a log scale too, because the gap between 1st and
- * 4th matters and the gap between 40th and 60th does not.
+ * Passed in rather than imported so the engine stays pure: `Majors.finishers`
+ * is the real one, and `check:games` hands over the same.
  */
-export function notability(result: MajorResult): number {
+export interface Field {
+  /** Everyone who finished exactly where `result` did, the secret included. */
+  finishers: (result: MajorResult) => ReadonlySet<string>;
+}
+
+/*
+ * How the ten clues are chosen.
+ *
+ * The old picker had one idea — the best result from each stretch of the
+ * career — and it produced exactly the rounds nobody enjoys: a champion's path
+ * read 1st, 1st, 1st, 1st, 1st, which says "a winner" and nothing else; the
+ * first clue for Bugha was the World Cup, which ends the round before it has
+ * started; and a duo that played every major side by side got a clue list
+ * that described both of them, so the right answer could be either.
+ *
+ * Now each clue is picked one at a time, scoring every result still unused on
+ * what it would add to the list:
+ *
+ *   event    how recognisable the stage is — a Globals or the World Cup over a
+ *            $65k regional final, on the prize pool's log scale
+ *   mix      a finish band the list does not have yet (win, podium, top 10,
+ *            top 25, the rest), and a penalty for a placement it already has
+ *   spread   distance in time from the clues already picked, so the list
+ *            covers the career rather than its best year — heavy in Order,
+ *            where the career is read as a story, light in Random
+ *   unique   whether it rules out someone else the list still describes — a
+ *            duo partner, until one result they did not share is in
+ *
+ * plus a little noise, so meeting the same player twice is not the same round.
+ *
+ * Two rules sit on top. The list must describe exactly one player: if the
+ * picks still fit someone else, the weakest is swapped for a result that
+ * player does not share. The only careers where that cannot be done are the
+ * thirteen whose every major was played beside the same partner — there the
+ * partner fits every clue, and naming them first costs one clue.
+ *
+ * And the opening must not give the answer away: a signature result — any
+ * major win, or a podium on a $1M stage — never comes in the first few
+ * clues, how many depending on how famous the player is.
+ * Three for the household names, two for the regulars, none for the deep
+ * cuts, whose biggest stage is the only thing anyone could know them by. The
+ * weights lean the same way: famous players get more mix, obscure players
+ * more big events.
+ */
+
+/** Clues at the top of a round that may not be a signature result. */
+const OPENING_GUARD: Record<FameTier, number> = { easy: 3, medium: 2, hard: 0 };
+
+const WEIGHTS: Record<FameTier, { event: number; mix: number }> = {
+  easy: { event: 0.6, mix: 1.3 },
+  medium: { event: 1, mix: 1 },
+  hard: { event: 1.6, mix: 0.7 },
+};
+
+const SPREAD: Record<Mode, number> = { order: 1.4, random: 0.4 };
+const UNIQUE = 3;
+const NOISE = 0.35;
+
+/** A result the scene remembers by name: any major win, or a podium at a $1M+ event. */
+export function isSignature(result: MajorResult): boolean {
+  return result.placement === 1 || (result.placement <= 3 && (result.tournament.prizePool ?? 0) >= 1_000_000);
+}
+
+/** How recognisable the event is, 0 (a $65k regional final) to 1 (the World Cup). */
+function eventWeight(result: MajorResult): number {
   const pool = Math.log10((result.tournament.prizePool ?? 0) + 1);
-  const finish = Math.max(0, 6 - Math.log2(Math.max(1, result.placement)));
-  return pool + finish;
+  return Math.min(1, Math.max(0, (pool - 4.8) / 2.4));
+}
+
+/** Win, podium, top 10, top 25, the rest. */
+export function finishBand(placement: number): number {
+  if (placement === 1) return 0;
+  if (placement <= 3) return 1;
+  if (placement <= 10) return 2;
+  return placement <= 25 ? 3 : 4;
+}
+
+const time = (result: MajorResult) => Date.parse(result.tournament.date);
+
+/** Everyone besides the secret whom every one of these clues also describes. */
+export function alsoFits(clues: readonly MajorResult[], secretId: string, field: Field): Set<string> {
+  let others: Set<string> | null = null;
+  for (const clue of clues) {
+    const here = field.finishers(clue);
+    others = new Set([...(others ?? here)].filter((id) => id !== secretId && here.has(id)));
+    if (others.size === 0) break;
+  }
+  return others ?? new Set();
+}
+
+function pickClues(
+  results: readonly MajorResult[],
+  secret: RosterPlayer,
+  mode: Mode,
+  field: Field,
+  rng: Rng,
+): MajorResult[] {
+  if (results.length <= MAX_CLUES) return [...results];
+
+  const weights = WEIGHTS[secret.tier];
+  const guard = OPENING_GUARD[secret.tier];
+  const span = Math.max(1, time(results[results.length - 1]) - time(results[0]));
+  const chosen: MajorResult[] = [];
+
+  /*
+   * In Order the opening is the start of the career, so the guard is kept by
+   * construction: the first clues are the earliest results that are not
+   * signatures, and any signature from before them is left out altogether.
+   * That is how Bugha's path now opens on the FNCS finals after the World Cup
+   * instead of on the World Cup itself.
+   */
+  let earliest = -Infinity;
+  if (mode === 'order' && guard > 0) {
+    const opening = results.filter((result) => !isSignature(result)).slice(0, guard);
+    chosen.push(...opening);
+    if (opening.length > 0) earliest = time(opening[opening.length - 1]);
+  }
+  const pool = results.filter((result) => !chosen.includes(result) && time(result) > earliest);
+
+  const score = (result: MajorResult, others: Set<string>) => {
+    const band = finishBand(result.placement);
+    const sameBand = chosen.filter((clue) => finishBand(clue.placement) === band).length;
+    // Per copy already in, so a fifth 4th costs more than a second 8th. Flat,
+    // it did not: Saf's eleven majors hold five 4ths, and the hand kept all
+    // five and dropped an 8th.
+    const samePlace = chosen.filter((clue) => clue.placement === result.placement).length;
+    const mix = (sameBand === 0 ? 1 : -0.35 * sameBand) - 0.3 * samePlace;
+    const nearest = chosen.length
+      ? Math.min(...chosen.map((clue) => Math.abs(time(clue) - time(result))))
+      : span;
+    const ruledOut = others.size
+      ? [...others].filter((id) => !field.finishers(result).has(id)).length / others.size
+      : 0;
+    return (
+      weights.event * eventWeight(result) +
+      weights.mix * mix +
+      SPREAD[mode] * (nearest / span) +
+      UNIQUE * ruledOut +
+      NOISE * rng()
+    );
+  };
+
+  while (chosen.length < MAX_CLUES) {
+    const open = pool.filter((result) => !chosen.includes(result));
+    if (open.length === 0) break;
+    const others = alsoFits(chosen, secret.id, field);
+    let best = open[0];
+    let bestScore = -Infinity;
+    for (const result of open) {
+      const value = score(result, others);
+      if (value > bestScore) {
+        best = result;
+        bestScore = value;
+      }
+    }
+    chosen.push(best);
+  }
+
+  // The list has to describe one player. The unique term nearly always gets
+  // there on its own; this is the backstop, swapping the least recognisable
+  // clue for the unused result that rules out the most of who is left.
+  for (let tries = 0; tries < MAX_CLUES; tries++) {
+    const others = alsoFits(chosen, secret.id, field);
+    if (others.size === 0) break;
+    const fixes = pool
+      .filter((result) => !chosen.includes(result))
+      .map((result) => ({
+        result,
+        ruledOut: [...others].filter((id) => !field.finishers(result).has(id)).length,
+      }))
+      .filter((fix) => fix.ruledOut > 0)
+      .sort((a, b) => b.ruledOut - a.ruledOut);
+    if (fixes.length === 0) break;
+    const swappable = chosen
+      .filter((clue) => mode !== 'order' || time(clue) > earliest)
+      .sort((a, b) => eventWeight(a) - eventWeight(b));
+    if (swappable.length === 0) break;
+    chosen[chosen.indexOf(swappable[0])] = fixes[0].result;
+  }
+  return chosen;
 }
 
 /**
- * The ten results that tell the career as a story.
+ * Puts the chosen clues in reveal order.
  *
- * The first major and the most recent one are always in — they are the two
- * that frame everything else, "arrived in 2019" and "still here in 2026". The
- * middle eight come one per equal slice of the span between them, each slice
- * contributing its best result.
- *
- * Slicing by position in the career rather than taking the eight best overall
- * is the whole point: the best eight of a long career cluster in whichever
- * eighteen months the player peaked, and a clue list of five events from 2021
- * reads as a career that started and ended in 2021.
+ * Order is by date, and its opening was settled when the clues were picked.
+ * Random is shuffled, then any signature sitting in the guarded opening swaps
+ * places with the first ordinary clue behind it.
  */
-export function careerStory(results: readonly MajorResult[], limit = MAX_CLUES): MajorResult[] {
-  if (results.length <= limit) return [...results];
-
-  const first = results[0];
-  const last = results[results.length - 1];
-  const middle = results.slice(1, -1);
-  const slots = limit - 2;
-
-  const picked: MajorResult[] = [];
-  for (let slot = 0; slot < slots; slot++) {
-    const from = Math.floor((middle.length * slot) / slots);
-    const to = Math.floor((middle.length * (slot + 1)) / slots);
-    const window = middle.slice(from, to);
-    if (window.length === 0) continue;
-    picked.push(window.reduce((best, entry) => (notability(entry) > notability(best) ? entry : best)));
+function revealOrder(clues: MajorResult[], secret: RosterPlayer, mode: Mode, rng: Rng): MajorResult[] {
+  if (mode === 'order') return [...clues].sort((a, b) => time(a) - time(b));
+  const out = shuffle(rng, clues);
+  const guard = Math.min(OPENING_GUARD[secret.tier], out.length);
+  for (let i = 0; i < guard; i++) {
+    if (!isSignature(out[i])) continue;
+    const swap = out.findIndex((clue, j) => j >= guard && !isSignature(clue));
+    if (swap < 0) break;
+    [out[i], out[swap]] = [out[swap], out[i]];
   }
-
-  return [first, ...picked, last].sort((a, b) => (a.tournament.date < b.tournament.date ? -1 : 1));
+  return out;
 }
 
 /**
@@ -89,28 +246,24 @@ export function careerStory(results: readonly MajorResult[], limit = MAX_CLUES):
  * `games/shared/rotation.ts`) and the rules of the round are not.
  *
  * `results` must be the player's majors oldest first — `Majors.resultsFor`
- * guarantees that. Order walks the career story; Random draws ten at random
- * from the whole career and shuffles them, which is a genuinely different
- * game: no arc to read, just ten facts.
+ * guarantees that. Both modes draw the same kind of hand (see `pickClues`);
+ * Order reads it by date, Random in no order at all.
  */
 export function createGame(
   secret: RosterPlayer,
   results: readonly MajorResult[],
   mode: Mode,
+  field: Field,
   seed: string = String(Date.now()),
 ): GameState | null {
   if (results.length === 0) return null;
   const rng = makeRng(seed);
-
-  const chosen =
-    mode === 'order'
-      ? careerStory(results)
-      : shuffle(rng, sample(rng, results, Math.min(MAX_CLUES, results.length)));
+  const clues = revealOrder(pickClues(results, secret, mode, field, rng), secret, mode, rng);
 
   return {
     mode,
     secret,
-    clues: chosen.map((result) => ({ result })),
+    clues: clues.map((result) => ({ result })),
     revealed: 1,
     earned: 1,
     guesses: [],

@@ -3,27 +3,29 @@ import { Link } from 'react-router-dom';
 import { formatDate, GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
-import { PoolSetup } from '@/components/PoolSetup';
+import { LevelSetup, type LevelOption } from '@/components/PoolSetup';
 import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import type { Pools } from '@/data/liquipedia/pools';
 import { EXPORT_DATE, SOURCE, type Roster, type RosterPlayer } from '@/data/liquipedia/roster';
 import { useEventMode } from '@/games/shared/mode';
-import { poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
+import { poolPlayers } from '@/games/shared/pool';
 import { playerMoney, plural } from '@/lib/format';
 import { CountryBadge } from '@/components/CountryBadge';
-import { useBestScore } from '@/lib/storage';
+import { useBestScore, useLocalState } from '@/lib/storage';
 import { getGame } from '@/games/registry';
 import {
   CATEGORIES,
+  CLOSENESS_ICON,
   correctAnswer,
   createGame,
-  eligible,
   giveUp,
   hasEqualButton,
   nextRound,
+  SCHEDULE,
   submitAnswer,
+  WINDOW,
   type Answer,
   type Category,
   type Difficulty,
@@ -32,6 +34,54 @@ import {
 import './higher-lower.css';
 
 const meta = getGame('higher-lower')!;
+
+/** A level's schedule as the six coloured steps it walks through. */
+const steps = (difficulty: Difficulty) => SCHEDULE[difficulty].map((step) => CLOSENESS_ICON[step]).join('');
+
+/**
+ * The levels, each described by what it does to a run.
+ *
+ * There is no separate fame setting any more — see the pairing notes in
+ * `engine.ts`. The row of dots is the schedule itself, four rounds a dot.
+ */
+const LEVELS: LevelOption<Difficulty>[] = [
+  {
+    id: 'easy',
+    label: '🟢 Easy',
+    hint: (
+      <>
+        Big gaps between famous names, closing slowly. Top {WINDOW.easy.cap} earners only.
+        <span className="tiny faint" style={{ display: 'block' }}>
+          {steps('easy')}
+        </span>
+      </>
+    ),
+  },
+  {
+    id: 'medium',
+    label: '🟡 Medium',
+    hint: (
+      <>
+        Starts the same, tightens much sooner. Reaches the top {WINDOW.medium.cap.toLocaleString('en-US')}.
+        <span className="tiny faint" style={{ display: 'block' }}>
+          {steps('medium')}
+        </span>
+      </>
+    ),
+  },
+  {
+    id: 'hard',
+    label: '🔴 Hard',
+    hint: (
+      <>
+        Near-level pairs within a few rounds, anyone on record, and an Equal button.
+        <span className="tiny faint" style={{ display: 'block' }}>
+          {steps('hard')}
+        </span>
+      </>
+    ),
+  },
+];
 
 function displayValue(player: RosterPlayer, category: Category): string {
   if (category === 'age') return `${player.age} years old`;
@@ -66,47 +116,36 @@ export default function HigherLowerGame() {
 }
 
 function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
-  const [choice, setChoice] = usePoolChoice();
   const [event] = useEventMode();
   const [category, setCategory] = useState<Category>('earnings');
+  const [difficulty, setDifficulty] = useLocalState<Difficulty>('higher-lower:level', 'easy');
   const [game, setGame] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const scope = `higher-lower:${category}:${poolScope(event, choice).join(':')}`;
+  // Keyed by the level alone now that it is the only setting. Scores from the
+  // old region / fame / status scopes are left where they are: they were
+  // earned under a different pairing and are not the same record.
+  const scope = `higher-lower:${category}:${event ? `event:${event}` : 'roster'}:${difficulty}`;
   const { best, submit: submitBest } = useBestScore(scope);
 
   /**
-   * The pool minus anyone missing the value this category compares — a player
-   * with no birth date cannot be part of an Age run.
+   * The whole roster, or the event's field. The level narrows it round by
+   * round from the top earners down, so nothing is cut from it up front.
    */
-  const forCategory = useCallback(
-    (players: RosterPlayer[]) => eligible(players, category),
-    [category],
-  );
-
-  const players = useMemo(
-    // A pair is the smallest run that can be dealt.
-    () => resolvePool(roster, pools, event, choice, forCategory, 2),
-    [roster, pools, event, choice, forCategory],
-  );
-
-  /**
-   * The band the pairing aims for.
-   *
-   * `any` has no band of its own — it is the absence of a difficulty — so it
-   * takes Medium's, which is the one that makes neither promise.
-   */
-  const pairing: Difficulty = choice.difficulty === 'any' ? 'medium' : choice.difficulty;
+  const players = useMemo(() => {
+    const field = poolPlayers(roster, pools, event);
+    return field.length > 0 ? field : roster.players;
+  }, [roster, pools, event]);
 
   const start = useCallback(() => {
-    const created = createGame(players, category, pairing);
+    const created = createGame(players, category, difficulty);
     if (!created) {
-      setError('Not enough players in this pool have that value on record.');
+      setError('Not enough players in this field have that value on record.');
       return;
     }
     setError(null);
     setGame(created);
-  }, [players, category, pairing]);
+  }, [players, category, difficulty]);
 
   // Reveal the answer for a beat, then slide to the next pair.
   useEffect(() => {
@@ -136,13 +175,12 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
     >
       {!game ? (
         <div className="stack">
-          <PoolSetup
-            roster={roster}
+          <LevelSetup
             pools={pools}
             event={event}
-            value={choice}
-            onChange={setChoice}
-            eligible={forCategory}
+            levels={LEVELS}
+            value={difficulty}
+            onChange={setDifficulty}
             onStart={start}
             startLabel="Start endless run"
             extra={
@@ -159,10 +197,6 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
                     />
                   ))}
                 </OptionGrid>
-                <p className="tiny faint">
-                  Hard also adds the Equal button — and expects you to use it when two players match
-                  exactly.
-                </p>
               </section>
             }
           />
@@ -309,7 +343,8 @@ function Board({
       <p className="tiny faint center">
         Is {game.challenger.name}’s {categoryMeta.title.toLowerCase()} higher or lower than{' '}
         {game.current.name}’s?
-        {hasEqualButton(game.difficulty) ? '' : ' Equal values accept either answer.'}
+        {/* Only Hard is ever dealt a tie, so only Hard needs telling. */}
+        {hasEqualButton(game.difficulty) ? ' Or exactly equal — Hard deals ties.' : ''}
       </p>
     </div>
   );

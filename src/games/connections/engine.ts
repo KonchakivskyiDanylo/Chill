@@ -56,13 +56,16 @@ export interface GameState {
  * unknowable and, at two shared tournaments, not really a fact about either
  * player. What is left is the set of things somebody could actually hold in
  * their head about sixteen names: where they are from, who they played for,
- * what they have won, what they have earned, and when they were born.
+ * what they have won and what they have earned.
+ *
+ * Birth year was on this list and came off it. "Born in 2005" reads like a
+ * sharp group, but nobody can tell a 2005 from a 2006 across four handles, so
+ * in play it was a group you could only find by elimination.
  */
 const GROUP_KINDS = new Set<CriterionKind>([
   'country',
   'region',
   'org',
-  'born',
   'fncs-winner',
   'fncs-wins',
   'lan-winner',
@@ -242,7 +245,6 @@ export function generatePuzzle(
   const candidates = buildCriteria(source, {
     minMatches: GROUP_SIZE,
     maxShare: 0.35,
-    birthYears: true,
   }).filter((criterion) => GROUP_KINDS.has(criterion.kind));
   if (candidates.length < GROUP_COUNT) return null;
 
@@ -257,10 +259,9 @@ export function generatePuzzle(
     /*
      * One connection per kind, then four of those — not four out of the hat.
      *
-     * A flat draw is a nationality generator: there are eighty countries, a
-     * dozen birth years and exactly one "has won a LAN", so four-from-the-hat
-     * served country and birth year nearly every board and the rest never came
-     * up. Drawing kinds first gives every kind the same seat at the table, and
+     * A flat draw is a nationality generator: there are eighty countries and
+     * exactly one "has won a LAN", so four-from-the-hat served country nearly
+     * every board and the rest never came up. Drawing kinds first gives every kind the same seat at the table, and
      * every fourth attempt goes back to the flat draw so that two countries can
      * still be two groups — France and Brazil is a good puzzle.
      */
@@ -342,11 +343,7 @@ export function overlap(puzzle: Puzzle, source: CriteriaSource): number {
 }
 
 function connectionsOf(puzzle: Puzzle, source: CriteriaSource): PlayerCriterion[] {
-  const candidates = buildCriteria(source, {
-    minMatches: GROUP_SIZE,
-    maxShare: 0.35,
-    birthYears: true,
-  });
+  const candidates = buildCriteria(source, { minMatches: GROUP_SIZE, maxShare: 0.35 });
   return puzzle.groups
     .map((group) => candidates.find((criterion) => criterion.id === group.id))
     .filter((criterion): criterion is PlayerCriterion => Boolean(criterion));

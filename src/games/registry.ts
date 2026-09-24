@@ -36,9 +36,10 @@ export interface GameMeta {
 /**
  * Rules every game repeats, written once.
  *
- * Eight of the ten share a setup step (see `components/PoolSetup`), so eight
+ * Six of the ten share a setup step (see `components/PoolSetup`), so six
  * rules panels were about to say the same three paragraphs in three slightly
- * different ways.
+ * different ways. Higher or Lower and Tic Tac Toe left it for a single
+ * Easy / Medium / Hard of their own (`LevelSetup`), and explain that instead.
  */
 const POOL_SECTION: RuleSection = {
   title: 'Who you get asked about',
@@ -63,7 +64,7 @@ const MODE_SECTION: RuleSection = {
   items: [
     'On the home page you can swap the whole scene for one tournament’s field — the FNCS Globals, the Esports World Cup.',
     'Every game then draws from that field and nothing else, and says so in the header until you leave it.',
-    'A field is a fixed list of players, so region, difficulty and status do not apply to it: eighty players is already the narrowest these games can run on.',
+    'A field is a fixed list of players, so the region, fame and status choices do not apply to it: eighty players is already the narrowest these games can run on. A game’s own Easy / Medium / Hard still does.',
   ],
 };
 
@@ -90,20 +91,20 @@ export const GAMES: GameMeta[] = [
       {
         title: 'How the pairs are picked',
         items: [
-          'Not at random. The challenger is chosen so the gap between the two values is about as wide as the round is aiming for.',
-          'That target narrows as your streak grows, so a run gets harder the longer it survives rather than asking the same question fifty times.',
-          'It also narrows with difficulty: Easy opens on pairs that are obvious, Hard on pairs that are nearly level.',
-          'Which is why you will not get a 1-versus-5 on round thirty any more.',
+          'Who: every player is ranked by career earnings. Round one is two of the top 20, and each round lets the challenger come from a little further down — so a run opens on names you know and reaches the deep cuts only if it lasts.',
+          'How close: the gap between the two values follows a schedule, four rounds per step — 🟢 obvious, 🟡 moderate, 🟠 close, 🔴 very close.',
+          'For earnings a step is a share of the bigger figure: obvious is one player on half the other’s money or less, very close is within 10%. For age it is years (6+ apart down to 0–1), for FNCS wins titles (3+ down to 0–1).',
+          'Which is why you will not get a 1-versus-5 on round thirty.',
         ],
       },
       {
         title: 'Difficulty',
         items: [
-          'Hard is the only level with an Equal button. Use it when the two values match exactly.',
-          'On Easy, Medium and Random there is no Equal button, so two matching values accept either answer.',
+          'Easy 🟢🟢🟡🟡🟠🔴 — the slowest schedule, and it never leaves the top 250 earners.',
+          'Medium 🟢🟡🟡🟠🔴🔴 — close pairs from round 13, reaching the top 1,000.',
+          'Hard 🟢🟡🟠🔴🔴🔴 — very close from round 13, anyone on record, and an Equal button. Hard is the only level dealt exact ties, and you must press Equal for them.',
         ],
       },
-      POOL_SECTION,
       MODE_SECTION,
     ],
     Component: lazy(() => import('./higher-lower/HigherLowerGame')),
@@ -158,9 +159,20 @@ export const GAMES: GameMeta[] = [
       {
         title: 'Game modes',
         items: [
-          'Order — ten results telling the career as a story: the first major they ever reached, the most recent, and the best result from each stretch in between.',
-          'That gives you an arc — 2019 → 2020 → 2022 → 2024 → 2026 — rather than ten results from whichever eighteen months the player happened to peak in.',
-          'Random — ten results drawn at random from the whole career, in no order at all. No arc to read, just ten facts. Genuinely harder.',
+          'Order — ten results read oldest first, spread across the whole career, so you get an arc — 2019 → 2021 → 2024 → 2026 — rather than one good year.',
+          'Random — the same kind of ten, in no order at all. No arc to read, just ten facts.',
+        ],
+      },
+      {
+        title: 'Which ten',
+        items: [
+          'Not the ten best. A hand mixes finishes — a win, a top 10, a 40th — rather than five 1sts in a row that only say “a winner”.',
+          'Bigger stages are preferred: a Globals or a World Cup placing over a small regional final.',
+          'The ten describe exactly one player whenever the career allows it: a duo partner who stood beside them at every one of those events is ruled out by at least one result they did not share.',
+          'The exception is the thirteen players who never played a major without the same partner — the clues fit the partner too, so if you name the partner, the next guess is the one.',
+          'The opening does not give it away. For the best-known players the first three clues are never a win or a podium on a $1M stage; for regulars the first two. The deep cuts get their big results early, because nobody could name them otherwise.',
+          'A career of ten majors or fewer is shown whole — there is nothing to choose — so in Order it reads oldest first whatever it opens on. Random still keeps the big results out of the opening.',
+          'The same player is dealt a different ten the next time they come round.',
         ],
       },
       POOL_SECTION,
@@ -293,7 +305,7 @@ export const GAMES: GameMeta[] = [
           'Organisations — has played for a given org, at any point, not just today.',
           'Titles — has won an FNCS, a LAN, a global championship, or two or more FNCS titles.',
           'Career earnings above a threshold.',
-          'Won a title in a given region, or in a given year.',
+          'Won their region’s FNCS — “has won the EU FNCS” — or won an FNCS final in a given year. A Globals counts for the year, never for the region it was held in.',
           'Played at a specific tournament — the globals and LANs, never a regional qualifier.',
           'Country and region — in the draw now that the cards carry no flags.',
         ],
@@ -317,17 +329,19 @@ export const GAMES: GameMeta[] = [
       {
         title: 'Where your player lands',
         items: [
-          'Fits no open cell — rejected, and on Easy that costs a mistake.',
-          'Fits exactly one cell — placed there automatically.',
-          'Fits several cells, but is the only possible answer to one of them — placed there. Put "World Cup winner × United States" on a board and type Bugha: he is the only person who fits it, so that is obviously where he goes.',
-          'Fits several cells and is not the sole answer to any — the grid highlights your options and you tap one.',
+          'Fits no open cell — rejected, and on Easy and Medium that costs a mistake.',
+          'The grid only ever offers a cell that leaves every other empty cell still fillable with players you have not used. A cell that would strand another is never offered.',
+          'Exactly one such cell — placed there automatically. That includes the cell you are the last possible answer for: putting you anywhere else would strand it.',
+          'Several — the grid highlights them and you tap one.',
         ],
       },
       {
         title: 'Difficulty',
         items: [
-          'Easy 🟢 — unlimited guesses, and three wrong answers end the board.',
-          'Hard 🔴 — nine guesses, one per cell. Every single one has to land.',
+          'Easy 🟢 — built on the names everyone knows, at least three of them per cell. Three wrong answers end the board.',
+          'Medium 🟡 — the scene’s regulars join in, at least two per cell. Three wrong answers end the board.',
+          'Hard 🔴 — a cell may have a single answer from anywhere on record. Nine guesses, one per cell.',
+          'At every level any player who fits is accepted — the level decides what the board is built around, not who you may type.',
         ],
       },
       {
@@ -335,11 +349,10 @@ export const GAMES: GameMeta[] = [
         items: [
           'Every player may only be used once on the board.',
           'Boards are generated and checked, so all nine cells can always be filled with nine different players.',
-          'A player who fits a cell but would strand another cell is refused rather than allowed to soft-lock the board — and it does not cost you anything.',
+          'Title rules say what was won: “Won EU FNCS” is the regional FNCS, and a Globals never makes someone a European winner because it was held in Copenhagen.',
           'Cells show the handle alone, for the same reason Griefer does.',
         ],
       },
-      POOL_SECTION,
       MODE_SECTION,
     ],
     Component: lazy(() => import('./tic-tac-toe/TicTacToeGame')),
@@ -355,7 +368,7 @@ export const GAMES: GameMeta[] = [
       'You have four lives, shown as hearts. Every wrong group costs one.',
     ],
     rules: [
-      'A group is a country, a region, an organisation, a birth year, a title — FNCS, LAN, major — or an earnings threshold. Nothing more obscure than that.',
+      'A group is a country, a region, an organisation, a title — FNCS, LAN, major — or an earnings threshold. Nothing more obscure than that, and no birth years: nobody can tell a 2005 from a 2006.',
       'Groups overlap on purpose: a player can fit two of the connections and still belong to only one group. That is the trap, and there is exactly one way to split the sixteen.',
       'A wrong guess tells you when three of your four belonged to one group, and says nothing otherwise.',
       'Nothing otherwise is deliberate: two of any four landing in the same group is close to chance on a sixteen-card board, so reporting it every time buried the one hint worth reading.',
@@ -374,17 +387,18 @@ export const GAMES: GameMeta[] = [
       'You have 8 guesses.',
     ],
     rules: [
-      'Green means an exact match, red means no match, amber means close.',
-      'Region, country and status are always simply right or wrong — except country, which goes amber when you have the right region.',
-      'Career earnings always show a direction and a proximity band, because exact-matching a six-figure number would never land.',
+      'Green means a match, red means not. There is no in-between colour — the arrows already say which way to go.',
+      'Columns: region, country, status, age, career earnings, FNCS wins, FNCS finals played, and whether your guess has played with the secret player.',
+      'Together is green when the two have entered 10 or more tournaments as teammates. A red cell still shows how many they did play, if any.',
+      'Career earnings always show a direction, because exact-matching a six-figure number would never land.',
       'Only players with a published birthday and earnings figure can be the answer, so no column is ever blank.',
     ],
     sections: [
       {
         title: 'Feedback style',
         items: [
-          'Exact — age and FNCS wins are simply right or wrong. Worth trying: competitive players sit in a narrow age band and FNCS counts are small.',
-          'Direction — ▲ means the secret player is higher, ▼ lower. Amber means within 2 years, 1 title, or 20% of the earnings.',
+          'Exact — age and the FNCS counts are simply right or wrong. Worth trying: competitive players sit in a narrow age band and FNCS counts are small.',
+          'Direction — ▲ means the secret player is higher, ▼ lower, on every number.',
         ],
       },
       POOL_SECTION,

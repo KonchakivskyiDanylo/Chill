@@ -30,12 +30,11 @@ export type CriterionKind =
   | 'tournament-winner'
   | 'earnings'
   | 'fncs-wins'
-  | 'won-in-region'
-  | 'won-in-year'
+  | 'won-fncs-region'
+  | 'won-fncs-year'
   | 'played-event'
   | 'status'
-  | 'age'
-  | 'born';
+  | 'age';
 
 export interface PlayerCriterion {
   id: string;
@@ -71,22 +70,26 @@ export interface CriteriaOptions {
    * Liquipedia page and $102k in career prize money is not a quiz question.
    */
   maxOrgs?: number;
-  /**
-   * Add a criterion per birth year, e.g. "was born in 2005".
-   *
-   * Off by default and on for Connections, which asked for it. A year is a
-   * sharp, guessable group in a way "is under 18" is not — and it is the one
-   * identity fact besides nationality that a whole group can share without the
-   * group being about anybody's career.
-   */
-  birthYears?: boolean;
 }
+
+/**
+ * How the scene writes each FNCS region. South America is Liquipedia's label
+ * for what the FNCS itself has always called Brazil.
+ */
+const REGION_SHORT: Record<string, string> = {
+  'North America': 'NA',
+  Europe: 'EU',
+  'South America': 'BR',
+  Oceania: 'OCE',
+  'Middle East': 'ME',
+  Asia: 'Asia',
+};
 
 export function buildCriteria(
   { players, facts, orgs }: CriteriaSource,
   options: CriteriaOptions = {},
 ): PlayerCriterion[] {
-  const { minMatches = 4, maxShare = 0.5, maxOrgs = 10, birthYears = false } = options;
+  const { minMatches = 4, maxShare = 0.5, maxOrgs = 10 } = options;
   const out: PlayerCriterion[] = [];
 
   const add = (
@@ -119,21 +122,6 @@ export function buildCriteria(
     ['age:20-plus', 'is 20 or older', '20+', (p: RosterPlayer) => p.age !== null && p.age >= 20],
   ] as const) {
     add(id, 'age', label, short, test);
-  }
-
-  if (birthYears) {
-    const born = [
-      ...new Set(
-        players
-          .map((player) => player.birthDate?.slice(0, 4))
-          .filter((year): year is string => Boolean(year)),
-      ),
-    ].sort();
-    for (const year of born) {
-      add(`born:${year}`, 'born', `was born in ${year}`, `Born ${year}`, (p) =>
-        p.birthDate?.startsWith(year) ?? false,
-      );
-    }
   }
 
   // ---------------------------------------------------------------- orgs --
@@ -191,30 +179,36 @@ export function buildCriteria(
     );
   }
 
-  // Where a player actually won, which is not always where they compete now:
-  // Muz won in Oceania and in North America.
-  const regions = [...new Set(players.flatMap((p) => facts.of(p.id).winRegions))];
+  /*
+   * FNCS wins by region and by year, named as the thing a player did.
+   *
+   * These used to be "Won in Europe" and "Won in 2023", counting any headline
+   * win by where the event was held. That made Cooper a European winner for
+   * taking the 2023 Globals in Copenhagen — true of the venue and of nothing a
+   * player would ever answer with. The region rule now asks about the regional
+   * FNCS alone ("Won EU FNCS"), and the year rule about FNCS finals, regional
+   * or global, rather than a bare "title".
+   */
+  const regions = [...new Set(players.flatMap((p) => facts.of(p.id).fncsWinRegions))];
   for (const region of regions) {
+    const short = REGION_SHORT[region] ?? region;
     add(
-      `won-in:${region}`,
-      'won-in-region',
-      `has won a title in ${region}`,
-      // "Title in North America" read as the name of a tournament rather than
-      // a thing a player did, which on a grid header is the only reading that
-      // matters. The verb is what makes it a question.
-      `Won in ${region}`,
-      (p) => facts.of(p.id).winRegions.includes(region),
+      `won-fncs:${region}`,
+      'won-fncs-region',
+      `has won the ${short} FNCS`,
+      `Won ${short} FNCS`,
+      (p) => facts.of(p.id).fncsWinRegions.includes(region),
     );
   }
 
-  const years = [...new Set(players.flatMap((p) => facts.of(p.id).winYears))].sort();
+  const years = [...new Set(players.flatMap((p) => facts.of(p.id).fncsWinYears))].sort();
   for (const year of years) {
     add(
-      `won-in-year:${year}`,
-      'won-in-year',
-      `won a title in ${year}`,
-      `Won in ${year}`,
-      (p) => facts.of(p.id).winYears.includes(year),
+      `won-fncs-in:${year}`,
+      'won-fncs-year',
+      `won an FNCS final in ${year}`,
+      `Won FNCS in ${year}`,
+      (p) => facts.of(p.id).fncsWinYears.includes(year),
     );
   }
 

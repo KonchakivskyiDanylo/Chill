@@ -50,8 +50,8 @@ const USABLE = new Set([
   'tournament-winner',
   'earnings',
   'fncs-wins',
-  'won-in-region',
-  'won-in-year',
+  'won-fncs-region',
+  'won-fncs-year',
   'played-event',
 ]);
 

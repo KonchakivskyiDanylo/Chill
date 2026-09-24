@@ -3,8 +3,8 @@ import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PlayerSearch } from '@/components/PlayerSearch';
-import { PoolSetup } from '@/components/PoolSetup';
-import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
+import { LevelSetup, type LevelOption } from '@/components/PoolSetup';
+import { Banner, Stat } from '@/components/ui';
 import type { Facts } from '@/data/liquipedia/facts';
 import type { Orgs } from '@/data/liquipedia/orgs';
 import type { Pools } from '@/data/liquipedia/pools';
@@ -14,7 +14,7 @@ import { useOrgs } from '@/data/liquipedia/useOrgs';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import { useEventMode } from '@/games/shared/mode';
-import { resolvePool, usePoolChoice } from '@/games/shared/pool';
+import { poolPlayers } from '@/games/shared/pool';
 import { getGame } from '@/games/registry';
 import {
   cellKey,
@@ -23,6 +23,7 @@ import {
   giveUp,
   guessesLeft,
   HARD_GUESSES,
+  LEVELS,
   MAX_MISTAKES,
   place,
   SIZE,
@@ -36,10 +37,36 @@ import './tic-tac-toe.css';
 
 const meta = getGame('tic-tac-toe')!;
 
-const RULESETS: { id: Difficulty; label: string; hint: string }[] = [
-  { id: 'easy', label: '🟢 Easy', hint: `Unlimited guesses. ${MAX_MISTAKES} wrong answers end the board.` },
-  { id: 'hard', label: '🔴 Hard', hint: `${HARD_GUESSES} guesses — one per cell. Every one has to land.` },
+/**
+ * The three levels, each one board shape plus one ruleset.
+ *
+ * The answers-per-cell count is read from `LEVELS` so the card cannot promise
+ * something the generator does not enforce.
+ */
+const DIFFICULTIES: LevelOption<Difficulty>[] = [
+  {
+    id: 'easy',
+    label: '🟢 Easy',
+    hint: `Built on the names everyone knows — ${LEVELS.easy.answers}+ of them fit every cell. ${MAX_MISTAKES} wrong answers end the board.`,
+  },
+  {
+    id: 'medium',
+    label: '🟡 Medium',
+    hint: `The scene’s regulars join in — ${LEVELS.medium.answers}+ per cell. ${MAX_MISTAKES} wrong answers end the board.`,
+  },
+  {
+    id: 'hard',
+    label: '🔴 Hard',
+    hint: `A cell may have one answer, from anywhere on record. ${HARD_GUESSES} guesses — one per cell.`,
+  },
 ];
+
+/** The fame bands each level's board is built around, widest last. */
+const BANDS: Record<Difficulty, ('easy' | 'medium' | 'hard')[]> = {
+  easy: ['easy'],
+  medium: ['easy', 'medium'],
+  hard: ['easy', 'medium', 'hard'],
+};
 
 export default function TicTacToeGame() {
   const { roster, error: rosterError } = useRoster();
@@ -70,32 +97,41 @@ function Game({
   orgs: Orgs;
   pools: Pools | null;
 }) {
-  const [choice, setChoice] = usePoolChoice();
   const [event] = useEventMode();
-  const [ruleset, setRuleset] = useState<Difficulty>('easy');
+  const [difficulty, setDifficulty] = useState<Difficulty>('easy');
   const [game, setGame] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ tone: string; message: string } | null>(null);
-  /** Set when a player fits several cells and none of them is uniquely theirs. */
+  /** Set when more than one cell would take this player and keep the board winnable. */
   const [choosing, setChoosing] = useState<{ player: RosterPlayer; cells: Cell[] } | null>(null);
 
-  const eligible = useMemo(() => facts.eligible(3), [facts]);
-  const players = useMemo(
-    () => resolvePool(roster, pools, event, choice, eligible, 60),
-    [roster, pools, event, choice, eligible],
-  );
+  /*
+   * Two pools, deliberately different.
+   *
+   * `accepted` is who the guess box takes: everyone, because a right answer is
+   * a right answer whatever the level. `answers` is who the board is built
+   * around, and it is the only thing the level narrows. In an event mode both
+   * are the field — that is the whole promise of the mode.
+   */
+  const field = useMemo(() => poolPlayers(roster, pools, event), [roster, pools, event]);
+  const accepted = field.length > 0 ? field : roster.players;
+  const answers = useMemo(() => {
+    const eligible = facts.eligible(3);
+    if (field.length > 0) return eligible(field);
+    return BANDS[difficulty].flatMap((band) => roster.exactly(band, { eligible }));
+  }, [facts, field, roster, difficulty]);
 
   const start = useCallback(() => {
-    const board = generateBoard({ players, facts, orgs });
+    const board = generateBoard({ facts, orgs }, { answers, accepted }, difficulty);
     if (!board) {
-      setError('Not enough players in this pool to build a solvable grid. Try a wider one.');
+      setError('Not enough players in this field to build a solvable grid.');
       return;
     }
     setError(null);
     setFeedback(null);
     setChoosing(null);
-    setGame(createGame(board, ruleset));
-  }, [players, facts, orgs, ruleset]);
+    setGame(createGame(board, difficulty));
+  }, [answers, accepted, facts, orgs, difficulty]);
 
   const usedIds = useMemo(
     () => new Set(game ? [...game.filled.values()].map((player) => player.id) : []),
@@ -106,31 +142,14 @@ function Game({
     return (
       <GameShell game={meta} dataNote={<RosterNote what="Players" generated={facts.generated} />}>
         <div className="stack">
-          <PoolSetup
-            roster={roster}
+          <LevelSetup
             pools={pools}
             event={event}
-            value={choice}
-            onChange={setChoice}
-            eligible={eligible}
+            levels={DIFFICULTIES}
+            value={difficulty}
+            onChange={setDifficulty}
             onStart={start}
             startLabel="New board"
-            extra={
-              <section className="card stack">
-                <div className="card__title">Rules</div>
-                <OptionGrid>
-                  {RULESETS.map((option) => (
-                    <OptionCard
-                      key={option.id}
-                      label={option.label}
-                      hint={option.hint}
-                      selected={ruleset === option.id}
-                      onClick={() => setRuleset(option.id)}
-                    />
-                  ))}
-                </OptionGrid>
-              </section>
-            }
           />
           {error ? (
             <Banner tone="danger" title="Cannot start">
@@ -195,7 +214,7 @@ function Game({
       <div className="stack">
         <div className="stats">
           <Stat label="Filled" value={`${game.filled.size}/9`} />
-          {game.difficulty === 'easy' ? (
+          {game.difficulty !== 'hard' ? (
             <Stat label="Mistakes" value={`${game.mistakes}/${MAX_MISTAKES}`} />
           ) : (
             <Stat label="Guesses left" value={Number.isFinite(left) ? left : '∞'} />
@@ -262,7 +281,7 @@ function Game({
               </p>
             ) : (
               <PlayerSearch
-                players={players}
+                players={accepted}
                 onPick={(player) => resolve(submit(game, player), player)}
                 exclude={usedIds}
                 placeholder="Name a player…"

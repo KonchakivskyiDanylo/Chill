@@ -69,8 +69,20 @@ export interface PlayerFacts {
   lanApps: number;
   fncsApps: number;
   wins: { global: number; fncs: number; lan: number; major: number };
+  /** Where each won event was *held* — a Globals in Copenhagen reads Europe. */
   winRegions: readonly string[];
   winYears: readonly number[];
+  /**
+   * Regions of the online regional FNCS finals this player won.
+   *
+   * Not `winRegions`, which is where any won event was held: Cooper won the
+   * 2023 Globals in Copenhagen and so "won in Europe", which nobody means by
+   * it. A Globals, the 2022 Invitational and the 2026 Summit are LANs with
+   * every region in them, so they are left out — this is "won the EU FNCS".
+   */
+  fncsWinRegions: readonly string[];
+  /** Years this player won any FNCS final, regional or global. */
+  fncsWinYears: readonly number[];
 }
 
 /** What a player with no recorded results looks like, so callers never branch. */
@@ -84,7 +96,19 @@ const NONE: PlayerFacts = {
   wins: { global: 0, fncs: 0, lan: 0, major: 0 },
   winRegions: [],
   winYears: [],
+  fncsWinRegions: [],
+  fncsWinYears: [],
 };
+
+/**
+ * An FNCS final: a regional grand final, or a Global Championship.
+ *
+ * `kind` alone does not say it — the World Cup is `global` too, and it was
+ * never an FNCS — so the Global Championships are told apart by name.
+ */
+function isFncs(event: RawEvent): boolean {
+  return event.kind === 'fncs' || (event.kind === 'global' && event.name.includes('FNCS'));
+}
 
 export class Facts {
   readonly generated: string;
@@ -101,7 +125,17 @@ export class Facts {
       index,
       year: Number(event.date.slice(0, 4)),
     }));
-    for (const player of payload.players) this.byPlayer.set(player.id, player);
+    for (const player of payload.players) {
+      const won = player.won.map((index) => payload.events[index]).filter(Boolean);
+      const regional = won.filter((event) => event.kind === 'fncs' && !event.lan && event.region);
+      this.byPlayer.set(player.id, {
+        ...player,
+        fncsWinRegions: [...new Set(regional.map((event) => event.region as string))].sort(),
+        fncsWinYears: [
+          ...new Set(won.filter(isFncs).map((event) => Number(event.date.slice(0, 4)))),
+        ].sort(),
+      });
+    }
   }
 
   /** This player's facts, or an all-zero record when they have no results. */

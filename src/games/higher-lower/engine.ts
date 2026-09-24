@@ -1,6 +1,6 @@
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 import type { Difficulty } from '@/games/shared/difficulty';
-import { makeRng, pick, sample, shuffle, type Rng } from '@/lib/rng';
+import { makeRng, pick, type Rng } from '@/lib/rng';
 
 /** Pure game logic for Higher or Lower — no React, no DOM. */
 
@@ -11,7 +11,8 @@ export type { Difficulty };
 
 /**
  * Only Hard offers the Equal button — and once it is on the board, using it is
- * compulsory. Easy and Medium accept either direction on a tie.
+ * compulsory. Easy and Medium are never dealt a tie at all (see
+ * `chooseChallenger`), and would accept either direction if one were.
  */
 export function hasEqualButton(difficulty: Difficulty): boolean {
   return difficulty === 'hard';
@@ -68,102 +69,203 @@ export function eligible(players: readonly RosterPlayer[], category: Category): 
 
 // ------------------------------------------------------------- pairing --
 
-/**
- * How far apart two players are on a category, as 0 (identical) to 1 (miles).
+/*
+ * How a pair is chosen.
  *
- * Relative for the continuous categories, because $40k against $50k and $2.0M
- * against $2.5M are the same question asked twice. Absolute for FNCS wins,
- * where the numbers run 0 to 7 and a relative gap would call nought-against-one
- * the widest pair on the board when it is one of the closest.
+ * Two dials, turned by the round you are on and the level you picked:
+ *
+ *   who     the challenger comes from the top N earners of the pool, and N
+ *           grows every round. Round one is top 20 against top 20 — the
+ *           names everyone knows — and the level decides how fast the window
+ *           opens and how far it may go.
+ *   how     the gap between the two values has to land in a band — obvious,
+ *           moderate, close, very close — and the band tightens on a fixed
+ *           schedule, faster on harder levels.
+ *
+ * The pairing it replaces had the second dial and not the first: it drew from
+ * everyone in the level's fame tier at once, so "obvious" meant a big gap
+ * between two players you had never heard of, and a 15-year-old on $0 against
+ * a 30-year-old nobody was an easy round on paper and a coin toss in practice.
+ * Obvious is a big gap between names you know.
+ */
+
+/** How close a pair's values are. */
+export type Closeness = 'obvious' | 'moderate' | 'close' | 'very-close';
+
+export const CLOSENESS_ICON: Record<Closeness, string> = {
+  obvious: '🟢',
+  moderate: '🟡',
+  close: '🟠',
+  'very-close': '🔴',
+};
+
+/** Rounds spent on each step of a schedule before moving to the next. */
+export const ROUNDS_PER_STEP = 4;
+
+/**
+ * The closeness each block of rounds asks for; the last step repeats forever.
+ *
+ * Easy stays on big gaps for eight rounds and only reaches very close at 21.
+ * Medium starts the same but is at close by 13. Hard is at very close by 13
+ * and stays there, which is where the Equal button starts to matter.
+ */
+export const SCHEDULE: Record<Difficulty, Closeness[]> = {
+  easy: ['obvious', 'obvious', 'moderate', 'moderate', 'close', 'very-close'],
+  medium: ['obvious', 'moderate', 'moderate', 'close', 'very-close', 'very-close'],
+  hard: ['obvious', 'moderate', 'close', 'very-close', 'very-close', 'very-close'],
+};
+
+export function closenessFor(difficulty: Difficulty, round: number): Closeness {
+  const steps = SCHEDULE[difficulty];
+  return steps[Math.min(Math.floor((round - 1) / ROUNDS_PER_STEP), steps.length - 1)];
+}
+
+/**
+ * The gap each closeness stands for, as [at least, less than].
+ *
+ * Earnings are relative — $40k against $50k and $2.0M against $2.5M are the
+ * same question — so "obvious" is one player on at most half the other's
+ * money. Age is in whole years and FNCS wins in titles, where a relative gap
+ * would call nought-against-one the widest pair on the board.
+ *
+ * Very close on the two whole-number categories is level or one apart. Only
+ * Hard is dealt the level ones, and it must not be dealt nothing else: with
+ * very close meaning ties alone, every FNCS round past the twelfth was a tie
+ * and Hard became "press Equal forever" — 134 of 200 rounds in a test run.
+ */
+const BANDS: Record<Category, Record<Closeness, [number, number]>> = {
+  earnings: {
+    obvious: [0.5, Infinity],
+    moderate: [0.25, 0.5],
+    close: [0.1, 0.25],
+    'very-close': [0, 0.1],
+  },
+  age: {
+    obvious: [6, Infinity],
+    moderate: [3, 6],
+    close: [2, 3],
+    'very-close': [0, 2],
+  },
+  fncsWins: {
+    obvious: [3, Infinity],
+    moderate: [2, 3],
+    close: [1, 2],
+    'very-close': [0, 2],
+  },
+};
+
+/**
+ * How far apart two players are, in the category's own unit — a share of the
+ * bigger figure for earnings, years for age, titles for FNCS wins.
  */
 export function gapBetween(a: RosterPlayer, b: RosterPlayer, category: Category): number {
   const x = valueOf(a, category);
   const y = valueOf(b, category);
-  if (category === 'fncsWins') return Math.min(Math.abs(x - y) / 4, 1);
+  if (category !== 'earnings') return Math.abs(x - y);
   const hi = Math.max(x, y);
   return hi <= 0 ? 0 : Math.abs(x - y) / hi;
 }
 
-/**
- * The gap a round is aiming for.
- *
- * Two things move it. Difficulty sets where it starts: Easy opens on pairs that
- * are obvious, Hard on pairs that are nearly level. Then it tightens as the
- * streak grows, so a run gets harder the longer it survives instead of staying
- * the same question fifty times.
- *
- * This is what stops a blowout landing late — a 1-versus-5 on round thirty is
- * not a question, it is a gift, and before this the pairing was random so it
- * happened constantly.
- */
-const TARGET: Record<Difficulty, [start: number, end: number]> = {
-  easy: [0.6, 0.35],
-  medium: [0.35, 0.18],
-  hard: [0.18, 0.06],
-};
-
-/** Rounds over which the target tightens from `start` to `end`. */
-const RAMP = 15;
-
-export function targetGap(difficulty: Difficulty, score: number): number {
-  const [start, end] = TARGET[difficulty];
-  return start + (end - start) * Math.min(score / RAMP, 1);
+/** Whether a pair's gap lands in a closeness band. */
+export function fitsBand(
+  a: RosterPlayer,
+  b: RosterPlayer,
+  category: Category,
+  closeness: Closeness,
+): boolean {
+  const gap = gapBetween(a, b, category);
+  const [low, high] = BANDS[category][closeness];
+  return gap >= low && gap < high;
 }
 
 /**
- * How many of the remaining players to consider per round.
+ * The fame window: how many of the pool's top earners the challenger may come
+ * from, by round.
  *
- * A Hard pool is over four thousand players and scoring every one of them on
- * every round is wasted work — a random slice of sixty already contains
- * something close to any target we ask for.
+ * Sorted by career earnings, the roster falls into four rough profiles —
+ * very high-profile (top 50), established (to 250), general (to 1,000) and
+ * everyone else. `cap` is where each level stops: Easy never leaves the first
+ * two, Medium reaches the general scene, Hard eventually draws from anyone.
+ * Earnings is the measure for every category, Age included, because what
+ * makes a pair obvious is knowing who the two people are.
  */
-const CANDIDATES = 60;
+export const WINDOW: Record<Difficulty, { start: number; grow: number; cap: number }> = {
+  easy: { start: 20, grow: 10, cap: 250 },
+  medium: { start: 20, grow: 30, cap: 1000 },
+  hard: { start: 20, grow: 60, cap: Infinity },
+};
+
+export function windowFor(difficulty: Difficulty, round: number): number {
+  const { start, grow, cap } = WINDOW[difficulty];
+  return Math.min(cap, start + grow * (round - 1));
+}
 
 /**
- * Picks the next challenger: the one whose gap to `current` sits closest to
- * what this round is aiming for.
+ * Picks the challenger for `round` against `current`.
  *
- * Chosen from the best handful rather than the single best, so two runs at the
- * same score are not the same run.
+ * 1. Take the unused players inside this round's fame window.
+ * 2. Keep those whose gap to `current` lands in the scheduled band, and pick
+ *    one at random.
+ * 3. If none does, pick among the three whose gap comes nearest the band. At
+ *    the very top of the roster there may be no "obvious" pair at all — the
+ *    top twenty span $1.2M to $3.8M — and the nearest miss is still the most
+ *    obvious question those names can ask.
+ * 4. If the window has nobody left, widen it to the level's cap. Nobody left
+ *    inside the cap is a cleared run — Easy never borrows an unknown to keep
+ *    going.
+ *
+ * Ties are never dealt without an Equal button, because a tie there accepts
+ * either answer and is a free point rather than a question.
  */
 function chooseChallenger(
-  queue: readonly RosterPlayer[],
+  ranked: readonly RosterPlayer[],
+  shown: ReadonlySet<string>,
   current: RosterPlayer,
   category: Category,
   difficulty: Difficulty,
-  score: number,
+  round: number,
   rng: Rng,
 ): RosterPlayer | null {
-  const target = targetGap(difficulty, score);
+  const allowed = (player: RosterPlayer) => {
+    if (shown.has(player.id)) return false;
+    // At least one of the pair must hold a title. 5,394 of the 5,678 players
+    // have never won one, so nought against nought was served constantly and
+    // on Hard the game became "press Equal forever".
+    if (category === 'fncsWins' && current.fncsWins === 0 && player.fncsWins === 0) return false;
+    if (!hasEqualButton(difficulty) && valueOf(player, category) === valueOf(current, category)) {
+      return false;
+    }
+    return true;
+  };
 
-  /*
-   * At least one of the pair must hold a title.
-   *
-   * Letting players on nought into the category was right — "a name you know
-   * on one title against a name you do not" is the best round it has. Letting
-   * *both* sides be on nought is not: 5,394 of the 5,678 eligible players have
-   * never won one, so on Hard the pairing found a nought-against-nought tie
-   * every single round and the game became "press Equal forever".
-   */
-  const from =
-    category === 'fncsWins' && current.fncsWins === 0
-      ? queue.filter((player) => player.fncsWins > 0)
-      : queue;
-  // Nothing left that makes a question. The run has been cleared, not broken.
+  const { cap } = WINDOW[difficulty];
+  let from: RosterPlayer[] = [];
+  for (const limit of [windowFor(difficulty, round), cap]) {
+    from = ranked.slice(0, limit).filter(allowed);
+    if (from.length > 0) break;
+  }
   if (from.length === 0) return null;
 
-  const slice = from.length <= CANDIDATES ? from : sample(rng, from, CANDIDATES);
-  const ranked = slice
-    .map((player) => ({ player, distance: Math.abs(gapBetween(player, current, category) - target) }))
-    .sort((a, b) => a.distance - b.distance);
-  return pick(rng, ranked.slice(0, Math.min(5, ranked.length))).player;
+  const closeness = closenessFor(difficulty, round);
+  const hits = from.filter((player) => fitsBand(player, current, category, closeness));
+  if (hits.length > 0) return pick(rng, hits);
+
+  const [low, high] = BANDS[category][closeness];
+  const miss = (player: RosterPlayer) => {
+    const gap = gapBetween(player, current, category);
+    return gap < low ? low - gap : gap - high;
+  };
+  const nearest = [...from].sort((a, b) => miss(a) - miss(b)).slice(0, 3);
+  return pick(rng, nearest);
 }
 
 export interface GameState {
   category: Category;
   difficulty: Difficulty;
-  /** Players not yet shown this run. */
-  queue: RosterPlayer[];
+  /** The run's pool, biggest earner first — the order the fame window is cut from. */
+  ranked: RosterPlayer[];
+  /** Everyone shown this run, so nobody comes round twice. */
+  shown: ReadonlySet<string>;
   current: RosterPlayer;
   challenger: RosterPlayer;
   score: number;
@@ -177,15 +279,16 @@ export interface GameState {
   seed: string;
 }
 
-/** Drops `player` from `queue`. */
-function without(queue: readonly RosterPlayer[], player: RosterPlayer): RosterPlayer[] {
-  return queue.filter((entry) => entry.id !== player.id);
+/** The round being asked: one more than the rounds already scored. */
+export function roundOf(state: GameState): number {
+  return state.score + 1;
 }
 
 /**
- * Starts a run. `players` is the difficulty's pool: the caller narrows the
- * roster to one fame tier first, so a run only compares players of comparable
- * renown.
+ * Starts a run over `players` — the whole roster, or an event's field.
+ *
+ * The level is not a fame tier cut from the roster any more. It is the
+ * schedule above: how fast the fame window opens and how fast the gap closes.
  */
 export function createGame(
   players: readonly RosterPlayer[],
@@ -193,19 +296,21 @@ export function createGame(
   difficulty: Difficulty,
   seed: string = String(Date.now()),
 ): GameState | null {
-  const pool = eligible(players, category);
-  if (pool.length < 2) return null;
+  const ranked = [...eligible(players, category)].sort((a, b) => b.earnings - a.earnings);
+  if (ranked.length < 2) return null;
 
   const rng = makeRng(`${seed}:0`);
-  const shuffled = shuffle(rng, pool);
-  const [current, ...rest] = shuffled;
-  const challenger = chooseChallenger(rest, current, category, difficulty, 0, rng);
+  // Round one's known side comes from the same window as its challenger: top
+  // 20 against top 20.
+  const current = pick(rng, ranked.slice(0, windowFor(difficulty, 1)));
+  const challenger = chooseChallenger(ranked, new Set([current.id]), current, category, difficulty, 1, rng);
   if (!challenger) return null;
 
   return {
     category,
     difficulty,
-    queue: without(rest, challenger),
+    ranked,
+    shown: new Set([current.id, challenger.id]),
     current,
     challenger,
     score: 0,
@@ -258,20 +363,21 @@ export function giveUp(state: GameState): GameState {
 /**
  * Moves to the next pair. The revealed player slides across and becomes the
  * known side, so no player is ever shown twice in a run, and the new challenger
- * is chosen against them at the difficulty the streak has earned.
+ * is chosen for the round the streak has reached.
  */
 export function nextRound(state: GameState): GameState {
   if (state.status !== 'revealed') return state;
-  if (state.queue.length === 0) return { ...state, status: 'cleared' };
 
   const current = state.challenger;
+  const round = roundOf(state);
   const rng = makeRng(`${state.seed}:${state.score}`);
   const challenger = chooseChallenger(
-    state.queue,
+    state.ranked,
+    state.shown,
     current,
     state.category,
     state.difficulty,
-    state.score,
+    round,
     rng,
   );
   // No pair left worth asking about — the run is cleared, not stuck.
@@ -281,7 +387,7 @@ export function nextRound(state: GameState): GameState {
     ...state,
     current,
     challenger,
-    queue: without(state.queue, challenger),
+    shown: new Set(state.shown).add(challenger.id),
     lastAnswer: null,
     status: 'playing',
   };

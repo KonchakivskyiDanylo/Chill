@@ -4,16 +4,54 @@ import { moneyShort } from '@/lib/format';
 /** Pure logic for Guess the Player. */
 
 /**
- * Exact — age and FNCS wins are simply right or wrong. Worth testing because
- * competitive players sit in a narrow age band and FNCS-win counts are small.
- * Direction — arrows plus a proximity band. Earnings always use this style.
+ * Exact — age and the FNCS counts are simply right or wrong. Worth testing
+ * because competitive players sit in a narrow age band and FNCS counts are
+ * small. Direction — arrows on every number. Earnings always use this style.
  */
 export type FeedbackMode = 'exact' | 'direction';
 
 export const MAX_GUESSES = 8;
 
-export type AttributeKey = 'region' | 'country' | 'status' | 'age' | 'earnings' | 'fncsWins';
-export type CellState = 'hit' | 'close' | 'miss';
+/**
+ * Shared tournaments before two players count as having played together.
+ *
+ * One or two is a pickup duo for a cash cup, and it would turn the column
+ * green for pairs nobody would ever call teammates. Ten is a partnership.
+ */
+export const TOGETHER_MIN = 10;
+
+export type AttributeKey =
+  | 'region'
+  | 'country'
+  | 'status'
+  | 'age'
+  | 'earnings'
+  | 'fncsWins'
+  | 'fncsFinals'
+  | 'together';
+
+/**
+ * Green or red, nothing between.
+ *
+ * There was an amber "close" — right region wrong country, within two years,
+ * within 20% of the earnings — and it was taken out. The arrows already say
+ * which way to go, and amber on top of them was a second, vaguer answer to
+ * the same question.
+ */
+export type CellState = 'hit' | 'miss';
+
+/**
+ * What the two newer columns read, when their files have loaded.
+ *
+ * Optional because both files are generated and may be absent — a supported
+ * state everywhere else — and the game still plays on the six roster columns.
+ */
+export interface Extras {
+  /** FNCS grand finals a player has appeared in, from `facts.json`. */
+  fncsFinals?: (playerId: string) => number;
+  /** Tournaments two players entered together, from `teammates.json`. */
+  together?: (a: string, b: string) => number;
+}
 
 export interface AttributeResult {
   key: AttributeKey;
@@ -36,6 +74,7 @@ export interface GameState {
   secret: RosterPlayer;
   rows: GuessRow[];
   status: 'playing' | 'won' | 'lost';
+  extras: Extras;
 }
 
 /**
@@ -44,8 +83,8 @@ export interface GameState {
  * The caller picks, because who comes up next is a rotation question (see
  * `games/shared/rotation.ts`) and the rules of the round are not.
  */
-export function gameFor(secret: RosterPlayer, mode: FeedbackMode): GameState {
-  return { mode, secret, rows: [], status: 'playing' };
+export function gameFor(secret: RosterPlayer, mode: FeedbackMode, extras: Extras = {}): GameState {
+  return { mode, secret, rows: [], status: 'playing', extras };
 }
 
 /**
@@ -65,29 +104,37 @@ function numericResult(
   guessValue: number,
   secretValue: number,
   mode: FeedbackMode,
-  closeWithin: number,
 ): AttributeResult {
   if (guessValue === secretValue) return { key, label, display, state: 'hit' };
   if (mode === 'exact') return { key, label, display, state: 'miss' };
-  return {
-    key,
-    label,
-    display,
-    state: Math.abs(guessValue - secretValue) <= closeWithin ? 'close' : 'miss',
-    direction: secretValue > guessValue ? 'up' : 'down',
-  };
+  return { key, label, display, state: 'miss', direction: secretValue > guessValue ? 'up' : 'down' };
+}
+
+/**
+ * Whether the guess is one of the secret player's regular teammates.
+ *
+ * Green on ten shared tournaments or more — see `TOGETHER_MIN`. A red cell
+ * still prints the count when there is one, because "Only 4" says you are
+ * circling the right duo even when it is not the answer.
+ */
+function togetherResult(guess: RosterPlayer, secret: RosterPlayer, count: number): AttributeResult {
+  const base = { key: 'together' as const, label: 'Played together' };
+  if (guess.id === secret.id) return { ...base, display: '—', state: 'hit' };
+  if (count >= TOGETHER_MIN) return { ...base, display: `${count} events`, state: 'hit' };
+  return { ...base, display: count > 0 ? `Only ${count}` : 'Never', state: 'miss' };
 }
 
 export function compare(
   guess: RosterPlayer,
   secret: RosterPlayer,
   mode: FeedbackMode,
+  extras: Extras = {},
 ): AttributeResult[] {
   const guessAge = guess.age ?? 0;
   const secretAge = secret.age ?? 0;
 
-  // Career earnings always use direction + proximity: exact matching on a
-  // six-figure number would never land.
+  // Career earnings always show a direction: exact matching on a six-figure
+  // number would never land.
   const earnings: AttributeResult =
     guess.earnings === secret.earnings
       ? { key: 'earnings', label: 'Earnings', display: moneyShort(guess.earnings), state: 'hit' }
@@ -95,12 +142,11 @@ export function compare(
           key: 'earnings',
           label: 'Earnings',
           display: moneyShort(guess.earnings),
-          // Within 20% counts as warm.
-          state: Math.abs(guess.earnings - secret.earnings) <= secret.earnings * 0.2 ? 'close' : 'miss',
+          state: 'miss',
           direction: secret.earnings > guess.earnings ? 'up' : 'down',
         };
 
-  return [
+  const out: AttributeResult[] = [
     {
       key: 'region',
       label: 'Region',
@@ -111,9 +157,8 @@ export function compare(
       key: 'country',
       label: 'Country',
       display: guess.countryName ?? '—',
-      // Right region, wrong country is a genuine partial hit.
-      state:
-        guess.country === secret.country ? 'hit' : guess.region === secret.region ? 'close' : 'miss',
+      // The region column beside it already says "right region, wrong country".
+      state: guess.country === secret.country ? 'hit' : 'miss',
     },
     {
       key: 'status',
@@ -121,10 +166,26 @@ export function compare(
       display: guess.status === 'active' ? 'Active' : 'Retired',
       state: (guess.status === 'active') === (secret.status === 'active') ? 'hit' : 'miss',
     },
-    numericResult('age', 'Age', String(guessAge), guessAge, secretAge, mode, 2),
+    numericResult('age', 'Age', String(guessAge), guessAge, secretAge, mode),
     earnings,
-    numericResult('fncsWins', 'FNCS wins', String(guess.fncsWins), guess.fncsWins, secret.fncsWins, mode, 1),
+    numericResult('fncsWins', 'FNCS wins', String(guess.fncsWins), guess.fncsWins, secret.fncsWins, mode),
   ];
+
+  if (extras.fncsFinals) {
+    const guessFinals = extras.fncsFinals(guess.id);
+    out.push(
+      numericResult(
+        'fncsFinals',
+        'FNCS finals',
+        String(guessFinals),
+        guessFinals,
+        extras.fncsFinals(secret.id),
+        mode,
+      ),
+    );
+  }
+  if (extras.together) out.push(togetherResult(guess, secret, extras.together(guess.id, secret.id)));
+  return out;
 }
 
 export function submitGuess(state: GameState, guess: RosterPlayer): GameState {
@@ -132,7 +193,10 @@ export function submitGuess(state: GameState, guess: RosterPlayer): GameState {
   if (state.rows.some((row) => row.player.id === guess.id)) return state;
 
   const correct = guess.id === state.secret.id;
-  const rows = [...state.rows, { player: guess, attributes: compare(guess, state.secret, state.mode), correct }];
+  const rows = [
+    ...state.rows,
+    { player: guess, attributes: compare(guess, state.secret, state.mode, state.extras), correct },
+  ];
   return {
     ...state,
     rows,

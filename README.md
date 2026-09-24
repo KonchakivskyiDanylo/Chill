@@ -32,19 +32,21 @@ export, and the derived files are built by the cells in
 
 | Game | Modes | Notes |
 | --- | --- | --- |
-| Higher or Lower | Age / Career earnings / FNCS wins | Endless, one mistake ends the run, best score in `localStorage`. Hard adds the Equal button. Pairs are chosen so the gap matches a target that narrows with difficulty *and* streak |
+| Higher or Lower | Age / Career earnings / FNCS wins × Easy / Medium / Hard | Endless, one mistake ends the run, best score in `localStorage`. Round one is two of the top 20 earners; each round widens that window (to 250 / 1,000 / everyone) and narrows the gap on a four-rounds-a-step schedule. Only Hard deals ties, and has the Equal button |
 | Fortnitedle | — | 6 guesses, digits are playable characters. Nothing is given away before guess 3; then one digit after 3, a second after 4, the rest by 5 — and a revealed digit turns green on the keyboard |
-| Career Path | Order / Random | 10 clues. Order tells the career as a story (first major, most recent, best of each stretch between); Random draws 10 at random from the whole career |
+| Career Path | Order / Random | 10 clues, picked for a mix of finishes on recognisable stages, spread across the career, never opening on a famous player's signature result, and describing exactly one player wherever the career allows it (a duo partner is ruled out). Order reads them by date, Random in no order |
 | Who Are Ya? | Counts shown / hidden / Random order | Ten clues drawn across up to fifty teammates, number one always among them, revealed fewest-shared first. Needs 3+ teammates and 5+ tournaments on record |
 | Tenaball | ~290 categories × Easy / Hard | Boards answer in players, organisations, countries *or* tournaments. Each states its own tie rule. A tournament board is ten placements, so a duos slot wants both names |
 | List | Easy / Hard | ~180 categories. 90s, +5s per correct answer, −3s per miss on Hard. Naming everyone ends the round as a win |
 | Griefer | All at once / One by one | Ten cards, four to six of which **fit** the rule, and the board never says how many. Cards show the handle only |
-| Tic Tac Toe | Easy / Hard | Type a player; the grid works out which cell they belong in. Easy allows 3 mistakes, Hard gives 9 guesses |
-| Connections | — | 16 players, 4 overlapping groups with one valid split, 4 lives shown as hearts |
-| Guess the Player | Exact / Direction | 6 attributes, 8 guesses |
+| Tic Tac Toe | Easy / Medium / Hard | Type any player; the grid only offers cells that keep the board solvable, and places them itself when there is one. Easy boards have 3+ household names per cell, Medium 2+ regulars; Hard may have one answer and gives 9 guesses |
+| Connections | — | 16 players, 4 overlapping groups with one valid split, 4 lives shown as hearts. No birth-year groups |
+| Guess the Player | Exact / Direction | 8 attributes — including FNCS finals played and "played together" (10+ events as teammates) — green or red, 8 guesses |
 
-Eight of the ten share a **setup step** (`components/PoolSetup`), and it opens
+Six of the ten share a **setup step** (`components/PoolSetup`), and it opens
 closed: Random, or Choose to narrow by region, difficulty and active/retired.
+Higher or Lower and Tic Tac Toe have a single Easy / Medium / Hard instead
+(`LevelSetup`), which sets both who they ask about and how hard they ask.
 Tenaball and List pick a category instead, because that is their whole subject.
 
 Above all of them sits the **event mode** (`games/shared/mode.ts`), chosen on
@@ -73,11 +75,13 @@ likewise unchanged, because local best scores hang off it — a rename touches
 `title` and `slug` only. (Piece Control has been renamed back to Tic Tac Toe,
 which is both its folder and its id.)
 
-Easy / Medium / Hard means two different things across that table. In the
+Easy / Medium / Hard means three different things across that table. In the
 shared setup step it is the **fame ranking** below — how well known the players
 you are asked about are, expressed on each card as the career-earnings band it
-covers. Inside Tenaball, List and Tic Tac Toe it is that game's own mechanical
-setting (lives, time penalties, guess budget) and has nothing to do with fame.
+covers. Inside Tenaball and List it is that game's own mechanical setting
+(lives, time penalties) and has nothing to do with fame. In Higher or Lower and
+Tic Tac Toe it is both at once and the only setting those games have: who the
+game is built around, and how hard it presses.
 Who Are Ya calls its clue orders Counts shown / Counts hidden / Random order
 for the same reason: it has a fame difficulty above them, and two Easys on one
 screen meant two different things.
@@ -224,8 +228,8 @@ Generated puzzles are validated before they are shown, and the games degrade
 gracefully rather than dead-ending:
 
 - Tic Tac Toe boards are only offered if all nine cells can be filled with nine
-  *different* players; during play, a move that would leave another cell
-  unfillable is refused (and costs no mistake) instead of soft-locking.
+  *different* players; during play a player is only ever offered cells that
+  keep that true, so a move can never soft-lock the board.
 - Connections lets its groups overlap — a player who fits two connections is
   the point of the game — and then proves the board has exactly one way to
   split into four connected fours before showing it. It also rejects a board

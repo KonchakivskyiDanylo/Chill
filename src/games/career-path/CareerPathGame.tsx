@@ -36,12 +36,12 @@ const MODES: { id: Mode; label: string; hint: string }[] = [
   {
     id: 'order',
     label: 'Order',
-    hint: 'Ten results telling the career as a story: the first major, the most recent, and the best of each stretch between.',
+    hint: 'Ten results spread across the career and read oldest first, like a story. It never opens on the result that gives the player away.',
   },
   {
     id: 'random',
     label: 'Random',
-    hint: 'Ten results drawn at random from the whole career, in no order. No arc to read — just ten facts.',
+    hint: 'The same kind of ten, in no order at all. No arc to read — just ten facts.',
   },
 ];
 
@@ -81,7 +81,7 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
     }
     writeLocal(key, drawn.seen);
     setError(null);
-    setGame(createGame(drawn.pick, majors.resultsFor(drawn.pick.id), mode));
+    setGame(createGame(drawn.pick, majors.resultsFor(drawn.pick.id), mode, majors));
   }, [players, event, choice, majors, mode]);
 
   const note = <RosterNote what="Results" generated={majors.generated} />;

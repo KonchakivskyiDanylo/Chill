@@ -1,9 +1,7 @@
 .gp-table {
   display: grid;
-  /* Guess, then region / country / status / age / earnings / FNCS. */
-  grid-template-columns: minmax(140px, 1.4fr) repeat(6, minmax(74px, 1fr));
+  /* Columns are set inline: the two optional ones depend on which files loaded. */
   gap: 5px;
-  min-width: 560px;
 }
 
 .gp-th {
@@ -44,11 +42,6 @@
   border-color: rgba(34, 197, 94, 0.5);
   color: var(--success);
 }
-.gp-cell--close {
-  background: rgba(234, 179, 8, 0.2);
-  border-color: rgba(234, 179, 8, 0.45);
-  color: var(--warning);
-}
 .gp-cell--miss {
   background: rgba(239, 68, 68, 0.14);
   border-color: rgba(239, 68, 68, 0.35);
@@ -70,9 +63,6 @@
 }
 .gp-swatch--hit {
   background: rgba(34, 197, 94, 0.6);
-}
-.gp-swatch--close {
-  background: rgba(234, 179, 8, 0.6);
 }
 .gp-swatch--miss {
   background: rgba(239, 68, 68, 0.45);

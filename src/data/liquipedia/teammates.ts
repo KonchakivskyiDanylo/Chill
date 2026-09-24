@@ -67,6 +67,20 @@ export class Teammates {
     }
     return out;
   }
+
+  /**
+   * Tournaments two players entered as teammates, or 0.
+   *
+   * Complete for any count that matters: the file keeps fifty teammates per
+   * player, and nobody's fiftieth has more than nine events with them, so a
+   * pair on ten or more is listed on both sides.
+   */
+  together(a: string, b: string): number {
+    for (const [id, events] of this.byPlayer.get(a) ?? []) {
+      if (id === b) return events;
+    }
+    return 0;
+  }
 }
 
 let cached: Promise<Teammates> | null = null;

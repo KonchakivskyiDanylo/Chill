@@ -80,6 +80,8 @@ export class Majors {
   readonly tournaments: MajorTournament[];
 
   private readonly byPlayer = new Map<string, MajorResult[]>();
+  /** "event|placement" -> everyone who finished exactly there. */
+  private readonly byFinish = new Map<string, Set<string>>();
 
   constructor(payload: RawPayload) {
     this.generated = payload.generated;
@@ -104,7 +106,25 @@ export class Majors {
           // guarantee lives here rather than in a comment upstream.
           .sort((a, b) => (a.tournament.date < b.tournament.date ? -1 : 1)),
       );
+      for (const [index, placement] of player.results) {
+        const key = finishKey(this.tournaments[index].name, placement);
+        let set = this.byFinish.get(key);
+        if (!set) this.byFinish.set(key, (set = new Set()));
+        set.add(player.id);
+      }
     }
+  }
+
+  /**
+   * Everyone who finished exactly where `result` did, its own player included.
+   *
+   * On a duos or trios event that is the whole team, which is the point: a
+   * clue list is only a fair puzzle if it describes one player, and the
+   * teammate who stood beside them on every result is the other player it
+   * could describe.
+   */
+  finishers(result: MajorResult): ReadonlySet<string> {
+    return this.byFinish.get(finishKey(result.tournament.name, result.placement)) ?? new Set();
   }
 
   /** Every major this player reached, oldest first. Empty for anyone not in the file. */
@@ -117,9 +137,20 @@ export class Majors {
    *
    * Passed to `roster.playersFor` as its `eligible` filter, so the difficulty
    * counts are counts of answerable players rather than of the roster.
+   *
+   * Everyone with a record, including the thirteen whose every major was
+   * played beside the same partner — Darm and Demus have the same eight
+   * results, placement for placement. They were left out for a while, because
+   * no clue list can tell them apart. They are back: a wrong guess only costs
+   * a clue, so naming the partner first and then the player is a fine round,
+   * and dropping them made them the one pair nobody would ever be asked about.
    */
   readonly eligible = (players: readonly RosterPlayer[]): RosterPlayer[] =>
     players.filter((player) => this.byPlayer.has(player.id));
+}
+
+function finishKey(event: string, placement: number): string {
+  return `${event}|${placement}`;
 }
 
 let cached: Promise<Majors> | null = null;

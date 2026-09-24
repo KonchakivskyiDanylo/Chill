@@ -88,10 +88,7 @@ export function PoolSetup({
   return (
     <div className="stack">
       {pool ? (
-        <p className="small muted center">
-          Playing the <strong>{pool.label}</strong> field —{' '}
-          {plural(pool.players.length, 'player')}. Change or leave the mode from the header.
-        </p>
+        <FieldNote pools={pools} event={event} />
       ) : (
         <section className="card stack">
           <div className="row-between">
@@ -227,6 +224,79 @@ export function PoolSetup({
         disabled={!canStart}
         onClick={onStart}
       >
+        {startLabel}
+      </button>
+    </div>
+  );
+}
+
+/** Which field is in force, when an event mode is. Renders nothing otherwise. */
+function FieldNote({ pools, event }: { pools: Pools | null; event: string | null }) {
+  const pool = activePool(pools, event);
+  if (!pool) return null;
+  return (
+    <p className="small muted center">
+      Playing the <strong>{pool.label}</strong> field — {plural(pool.players.length, 'player')}.
+      Change or leave the mode from the header.
+    </p>
+  );
+}
+
+export interface LevelOption<T extends string> {
+  id: T;
+  label: ReactNode;
+  hint: ReactNode;
+}
+
+/**
+ * The setup step for a game whose only question is Easy, Medium or Hard.
+ *
+ * Tic Tac Toe and Higher or Lower used to open on `PoolSetup` *and* a rules
+ * card of their own, so a player met two difficulty settings that meant two
+ * different things — the fame band behind Choose, and the game's own rules
+ * below it. Each of those games now folds both into one level, and that level
+ * is the whole form. An event mode still applies: the field note replaces
+ * nothing here, because there was no pool choice to replace.
+ */
+export function LevelSetup<T extends string>({
+  pools,
+  event,
+  levels,
+  value,
+  onChange,
+  extra,
+  onStart,
+  startLabel = 'Start',
+}: {
+  pools: Pools | null;
+  event: string | null;
+  levels: LevelOption<T>[];
+  value: T;
+  onChange: (next: T) => void;
+  /** Game-specific choices (categories) shown between the levels and Start. */
+  extra?: ReactNode;
+  onStart: () => void;
+  startLabel?: string;
+}) {
+  return (
+    <div className="stack">
+      <FieldNote pools={pools} event={event} />
+      <section className="card stack">
+        <div className="card__title">Difficulty</div>
+        <OptionGrid>
+          {levels.map((level) => (
+            <OptionCard
+              key={level.id}
+              label={level.label}
+              hint={level.hint}
+              selected={value === level.id}
+              onClick={() => onChange(level.id)}
+            />
+          ))}
+        </OptionGrid>
+      </section>
+      {extra}
+      <button type="button" className="btn btn--primary btn--lg btn--block" onClick={onStart}>
         {startLabel}
       </button>
     </div>

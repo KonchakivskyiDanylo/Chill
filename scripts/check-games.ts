@@ -23,6 +23,7 @@ import { loadRankings, membersOf } from '@/data/liquipedia/rankings';
 import { deal } from '@/games/shared/rotation';
 import { GAMES, getGame } from '@/games/registry';
 import { buildCriteria, type CriteriaSource } from '@/games/shared/criteria';
+import { makeRng, shuffle } from '@/lib/rng';
 import { matchPlayer, suggestPlayers } from '@/lib/text';
 
 import * as hl from '@/games/higher-lower/engine';
@@ -102,75 +103,78 @@ const teammates = await optional(loadTeammates, 'teammates.json');
 }
 
 // --------------------------------------------------------- 2. Higher or Lower
+// Played perfectly for forty rounds, five runs per level, checking the pairing
+// keeps the promises the schedule makes: it opens on famous names, never
+// leaves the level's cap, never deals a free tie, and once the schedule has
+// reached "close" it never serves an obvious pair — the 1-versus-5 on round
+// thirty that started all this.
 for (const category of ['age', 'earnings', 'fncsWins'] as const) {
+  const ranked = [...hl.eligible(roster.players, category)].sort((a, b) => b.earnings - a.earnings);
+  const rank = new Map(ranked.map((player, index) => [player.id, index + 1]));
   for (const difficulty of ['easy', 'medium', 'hard'] as const) {
-    const pool = roster.playersFor(difficulty, {
-      minimum: 2,
-      eligible: (players) => hl.eligible(players, category),
-    });
-    let state = hl.createGame(pool, category, difficulty, `hl-${category}-${difficulty}`);
-    check(state !== null, `higher-lower: could not start ${category}/${difficulty}`);
-    if (!state) continue;
-
-    // Play a long run with perfect answers and measure the gaps served, which
-    // is the thing the new pairing is supposed to control.
-    const gaps: number[] = [];
-    let ties = 0;
-    let bothZero = 0;
     let rounds = 0;
-    const maxRounds = Math.min(pool.length + 5, 400);
-    while (state.status !== 'cleared' && rounds < maxRounds) {
-      rounds++;
-      gaps.push(hl.gapBetween(state.current, state.challenger, category));
-      if (hl.correctAnswer(state) === 'equal') ties++;
-      if (category === 'fncsWins' && state.current.fncsWins === 0 && state.challenger.fncsWins === 0) {
-        bothZero++;
-      }
-      const truth = hl.correctAnswer(state);
-      const answer = truth === 'equal' && !hl.hasEqualButton(difficulty) ? 'higher' : truth;
-      state = hl.submitAnswer(state, answer);
-      check(state.status !== 'gameover', `higher-lower ${category}/${difficulty}: perfect play lost`);
-      if (state.status === 'gameover') break;
-      state = hl.nextRound(state);
-    }
-    check(rounds > 0, `higher-lower ${category}/${difficulty}: no rounds played`);
-
-    // A round where both players are on nought is not a question — the answer
-    // is always Equal. The pairing is supposed to make those impossible.
-    check(
-      bothZero === 0,
-      `higher-lower ${category}/${difficulty}: ${bothZero} of ${rounds} rounds were nought against nought`,
-    );
-    // And even legitimate ties must not be the whole game.
-    check(
-      ties < rounds * 0.75,
-      `higher-lower ${category}/${difficulty}: ${ties} of ${rounds} rounds were ties`,
-    );
-    if (category === 'fncsWins') {
-      notes.push(`higher-lower fncsWins/${difficulty}: ${ties} ties in ${rounds} rounds`);
-    }
-
-    /*
-     * The gap should trend down as the streak grows — that is the whole point.
-     *
-     * Measured over the first thirty rounds rather than the whole oracle run,
-     * because thirty is already a very good session and the run above is not
-     * one: it plays perfectly until the pool is exhausted. FNCS Wins has only
-     * 284 title-holders in 5,678 players, so a 340-round run genuinely runs
-     * out of pairs and has to start serving wide ones. Nobody reaches that,
-     * and measuring it would be measuring the oracle, not the game.
-     */
-    if (gaps.length >= 30) {
-      const early = gaps.slice(0, 10).reduce((a, b) => a + b, 0) / 10;
-      const later = gaps.slice(20, 30).reduce((a, b) => a + b, 0) / 10;
-      notes.push(
-        `higher-lower ${category}/${difficulty}: ${rounds} rounds, gap ${early.toFixed(2)} → ${later.toFixed(2)} by round 30`,
-      );
+    let onSchedule = 0;
+    let ties = 0;
+    let deepest = 0;
+    for (let run = 0; run < 5; run++) {
+      let state = hl.createGame(roster.players, category, difficulty, `hl-${category}-${difficulty}-${run}`);
+      check(state !== null, `higher-lower: could not start ${category}/${difficulty}`);
+      if (!state) continue;
       check(
-        later <= early + 0.08,
-        `higher-lower ${category}/${difficulty}: pairs got easier over the first 30 rounds (${early.toFixed(2)} → ${later.toFixed(2)})`,
+        (rank.get(state.current.id) ?? Infinity) <= 20 && (rank.get(state.challenger.id) ?? Infinity) <= 20,
+        `higher-lower ${category}/${difficulty}: round one was not top 20 against top 20`,
       );
+
+      while (state.status === 'playing' && hl.roundOf(state) <= 40) {
+        const round = hl.roundOf(state);
+        const scheduled = hl.closenessFor(difficulty, round);
+        const where = `${category}/${difficulty} run ${run} round ${round}`;
+        rounds++;
+        if (hl.fitsBand(state.current, state.challenger, category, scheduled)) onSchedule++;
+        deepest = Math.max(deepest, rank.get(state.challenger.id) ?? Infinity);
+
+        check(
+          (rank.get(state.challenger.id) ?? Infinity) <= hl.WINDOW[difficulty].cap,
+          `higher-lower ${where}: ${state.challenger.name} is outside the level's cap`,
+        );
+        const truth = hl.correctAnswer(state);
+        if (truth === 'equal') ties++;
+        check(
+          truth !== 'equal' || hl.hasEqualButton(difficulty),
+          `higher-lower ${where}: dealt a tie with no Equal button`,
+        );
+        if (category === 'fncsWins') {
+          check(
+            state.current.fncsWins > 0 || state.challenger.fncsWins > 0,
+            `higher-lower ${where}: nought against nought`,
+          );
+        }
+        if (category !== 'fncsWins' && (scheduled === 'close' || scheduled === 'very-close')) {
+          check(
+            !hl.fitsBand(state.current, state.challenger, category, 'obvious'),
+            `higher-lower ${where}: served an obvious pair`,
+          );
+        }
+
+        state = hl.submitAnswer(state, truth);
+        check(state.status !== 'gameover', `higher-lower ${where}: perfect play lost`);
+        if (state.status === 'gameover') break;
+        state = hl.nextRound(state);
+      }
     }
+    const share = onSchedule / Math.max(rounds, 1);
+    notes.push(
+      `higher-lower ${category}/${difficulty}: ${rounds} rounds, ${Math.round(share * 100)}% in the ` +
+        `scheduled band, deepest challenger #${deepest}, ${ties} ties`,
+    );
+    // FNCS Wins runs on small integers and a few hundred title-holders, so its
+    // bands are often unreachable and the nearest miss stands in — measured,
+    // not held to a number.
+    if (category !== 'fncsWins') {
+      check(share >= 0.7, `higher-lower ${category}/${difficulty}: only ${Math.round(share * 100)}% on schedule`);
+    }
+    // Legitimate ties must still not be the whole game.
+    check(ties < rounds * 0.5, `higher-lower ${category}/${difficulty}: ${ties} of ${rounds} rounds were ties`);
   }
 }
 
@@ -233,60 +237,117 @@ for (const category of ['age', 'earnings', 'fncsWins'] as const) {
 }
 
 // ------------------------------------------------------------ 4. Career Path
+// Every answerable player, both modes, two seeds each. What is asserted is
+// what the clue picker promises: the ten describe one player and nobody else,
+// the opening never hands over a signature result for a known name, Order
+// reads by date, and a hand is never five of the same finish.
 if (majors) {
   const answerable = majors.eligible(roster.players);
   check(answerable.length > 0, 'career-path: nobody is answerable');
-  notes.push(`career-path: ${answerable.length} answerable, ${majors.tournaments.length} majors`);
+  // Players whose whole record a partner shares. No hand can tell them apart,
+  // so they are held to everything below except describing one player.
+  const twinned = new Set(
+    answerable
+      .filter((p) => career.alsoFits(majors.resultsFor(p.id), p.id, majors).size > 0)
+      .map((p) => p.id),
+  );
+  notes.push(
+    `career-path: ${answerable.length} answerable, ${twinned.size} of them share a partner's whole ` +
+      `record, ${majors.tournaments.length} majors`,
+  );
+  const guard = { easy: 3, medium: 2, hard: 0 } as const;
 
   for (const mode of ['order', 'random'] as const) {
-    let longest = 0;
-    for (const secret of answerable.slice(0, 200)) {
+    let hands = 0;
+    let bands = 0;
+    let samey = 0;
+    let varied = 0;
+    let long = 0;
+    for (const secret of answerable) {
       const results = majors.resultsFor(secret.id);
-      const game = career.createGame(secret, results, mode, `cp-${mode}-${secret.id}`);
-      check(game !== null, `career-path: could not start on ${secret.name}`);
-      if (!game) continue;
-      check(
-        game.clues.length <= career.MAX_CLUES,
-        `career-path: ${secret.name} got ${game.clues.length} clues, max is ${career.MAX_CLUES}`,
+      const [first, second] = ['a', 'b'].map((seed) =>
+        career.createGame(secret, results, mode, majors, `cp-${mode}-${seed}-${secret.id}`),
       );
-      // A correct guess turns the rest of the clue list face up, and records
-      // how many were actually needed.
-      const solved = career.submitGuess(game, secret);
-      check(solved.status === 'won', `career-path: correct guess did not win on ${secret.name}`);
-      check(
-        solved.revealed === game.clues.length,
-        `career-path: winning on ${secret.name} left ${solved.revealed}/${game.clues.length} clues hidden`,
-      );
-      check(
-        solved.earned <= solved.revealed,
-        `career-path: ${secret.name} earned more clues than were revealed`,
-      );
-      longest = Math.max(longest, game.clues.length);
+      if (!first || !second) {
+        check(false, `career-path: could not start on ${secret.name}`);
+        continue;
+      }
+      for (const game of [first, second]) {
+        hands++;
+        const clues = game.clues.map((clue) => clue.result);
+        check(clues.length <= career.MAX_CLUES, `career-path: ${secret.name} got ${clues.length} clues`);
+        check(
+          clues.length === Math.min(career.MAX_CLUES, results.length),
+          `career-path: ${secret.name} got ${clues.length} clues from ${results.length} results`,
+        );
 
-      if (mode === 'order') {
-        // The story must open on the first major and close on the last.
+        const others = career.alsoFits(clues, secret.id, majors);
         check(
-          game.clues[0].result.tournament.date === results[0].tournament.date,
-          `career-path: ${secret.name}'s story does not open on their first major`,
+          others.size === 0 || twinned.has(secret.id),
+          `career-path ${mode}: ${secret.name}'s clues also describe ${[...others].slice(0, 2).join(', ')}`,
         );
-        check(
-          game.clues[game.clues.length - 1].result.tournament.date ===
-            results[results.length - 1].tournament.date,
-          `career-path: ${secret.name}'s story does not close on their most recent major`,
-        );
-        // …and run in order.
-        for (let i = 1; i < game.clues.length; i++) {
+
+        // A known name never opens on the result that gives them away — as far
+        // as the career has ordinary results to open on instead.
+        const ordinary = clues.filter((clue) => !career.isSignature(clue)).length;
+        const opening = Math.min(guard[secret.tier], ordinary);
+        if (results.length > career.MAX_CLUES || mode === 'random') {
           check(
-            game.clues[i - 1].result.tournament.date <= game.clues[i].result.tournament.date,
-            `career-path: ${secret.name}'s story is out of order at clue ${i}`,
+            clues.slice(0, opening).every((clue) => !career.isSignature(clue)),
+            `career-path ${mode}: ${secret.name} opens on a signature result`,
           );
         }
-      }
 
-      // A correct guess on the first clue wins.
-      check(career.submitGuess(game, secret).status === 'won', `career-path: correct guess did not win`);
+        if (mode === 'order') {
+          for (let i = 1; i < clues.length; i++) {
+            check(
+              clues[i - 1].tournament.date <= clues[i].tournament.date,
+              `career-path: ${secret.name}'s story is out of order at clue ${i}`,
+            );
+          }
+        }
+
+        bands += new Set(clues.map((clue) => career.finishBand(clue.placement))).size;
+        const same = Math.max(
+          ...[...new Set(clues.map((clue) => clue.placement))].map(
+            (place) => clues.filter((clue) => clue.placement === place).length,
+          ),
+        );
+        // Only a hand with a choice counts: a five-major career of five wins
+        // is what it is.
+        if (same >= 5 && results.length > career.MAX_CLUES) samey++;
+
+        const solved = career.submitGuess(game, secret);
+        check(solved.status === 'won', `career-path: correct guess did not win on ${secret.name}`);
+        check(
+          solved.revealed === game.clues.length,
+          `career-path: winning on ${secret.name} left ${solved.revealed}/${game.clues.length} clues hidden`,
+        );
+      }
+      if (results.length > 15) {
+        long++;
+        const key = (game: career.GameState) =>
+          game.clues.map((clue) => clue.result.tournament.name).sort().join('|');
+        if (key(first) !== key(second)) varied++;
+      }
     }
-    notes.push(`career-path ${mode}: longest clue list ${longest}`);
+    check(samey === 0, `career-path ${mode}: ${samey} hands repeat one placement five times`);
+    notes.push(
+      `career-path ${mode}: ${hands} hands, ${(bands / Math.max(hands, 1)).toFixed(1)} finish bands each, ` +
+        `${varied}/${long} long careers dealt a different hand on a second meeting`,
+    );
+  }
+
+  // The round the old picker served: Bugha opening on the World Cup.
+  const bugha = answerable.find((p) => p.name === 'Bugha');
+  if (bugha) {
+    const game = career.createGame(bugha, majors.resultsFor(bugha.id), 'order', majors, 'bugha');
+    const opening = game?.clues[0]?.result;
+    notes.push(`career-path: Bugha's Order path opens on ${opening?.tournament.shortName} (${opening?.placement})`);
+    check(
+      !opening?.tournament.name.startsWith('Fortnite World Cup'),
+      "career-path: Bugha's path still opens on the World Cup",
+    );
   }
 }
 
@@ -465,51 +526,111 @@ if (facts && orgs) {
   check(grieferOk >= 50, `griefer: only ${grieferOk} of 60 seeds produced a board`);
 
   // ---- Tic Tac Toe
-  let boards = 0;
-  for (let seed = 0; seed < 40; seed++) {
-    const board = ttt.generateBoard(source, `t-${seed}`);
-    if (!board) continue;
-    boards++;
-    let game = ttt.createGame(board, 'easy');
-
-    // Fill it by always submitting a player the grid can place, which exercises
-    // the auto-placement path rather than the explicit one.
-    for (let step = 0; step < 40 && game.filled.size < 9; step++) {
-      const used = new Set([...game.filled.values()].map((p) => p.id));
-      let placed = false;
-      for (let r = 0; r < ttt.SIZE && !placed; r++) {
-        for (let c = 0; c < ttt.SIZE && !placed; c++) {
-          if (game.filled.has(ttt.cellKey(r, c))) continue;
-          for (const candidate of board.candidates[r][c]) {
-            if (used.has(candidate.id)) continue;
-            const result = ttt.submit(game, candidate);
-            if (result.outcome.kind === 'placed') {
-              game = result.state;
-              placed = true;
-              break;
-            }
-            if (result.outcome.kind === 'choose') {
-              const cell = result.outcome.cells[0];
-              const forced = ttt.place(game, cell, candidate);
-              if (forced.outcome.kind === 'placed') {
-                game = forced.state;
-                placed = true;
-                break;
-              }
-            }
-          }
+  // Built the way the game builds it: the board around one level's fame band,
+  // the guess box open to the whole roster.
+  const bands = { easy: ['easy'], medium: ['easy', 'medium'], hard: ['easy', 'medium', 'hard'] } as const;
+  for (const difficulty of ['easy', 'medium', 'hard'] as const) {
+    const answers = bands[difficulty].flatMap((band) =>
+      roster.exactly(band, { eligible: facts.eligible(3) }),
+    );
+    const pools = { answers, accepted: roster.players };
+    const answerIds = new Set(answers.map((p) => p.id));
+    let boards = 0;
+    let offers = 0;
+    let autoPlaced = 0;
+    // Placed players from outside the level's band. The band builds the board;
+    // it must never decide who you are allowed to answer with.
+    let outsiders = 0;
+    for (let seed = 0; seed < 25; seed++) {
+      const board = ttt.generateBoard({ facts, orgs }, pools, difficulty, `t-${difficulty}-${seed}`);
+      if (!board) continue;
+      boards++;
+      // The level's promise: enough answers from its own band in every cell.
+      for (const row of board.candidates) {
+        for (const cell of row) {
+          const known = cell.filter((p) => answerIds.has(p.id)).length;
+          check(
+            known >= ttt.LEVELS[difficulty].answers,
+            `tic-tac-toe ${difficulty}: board ${seed} has a cell with ${known} answers from its band`,
+          );
         }
       }
-      if (!placed) break;
+
+      // Play it in a scrambled order, submitting whoever fits some empty cell.
+      // This is the path that used to dead-end: a player offered two cells,
+      // one of which stranded a third.
+      let game = ttt.createGame(board, difficulty);
+      // One pass is enough: a cell only ever closes, so anyone who fits an
+      // open cell now was offered it on their turn.
+      const order = shuffle(makeRng(`t-order-${seed}`), board.candidates.flat(2));
+      for (const candidate of order) {
+        if (game.status !== 'playing') break;
+        if ([...game.filled.values()].some((p) => p.id === candidate.id)) continue;
+        const open = board.rows.some((row, r) =>
+          board.cols.some(
+            (col, c) => !game.filled.has(ttt.cellKey(r, c)) && row.test(candidate) && col.test(candidate),
+          ),
+        );
+        if (!open) continue;
+        const result = ttt.submit(game, candidate);
+        check(
+          result.outcome.kind !== 'deadlock',
+          `tic-tac-toe ${difficulty}: board ${seed} refused ${candidate.name}, who fits an open cell`,
+        );
+        if (result.outcome.kind === 'placed') {
+          autoPlaced++;
+          if (!answerIds.has(candidate.id)) outsiders++;
+          game = result.state;
+        } else if (result.outcome.kind === 'choose') {
+          offers++;
+          // Every offered cell has to be one the move can actually go to.
+          for (const cell of result.outcome.cells) {
+            const tried = ttt.place(game, cell, candidate);
+            check(
+              tried.outcome.kind === 'placed',
+              `tic-tac-toe ${difficulty}: board ${seed} offered ${candidate.name} a cell that strands another`,
+            );
+          }
+          game = ttt.place(game, result.outcome.cells[0], candidate).state;
+          if (!answerIds.has(candidate.id)) outsiders++;
+        }
+      }
+      check(
+        game.status === 'won',
+        `tic-tac-toe ${difficulty}: board ${seed} could not be completed (${game.filled.size}/9)`,
+      );
+      check(game.mistakes === 0, `tic-tac-toe ${difficulty}: board ${seed} charged a mistake on perfect play`);
     }
-    check(game.status === 'won', `tic-tac-toe: board ${seed} could not be completed (${game.filled.size}/9)`);
-    check(game.mistakes === 0, `tic-tac-toe: board ${seed} charged ${game.mistakes} mistakes on perfect play`);
+    check(boards >= 22, `tic-tac-toe ${difficulty}: only ${boards} of 25 seeds produced a board`);
+    if (difficulty !== 'hard') {
+      check(outsiders > 0, `tic-tac-toe ${difficulty}: nobody from outside the band was ever placed`);
+    }
+    notes.push(
+      `tic-tac-toe ${difficulty}: ${boards}/25 boards over a ${answers.length}-player band, ` +
+        `${autoPlaced} placed by typing alone, ${offers} asked which cell, ` +
+        `${outsiders} placed from outside the band`,
+    );
   }
-  check(boards >= 35, `tic-tac-toe: only ${boards} of 40 seeds produced a board`);
+
+  // Nobody reads "won in Europe" off a Globals any more.
+  {
+    const all = buildCriteria({ players: roster.players, facts, orgs }, { minMatches: 1, maxShare: 1 });
+    const eu = all.find((criterion) => criterion.id === 'won-fncs:Europe');
+    const cooper = roster.players.find((p) => p.name === 'Cooper' && facts.of(p.id).wins.global > 0);
+    check(Boolean(eu), 'criteria: no "Won EU FNCS" rule');
+    if (eu && cooper) {
+      check(!eu.test(cooper), 'criteria: Cooper counts as an EU FNCS winner for the Copenhagen Globals');
+    }
+  }
+
+  const easyPools = {
+    answers: roster.exactly('easy', { eligible: facts.eligible(3) }),
+    accepted: roster.players,
+  };
 
   // A player who fits nothing must be rejected, not placed.
   {
-    const board = ttt.generateBoard(source, 'reject');
+    const board = ttt.generateBoard({ facts, orgs }, easyPools, 'easy', 'reject');
     if (board) {
       const game = ttt.createGame(board, 'easy');
       const misfit = players.find(
@@ -524,7 +645,7 @@ if (facts && orgs) {
 
   // Hard must end the board once nine guesses cannot fill nine cells.
   {
-    const board = ttt.generateBoard(source, 'hard');
+    const board = ttt.generateBoard({ facts, orgs }, easyPools, 'hard', 'hard');
     if (board) {
       let game = ttt.createGame(board, 'hard');
       const misfit = players.find(
@@ -593,11 +714,21 @@ if (facts && orgs) {
   check(pool.length > 0, 'guess-the-player: nobody is answerable');
   notes.push(`guess-the-player: ${pool.length} answerable`);
 
+  const extras: gtp.Extras = {
+    fncsFinals: facts ? (id) => facts.of(id).fncsApps : undefined,
+    together: teammates ? (a, b) => teammates.together(a, b) : undefined,
+  };
+  const columns = 6 + (facts ? 1 : 0) + (teammates ? 1 : 0);
+
   for (const mode of ['exact', 'direction'] as const) {
     const drawn = deal(pool, [], `gtp-${mode}`);
     if (!drawn) continue;
-    const game = gtp.gameFor(drawn.pick, mode);
+    const game = gtp.gameFor(drawn.pick, mode, extras);
     const won = gtp.submitGuess(game, drawn.pick);
+    check(
+      won.rows[0].attributes.length === columns,
+      `guess-the-player: ${won.rows[0].attributes.length} columns, expected ${columns}`,
+    );
     check(won.status === 'won', `guess-the-player: the correct guess did not win in ${mode}`);
     check(
       won.rows[0].attributes.every((attribute) => attribute.state === 'hit'),
@@ -607,6 +738,30 @@ if (facts && orgs) {
       won.rows[0].attributes.some((attribute) => attribute.key === 'status'),
       'guess-the-player: no status column',
     );
+  }
+
+  // Played together: a duo that has entered 100+ events is green both ways, a
+  // pair that never has is red — and nothing is ever amber any more.
+  if (teammates) {
+    const peterbot = pool.find((p) => p.name === 'Peterbot');
+    const pollo = pool.find((p) => p.name === 'Pollo');
+    if (peterbot && pollo) {
+      const cell = (guess: RosterPlayer, secret: RosterPlayer) =>
+        gtp.compare(guess, secret, 'direction', extras).find((a) => a.key === 'together');
+      notes.push(`guess-the-player: Pollo on Peterbot reads "${cell(pollo, peterbot)?.display}"`);
+      check(cell(pollo, peterbot)?.state === 'hit', 'guess-the-player: Pollo is not green on Peterbot');
+      check(cell(peterbot, pollo)?.state === 'hit', 'guess-the-player: Peterbot is not green on Pollo');
+      const stranger = pool.find((p) => teammates.together(p.id, peterbot.id) === 0 && p.id !== peterbot.id);
+      if (stranger) {
+        check(cell(stranger, peterbot)?.state === 'miss', `guess-the-player: ${stranger.name} is green on Peterbot`);
+      }
+    }
+  }
+  for (const secret of pool.slice(0, 50)) {
+    for (const guess of pool.slice(50, 70)) {
+      const states = gtp.compare(guess, secret, 'direction', extras).map((a) => a.state as string);
+      check(!states.includes('close'), 'guess-the-player: a cell came back amber');
+    }
   }
 
   // Running out of guesses must lose.

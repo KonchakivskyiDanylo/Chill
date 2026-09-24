@@ -1,5 +1,5 @@
 import type { RosterPlayer } from '@/data/liquipedia/roster';
-import { makeRng, sample, shuffle } from '@/lib/rng';
+import { makeRng, sample } from '@/lib/rng';
 import {
   buildCriteria,
   hasNestedPair,
@@ -12,20 +12,58 @@ import {
 /** Pure logic for the 3x3 grid game. */
 
 export const SIZE = 3;
-/** Easy allows this many wrong answers. Hard allows none — see `Difficulty`. */
+/** Easy and Medium allow this many wrong answers. Hard counts guesses instead. */
 export const MAX_MISTAKES = 3;
 /** Hard gives exactly one guess per cell, so every one has to land. */
 export const HARD_GUESSES = SIZE * SIZE;
 /** How many candidate boards to try per pass. */
 const GENERATION_ATTEMPTS = 600;
 
-export type Difficulty = 'easy' | 'hard';
+/**
+ * The one setting the game has.
+ *
+ * It used to have two — a fame band from the shared pool picker and an
+ * Easy/Hard ruleset under it — and the fame band did something no player would
+ * guess: it also narrowed who you could *type*. On Hard the search box held
+ * only the four thousand least-known players, so naming Bugha for a cell he
+ * obviously fits was impossible. Now the level decides what the board is
+ * built around and how forgiving the rules are, and any valid player is
+ * accepted at every level.
+ */
+export type Difficulty = 'easy' | 'medium' | 'hard';
+
+/**
+ * What a board at each level promises.
+ *
+ * `answers` is how many players from the level's fame band every cell must
+ * have — three household names per cell on Easy, so there is always one you
+ * know, and a single answer from anywhere on Hard.
+ */
+export const LEVELS: Record<Difficulty, { answers: number }> = {
+  easy: { answers: 3 },
+  medium: { answers: 2 },
+  hard: { answers: 1 },
+};
 
 export interface Board {
   rows: PlayerCriterion[];
   cols: PlayerCriterion[];
-  /** Valid players per cell, indexed [row][col]. */
+  /**
+   * Every accepted player per cell, indexed [row][col], biggest earner first.
+   *
+   * Drawn from the whole accepted pool rather than the fame band the board was
+   * built around, because it is what `canComplete` reasons over: a board that
+   * only knew the famous answers would refuse moves an obscure answer makes
+   * perfectly safe.
+   */
   candidates: RosterPlayer[][][];
+}
+
+export interface BoardPools {
+  /** The fame band the board is built around — every cell has answers here. */
+  answers: readonly RosterPlayer[];
+  /** Everyone the guess box accepts. */
+  accepted: readonly RosterPlayer[];
 }
 
 export interface GameState {
@@ -42,17 +80,46 @@ export interface GameState {
 export const cellKey = (row: number, col: number) => `${row},${col}`;
 
 /**
- * Builds a board whose every cell has at least one valid player AND where all
- * nine cells can be filled with nine *different* players — otherwise the
- * "each player once" rule could make a generated board unwinnable.
+ * Builds a board whose every cell has enough answers from the level's fame
+ * band AND where all nine cells can be filled with nine *different* players —
+ * otherwise the "each player once" rule could make a generated board
+ * unwinnable.
+ *
+ * The rules are built against `pools.answers`, so "has played for FaZe" on an
+ * Easy board is a question about the famous FaZe players, and the guess box
+ * then takes anyone in `pools.accepted` who fits.
  */
-export function generateBoard(source: CriteriaSource, seed: string = String(Date.now())): Board | null {
-  const pool = buildCriteria(source, { minMatches: 5, maxShare: 0.45 });
+export function generateBoard(
+  source: Omit<CriteriaSource, 'players'>,
+  pools: BoardPools,
+  difficulty: Difficulty,
+  seed: string = String(Date.now()),
+): Board | null {
+  const pool = buildCriteria({ ...source, players: pools.answers }, { minMatches: 5, maxShare: 0.45 });
   if (pool.length < SIZE * 2) return null;
 
   // Prefer a varied, non-redundant board; fall back to any solvable one rather
-  // than showing the player an error.
-  return attemptBoards(pool, seed, true) ?? attemptBoards(pool, `${seed}:relaxed`, false);
+  // than showing the player an error. A small field — an event mode on Easy —
+  // may not have three answers per cell anywhere, and a board with two beats
+  // "cannot start".
+  for (let answers = LEVELS[difficulty].answers; answers >= 1; answers--) {
+    const found =
+      attemptBoards(pool, seed, true, answers) ??
+      attemptBoards(pool, `${seed}:relaxed`, false, answers);
+    if (found) return { ...found, candidates: acceptedPerCell(found, pools.accepted) };
+  }
+  return null;
+}
+
+/** Everyone in `accepted` who fits each cell, biggest earner first. */
+function acceptedPerCell(
+  board: Pick<Board, 'rows' | 'cols'>,
+  accepted: readonly RosterPlayer[],
+): RosterPlayer[][][] {
+  const ranked = [...accepted].sort((a, b) => b.earnings - a.earnings);
+  return board.rows.map((row) =>
+    board.cols.map((col) => ranked.filter((player) => row.test(player) && col.test(player))),
+  );
 }
 
 /**
@@ -70,7 +137,12 @@ export function generateBoard(source: CriteriaSource, seed: string = String(Date
  * and the only check left to fail is whether nine *different* players can fill
  * it.
  */
-function attemptBoards(pool: PlayerCriterion[], seed: string, strict: boolean): Board | null {
+function attemptBoards(
+  pool: PlayerCriterion[],
+  seed: string,
+  strict: boolean,
+  answers: number,
+): Board | null {
   const rng = makeRng(seed);
 
   for (let attempt = 0; attempt < GENERATION_ATTEMPTS; attempt++) {
@@ -97,6 +169,7 @@ function attemptBoards(pool: PlayerCriterion[], seed: string, strict: boolean): 
     const candidates: RosterPlayer[][][] = rows.map((row) =>
       cols.map((col) => intersect(row, col)),
     );
+    if (candidates.some((line) => line.some((cell) => cell.length < answers))) continue;
     if (!hasDistinctSolution(candidates)) continue;
 
     return { rows, cols, candidates };
@@ -196,28 +269,30 @@ function fittingCells(state: GameState, player: RosterPlayer): Cell[] {
 }
 
 /**
- * Cells where this player is the *only* remaining valid answer.
- *
- * This is what makes typing a name feel like it reads your mind. Put "World
- * Cup winner × United States" and "North America × FNCS winner" on the same
- * board and type Bugha: he fits both, but he is the only person alive who fits
- * the first, so that is obviously where he is meant to go. Sending him there
- * without asking is right, and asking would be faintly insulting.
- */
-function soleCells(state: GameState, player: RosterPlayer, fits: Cell[]): Cell[] {
-  const used = new Set([...state.filled.values()].map((entry) => entry.id));
-  return fits.filter(({ row, col }) => {
-    const options = state.board.candidates[row][col].filter((entry) => !used.has(entry.id));
-    return options.length === 1 && options[0].id === player.id;
-  });
-}
-
-/**
  * Submits a typed player and resolves where they go.
  *
  * The board no longer asks you to pick a cell first. You name a player and the
  * grid works out where they belong, because in all but a handful of cases
  * there is only one answer to that and making someone click it was busywork.
+ *
+ * The cells a player is offered are the ones they fit *and* that leave every
+ * other empty cell still fillable with players nobody has used. That second
+ * test used to run after you chose: Koyota fitted two cells, you were asked
+ * which, and the one you tapped was refused with "would leave another cell
+ * impossible" — a question with a wrong answer the game already knew. A cell
+ * that strands another is now never offered, so when only one cell is safe
+ * the player goes straight there.
+ *
+ * That also covers what the old sole-answer rule did: if you are the last
+ * person who fits a cell, putting you anywhere else strands it, so that cell
+ * is the only safe one.
+ *
+ * A player who fits always has at least one safe cell. The board is
+ * completable before the move, so some assignment fills every empty cell with
+ * distinct players. If it uses this player, the cell it gives them is safe; if
+ * it does not, every cell they fit is, because they can take that cell's
+ * place in it. `deadlock` is kept as the guard on `place`, not as a path play
+ * reaches.
  */
 export function submit(
   state: GameState,
@@ -232,11 +307,16 @@ export function submit(
   const fits = fittingCells(state, player);
   if (fits.length === 0) return { state: charge(state, false), outcome: { kind: 'rejected' } };
 
-  const sole = soleCells(state, player, fits);
-  const target = sole.length > 0 ? sole[0] : fits.length === 1 ? fits[0] : null;
-  if (!target) return { state, outcome: { kind: 'choose', cells: fits } };
+  const safe = fits.filter((cell) => keepsBoardWinnable(state, cell, player));
+  if (safe.length === 0) return { state, outcome: { kind: 'deadlock', cell: fits[0] } };
+  if (safe.length === 1) return place(state, safe[0], player);
+  return { state, outcome: { kind: 'choose', cells: safe } };
+}
 
-  return place(state, target, player);
+/** Whether every other empty cell can still be filled once `player` sits in `cell`. */
+function keepsBoardWinnable(state: GameState, cell: Cell, player: RosterPlayer): boolean {
+  const filled = new Map(state.filled).set(cellKey(cell.row, cell.col), player);
+  return filled.size === SIZE * SIZE || canComplete(state.board.candidates, filled);
 }
 
 /**
@@ -249,14 +329,13 @@ export function place(
   cell: Cell,
   player: RosterPlayer,
 ): { state: GameState; outcome: Submission } {
-  const filled = new Map(state.filled).set(cellKey(cell.row, cell.col), player);
-
-  // The player is valid here, but spending them here can leave another cell
-  // with nobody left. Refuse the move rather than soft-locking a board that was
-  // generated as winnable — and do not charge a guess for it.
-  if (filled.size < SIZE * SIZE && !canComplete(state.board.candidates, filled)) {
+  // `submit` only ever offers safe cells, so this guards the export rather
+  // than a path play can reach: a move that strands another cell is refused,
+  // and it costs nothing.
+  if (!keepsBoardWinnable(state, cell, player)) {
     return { state, outcome: { kind: 'deadlock', cell } };
   }
+  const filled = new Map(state.filled).set(cellKey(cell.row, cell.col), player);
 
   const next = charge({ ...state, filled }, true);
   return {
@@ -268,15 +347,15 @@ export function place(
 /**
  * Books a guess and ends the round if it was the last one available.
  *
- * Easy counts mistakes and forgives three. Hard counts guesses and gives
- * exactly nine — one per cell — so a wrong answer is not punished separately,
- * it simply costs a cell you can no longer fill.
+ * Easy and Medium count mistakes and forgive three. Hard counts guesses and
+ * gives exactly nine — one per cell — so a wrong answer is not punished
+ * separately, it simply costs a cell you can no longer fill.
  */
 function charge(state: GameState, correct: boolean): GameState {
   const guesses = state.guesses + 1;
   const mistakes = state.mistakes + (correct ? 0 : 1);
   const out = { ...state, guesses, mistakes };
-  if (state.difficulty === 'easy') {
+  if (state.difficulty !== 'hard') {
     return mistakes >= MAX_MISTAKES ? { ...out, status: 'lost' } : out;
   }
   // Hard: nine guesses total, and every unfilled cell needs one of them.
@@ -289,9 +368,14 @@ export function giveUp(state: GameState): GameState {
   return state.status === 'playing' ? { ...state, status: 'lost' } : state;
 }
 
-/** A few valid answers per empty cell, for the reveal after a loss. */
+/**
+ * A few valid answers per empty cell, for the reveal after a loss.
+ *
+ * The biggest earners rather than a random three: the reveal is where you
+ * learn the answer you should have known, and three at random from a cell with
+ * three hundred players in it were nearly always three nobody had heard of.
+ */
 export function solutionFor(state: GameState, row: number, col: number): RosterPlayer[] {
   const usedIds = new Set([...state.filled.values()].map((player) => player.id));
-  const options = state.board.candidates[row][col].filter((player) => !usedIds.has(player.id));
-  return shuffle(makeRng(`${row}:${col}`), options).slice(0, 3);
+  return state.board.candidates[row][col].filter((player) => !usedIds.has(player.id)).slice(0, 3);
 }
