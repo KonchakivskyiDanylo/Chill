@@ -266,6 +266,12 @@ export function isNested(a: PlayerCriterion, b: PlayerCriterion, share = 1): boo
   return inside >= small.matches.length * share;
 }
 
+/**
+ * How much of one criterion may sit inside another before the pair is
+ * redundant — nine in ten. Tic Tac Toe and Connections both hold to it.
+ */
+export const NEAR_NESTED = 0.9;
+
 /** No pair among the given criteria may imply another — or nearly, below `share` 1. */
 export function hasNestedPair(criteria: PlayerCriterion[], share = 1): boolean {
   for (let i = 0; i < criteria.length; i++) {

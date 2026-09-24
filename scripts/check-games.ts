@@ -23,7 +23,13 @@ import { loadRankings, membersOf } from '@/data/liquipedia/rankings';
 import { deal, dealWeighted } from '@/games/shared/rotation';
 import { DEFAULT_POOL, RANDOM_MIX } from '@/games/shared/pool';
 import { GAMES, getGame } from '@/games/registry';
-import { buildCriteria, type CriteriaSource } from '@/games/shared/criteria';
+import {
+  buildCriteria,
+  hasNestedPair,
+  NEAR_NESTED,
+  type CriteriaSource,
+  type PlayerCriterion,
+} from '@/games/shared/criteria';
 import { makeRng, shuffle } from '@/lib/rng';
 import { aggregate } from '@/analytics/aggregate';
 import {
@@ -738,6 +744,14 @@ if (facts && orgs) {
       `connections: puzzle ${seed} has ${traps} players fitting two groups`,
     );
     crossed += traps;
+    // "Has won a major" beside "has won an FNCS title": 164 of 165 in both.
+    const groups = puzzle.groups.map((group) => criteria.find((c) => c.id === group.id));
+    if (groups.every((c) => c !== undefined)) {
+      check(
+        !hasNestedPair(groups as PlayerCriterion[], NEAR_NESTED),
+        `connections: puzzle ${seed} has two nearly identical groups (${puzzle.groups.map((g) => g.label).join(' / ')})`,
+      );
+    }
   }
   check(puzzles >= 35, `connections: only ${puzzles} of 40 seeds produced a board`);
   notes.push(

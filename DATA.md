@@ -178,10 +178,15 @@ absolute.
    settles it where the caller knows one, otherwise the biggest career wins.
 4. Scores every 1st place by Liquipedia's tier, tier type and prize pool, and
    derives the fame ranking from that plus career earnings.
-5. Carries **FNCS titles** over from the Wikipedia import by handle, with three
-   hand-verified aliases for winners the two sources spell differently
-   (Kalgamer710, Kiryache32, Speedy). Seven winners have no Liquipedia page at
-   all; the build names them when it runs.
+5. Carries **FNCS titles** over from the Wikipedia import by handle, with
+   hand-verified aliases for winners the two sources spell differently. Where
+   a handle belongs to several pages, nationality decides, then whichever page
+   Liquipedia itself has winning an FNCS final — both FHDs are Saudi, and
+   until 24 Sep 2026 the bigger earner took the other one's two titles. A
+   player is credited once per final, so Ruri's win as Takamura adds to their
+   count rather than being lost to it. The cell lives in
+   `players_optimize.ipynb` and reads the deleted import out of git
+   (`dce12ea^`).
 
 ### The FNCS Wins category
 

@@ -4,6 +4,7 @@ import { makeRng, pick, randInt, sample, shuffle, type Rng } from '@/lib/rng';
 import {
   buildCriteria,
   hasNestedPair,
+  NEAR_NESTED,
   type CriteriaSource,
   type CriterionKind,
   type PlayerCriterion,
@@ -291,8 +292,15 @@ export function generatePuzzle(
       families.set(family, (families.get(family) ?? 0) + 1);
     }
     if ([...families.values()].some((count) => count > 2)) continue;
-    // "3+ FNCS titles" inside "has won an FNCS" is not two connections.
-    if (hasNestedPair(picked)) continue;
+    /*
+     * "3+ FNCS titles" inside "has won an FNCS" is not two connections, and
+     * neither is a pair that is only nearly nested. Exact implication let
+     * "has won a major tournament" and "has won an FNCS title" share a board,
+     * because one of the 165 major winners has no FNCS title — so every major
+     * winner on the board fitted both groups, and nobody could say which four
+     * were meant.
+     */
+    if (hasNestedPair(picked, NEAR_NESTED)) continue;
 
     const dealt = deal(picked, rng);
     if (!dealt) continue;

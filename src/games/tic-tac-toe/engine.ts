@@ -6,9 +6,12 @@ import {
   hasNestedPair,
   intersect,
   intersects,
+  NEAR_NESTED,
   type CriteriaSource,
   type PlayerCriterion,
 } from '@/games/shared/criteria';
+
+export { NEAR_NESTED };
 
 /** Pure logic for the 3x3 grid game. */
 
@@ -19,11 +22,6 @@ export const MAX_MISTAKES = 3;
 export const HARD_GUESSES = SIZE * SIZE;
 /** How many candidate boards to try per pass. */
 const GENERATION_ATTEMPTS = 600;
-/**
- * How much of one axis may sit inside another before the pair is redundant —
- * see `isNested`. Nine in ten.
- */
-export const NEAR_NESTED = 0.9;
 
 /**
  * The one setting the game has.
