@@ -1,4 +1,5 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
+import type { TermId } from './shared/glossary';
 
 /** A named block of rules, e.g. "Game modes". */
 export interface RuleSection {
@@ -30,6 +31,11 @@ export interface GameMeta {
   intro?: string[];
   /** Grouped rules shown under their own headings, below `rules`. */
   sections?: RuleSection[];
+  /**
+   * The terms this game leans on — a major, a LAN, a nationality — defined
+   * under "What the words mean". See `games/shared/glossary.ts`.
+   */
+  terms?: TermId[];
   Component: LazyExoticComponent<ComponentType>;
 }
 
@@ -68,6 +74,18 @@ const MODE_SECTION: RuleSection = {
   ],
 };
 
+/**
+ * The event mode in the four games with one secret player, which deal a field
+ * differently from the rest — see `dealInTurn`.
+ */
+const MODE_SECTION_SECRET: RuleSection = {
+  title: MODE_SECTION.title,
+  items: [
+    ...MODE_SECTION.items,
+    'The secret player comes from each of the field’s regions in turn, so every region is on the screen every few rounds — the four players the Middle East sent come up as often as Europe’s forty-six.',
+  ],
+};
+
 export const GAMES: GameMeta[] = [
   {
     id: 'higher-lower',
@@ -86,6 +104,7 @@ export const GAMES: GameMeta[] = [
           'Age — how old each player is today, from their published birthday.',
           'Career Earnings — every dollar of tournament prize money on record.',
           'FNCS Wins — FNCS grand finals won, across every season and region. Players on nought are included, because “a name you know on one title against a name you do not” is the best round this category has.',
+          'FNCS Finals — FNCS grand finals reached, the Globals and the other FNCS LANs included. Only players who have reached one are in, so a shown number can always go either way.',
         ],
       },
       {
@@ -93,8 +112,10 @@ export const GAMES: GameMeta[] = [
         items: [
           'Who: every player is ranked by career earnings. Round one is two of the top 20, and each round lets the challenger come from a little further down — so a run opens on names you know and reaches the deep cuts only if it lasts.',
           'How close: the gap between the two values follows a schedule, four rounds per step — 🟢 obvious, 🟡 moderate, 🟠 close, 🔴 very close.',
-          'For earnings a step is a share of the bigger figure: obvious is one player on half the other’s money or less, very close is within 10%. For age it is years (6+ apart down to 0–1), for FNCS wins titles (3+ down to 0–1).',
+          'For earnings a step is a share of the bigger figure: obvious is one player on half the other’s money or less, very close is within 10%. For age it is years (6+ apart down to 0–1), for FNCS wins titles (3+ down to 0–1), and for FNCS finals whole finals (8+ down to 0–1).',
           'Which is why you will not get a 1-versus-5 on round thirty.',
+          'Which way: the answer is drawn before the player, Higher and Lower about equally often whatever the last one was. Guessing the opposite of last time will not carry a run — knowing the players will.',
+          'In an event mode the new player leans towards the region the run has shown least, so a Globals run is not all Europe and North America.',
         ],
       },
       {
@@ -102,11 +123,21 @@ export const GAMES: GameMeta[] = [
         items: [
           'Easy 🟢🟢🟡🟡🟠🔴 — the slowest schedule, and it never leaves the top 250 earners.',
           'Medium 🟢🟡🟡🟠🔴🔴 — close pairs from round 13, reaching the top 1,000.',
-          'Hard 🟢🟡🟠🔴🔴🔴 — very close from round 13, anyone on record, and an Equal button. Hard is the only level dealt exact ties, and you must press Equal for them.',
+          'Hard 🟢🟡🟠🔴🔴🔴 — very close from round 13, anyone on record, and an Equal button.',
+        ],
+      },
+      {
+        title: 'Ties',
+        items: [
+          'Easy and Medium never deal two players on the same number, so one of Higher and Lower is always right.',
+          'Hard does, and only Equal is right for them — two players who have never won an FNCS included.',
+          'Age is compared in whole years: two 19-year-olds are level even with birthdays months apart.',
+          'Career earnings are never dealt level. Two careers equal to the dollar would be a coincidence nobody could know.',
         ],
       },
       MODE_SECTION,
     ],
+    terms: ['earnings', 'age', 'fncs-title', 'fncs-final'],
     Component: lazy(() => import('./higher-lower/HigherLowerGame')),
   },
   {
@@ -135,8 +166,9 @@ export const GAMES: GameMeta[] = [
         ],
       },
       POOL_SECTION,
-      MODE_SECTION,
+      MODE_SECTION_SECRET,
     ],
+    terms: ['region'],
     Component: lazy(() => import('./wordle/WordleGame')),
   },
   {
@@ -176,8 +208,9 @@ export const GAMES: GameMeta[] = [
         ],
       },
       POOL_SECTION,
-      MODE_SECTION,
+      MODE_SECTION_SECRET,
     ],
+    terms: ['major', 'global', 'lan'],
     Component: lazy(() => import('./career-path/CareerPathGame')),
   },
   {
@@ -204,11 +237,13 @@ export const GAMES: GameMeta[] = [
           'Counts shown — fewest → most shared tournaments, with the number on each teammate.',
           'Counts hidden — the same order, without the numbers.',
           'Random order — no ramp-up, and the counts stay hidden.',
+          'Teammates on the same number of shared tournaments can come out in either order — the count is the clue, not the position.',
         ],
       },
       POOL_SECTION,
-      MODE_SECTION,
+      MODE_SECTION_SECRET,
     ],
+    terms: ['teammates', 'tournament'],
     Component: lazy(() => import('./who-are-ya/WhoAreYaGame')),
   },
   {
@@ -224,9 +259,8 @@ export const GAMES: GameMeta[] = [
     rules: [
       'Easy: unlimited guesses — just find all ten.',
       'Hard: you start with 3 lives and every wrong guess costs one.',
-      'Ties are handled per category, and the board says which rule is in play above the ten slots.',
-      'Naming someone level with 10th but ranked out by the tie rule is a near miss: it is called out, and it never costs a life.',
       'A tournament board ranks the finishing positions, so on a duos or trios event a slot is a whole team — it fills in as you name them and only locks once you have every one.',
+      'Under every board, “What counts here” says what its words mean — which events are majors, which are LANs, whose nationality a dual national counts for.',
     ],
     sections: [
       {
@@ -236,10 +270,36 @@ export const GAMES: GameMeta[] = [
           'Some are about the whole career — earnings, FNCS wins, LAN appearances. Some are about one year, one region, one country or one tournament.',
           'Not every board wants a player. An organisations board wants org names, a countries board wants country names, and a paydays board wants the tournament where the money was won — the prompt above the input says which.',
           'Hit Random for a board you did not choose, or search the list if you have one in mind.',
-          'In an event mode all of them are replaced by that field’s own boards — the ten biggest earners who qualified, the ten youngest, the countries that sent the most.',
+          'In an event mode all of them are replaced by that field’s own boards, under one heading and in a fixed order: career earnings, the youngest, the lowest earners, FNCS wins, Europe’s top earners, countries by players, this year’s earnings, the oldest, organisations by players, North America’s top earners, then LAN and FNCS grand-final appearances.',
+        ],
+      },
+      {
+        title: 'Ties',
+        items: [
+          'Every board prints its tie rule above the ten slots, because they differ.',
+          'Counts — wins, appearances, players — are split by career earnings: of two players on the same number, the bigger earner ranks higher. Countries and organisations are split by their players’ combined earnings.',
+          'Money boards are straight money order, and youngest and oldest go by the birth date rather than the age in years.',
+          'If 10th and 11th are still level after the tie rule, the board is not offered at all. The alphabet never decides who is 10th.',
+          'Naming someone level with 10th but ranked out by the tie rule is a near miss: it is called out, and it never costs a life.',
+          'A tournament where two teams share a place in the top eleven is not offered either.',
         ],
       },
       MODE_SECTION,
+    ],
+    terms: [
+      'tournament',
+      'major',
+      'lan',
+      'lan-wide',
+      'global',
+      'fncs-title',
+      'fncs-final',
+      'nationality',
+      'region',
+      'org',
+      'earnings',
+      'age',
+      'teammates',
     ],
     Component: lazy(() => import('./tenaball/TenaballGame')),
   },
@@ -267,12 +327,30 @@ export const GAMES: GameMeta[] = [
         items: [
           'Qualified fields — everyone who made it to the FNCS Globals, or to the Esports World Cup.',
           'FNCS grand final winners, split by region, because Europe’s winners and North America’s are two different memories.',
-          'LAN winners — major LANs only: the World Cup, the Globals and Epic’s other offline finals.',
+          'LAN winners — Epic’s offline majors only; “What counts here” under the list names every one of them.',
           'Major tournament winners, year by year — Epic’s tier-1 finals: FNCS grand finals, the Globals, the World Cup and Epic’s LANs.',
-          'In an event mode the lists are all about that field instead: everyone who qualified, the qualifiers from one region or country, the ones who have won an FNCS and the ones who never have.',
+          'In an event mode the lists are all about that field instead, in a fixed order: the qualifiers from each region, this year’s FNCS winners, the organisations and the countries with a player there, everyone who has won an FNCS, who else played the last LANs, and who has earned what — then everyone who qualified.',
+          'A field list can be short. The Middle East sent four players to the 2026 Globals, and naming all four is a round of its own.',
         ],
       },
+      {
+        title: 'Ties',
+        items: ['A list has no order, so there is nothing to tie: everyone who fits counts, however many there are.'],
+      },
       MODE_SECTION,
+    ],
+    terms: [
+      'field',
+      'region',
+      'nationality',
+      'org',
+      'fncs-title',
+      'fncs-final',
+      'major',
+      'lan',
+      'global',
+      'earnings',
+      'teammates',
     ],
     Component: lazy(() => import('./list/ListGame')),
   },
@@ -314,6 +392,7 @@ export const GAMES: GameMeta[] = [
       POOL_SECTION,
       MODE_SECTION,
     ],
+    terms: ['org', 'fncs-title', 'lan', 'global', 'earnings', 'nationality', 'region'],
     Component: lazy(() => import('./impostor/ImpostorGame')),
   },
   {
@@ -356,6 +435,7 @@ export const GAMES: GameMeta[] = [
       },
       MODE_SECTION,
     ],
+    terms: ['nationality', 'region', 'org', 'fncs-title', 'lan', 'global', 'major', 'earnings', 'age'],
     Component: lazy(() => import('./tic-tac-toe/TicTacToeGame')),
   },
   {
@@ -370,11 +450,12 @@ export const GAMES: GameMeta[] = [
     ],
     rules: [
       'A group is a country, a region, an organisation, a title — FNCS, LAN, major — or an earnings threshold. Nothing more obscure than that, and no birth years: nobody can tell a 2005 from a 2006.',
-      'Groups overlap on purpose: a player can fit two of the connections and still belong to only one group. That is the trap, and there is exactly one way to split the sixteen.',
+      'Every connection fits exactly its own four. If the group is Poland, there is no fifth Pole on the board — so there is exactly one way to split the sixteen.',
       'A wrong guess tells you when three of your four belonged to one group, and says nothing otherwise.',
       'Nothing otherwise is deliberate: two of any four landing in the same group is close to chance on a sixteen-card board, so reporting it every time buried the one hint worth reading.',
     ],
     sections: [POOL_SECTION, MODE_SECTION],
+    terms: ['nationality', 'region', 'org', 'fncs-title', 'lan', 'major', 'earnings'],
     Component: lazy(() => import('./connections/ConnectionsGame')),
   },
   {
@@ -403,9 +484,17 @@ export const GAMES: GameMeta[] = [
           'Direction — ▲ means the secret player is higher, ▼ lower, on every number.',
         ],
       },
+      {
+        title: 'Ties',
+        items: [
+          'A number level with the secret player’s is green in both styles — in Direction there is simply no arrow.',
+          'Country compares the first nationality on each page, so a dual national matches only on the flag they list first.',
+        ],
+      },
       POOL_SECTION,
-      MODE_SECTION,
+      MODE_SECTION_SECRET,
     ],
+    terms: ['region', 'nationality', 'age', 'earnings', 'fncs-title', 'fncs-final', 'teammates'],
     Component: lazy(() => import('./guess-the-player/GuessThePlayerGame')),
   },
 ];

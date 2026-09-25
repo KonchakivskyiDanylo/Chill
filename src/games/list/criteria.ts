@@ -419,6 +419,15 @@ function consecutiveFinals(facts: Facts): [HeadlineEvent, HeadlineEvent][] {
   return pairs;
 }
 
+
+/**
+ * Below this a field list is not worth a round. Lower than `MIN_ANSWERS`,
+ * because a field list can be short and still be the question: the Middle
+ * East sent four players to the 2026 Globals, and "name all four" is a fine
+ * ninety seconds that ends in ten if you know them.
+ */
+const MIN_FIELD = 4;
+
 /**
  * The same kinds of list, cut down to one tournament's field.
  *
@@ -430,62 +439,163 @@ function consecutiveFinals(facts: Facts): [HeadlineEvent, HeadlineEvent][] {
  * rather than four thousand: you can hold the shape of the answer in your head
  * and still not be able to name it.
  *
+ * In the order planned for an event's fortnight in LIMITED_MODE.md, numbered
+ * below to match it. The gaps are lists the export cannot answer yet: creator
+ * subscribers, duos split across two nations (the field has no pairings until
+ * the event is played), who qualified from where, and anything scored at the
+ * event itself.
+ *
  * Nothing here is precomputed. A field is a hundred players and every fact
- * needed is already on the roster row or in `facts.json`.
+ * needed is already on the roster row or in `facts.json`. `orgs` arrives after
+ * the first paint, like the all-time org lists; `everyone` is the roster, for
+ * the guess box of the list answered with countries.
  */
 export function buildPoolCriteria(
   pool: Pool,
   players: RosterPlayer[],
   facts: Facts,
+  orgs?: Orgs | null,
+  everyone: readonly RosterPlayer[] = players,
 ): Criterion[] {
   const out: Criterion[] = [];
-  const add = (id: string, title: string, answers: RosterPlayer[], subtitle?: string) => {
-    if (answers.length < MIN_ANSWERS) return;
+  const add = (id: string, title: string, answers: RosterPlayer[], subtitle?: string, least = MIN_FIELD) => {
+    if (answers.length < least) return;
     out.push({ id, title, subtitle, answers });
   };
   const prefix = `pool:${pool.id}`;
   const field = `The ${pool.label} field`;
+  const year = Number(pool.date.slice(0, 4));
+  const from = (region: string) => players.filter((player) => player.region === region);
 
-  add(`${prefix}:all`, `Everyone who qualified for ${pool.label}`, players, pool.event);
+  // 1, 3, 5, 7 and 10: the regions, the big two first.
+  const region = (id: string, where: string, answers: RosterPlayer[], note: string) =>
+    add(`${prefix}:region:${id}`, `${pool.label} qualifiers from ${where}`, answers, `${field} — ${note}`);
 
-  // ------------------------------------------------------------ regions --
-  const regions = new Map<string, RosterPlayer[]>();
-  for (const player of players) {
-    if (!player.region) continue;
-    const list = regions.get(player.region);
-    if (list) list.push(player);
-    else regions.set(player.region, [player]);
+  region('Europe', 'Europe', from('Europe'), 'by the region they compete in');
+
+  // 2
+  add(
+    `${prefix}:fncs-${year}`,
+    `${pool.label} qualifiers who won an FNCS in ${year}`,
+    players.filter((player) => facts.of(player.id).fncsWinYears.includes(year)),
+    `${field} — a regional FNCS grand final won during ${year}`,
+  );
+
+  region('North America', 'North America', from('North America'), 'East and West together');
+
+  // 4: answered with organisations.
+  if (orgs) {
+    const inField = new Set(players.map((player) => player.id));
+    const answers = orgs.orgs
+      .filter((org) => org.current.some((id) => inField.has(id)))
+      .map((org) => ({ id: org.name, name: org.name }));
+    if (answers.length >= MIN_FIELD) {
+      out.push({
+        id: `${prefix}:orgs`,
+        title: `Organisations with a player at ${pool.label}`,
+        subtitle: `${field} — each player’s current organisation`,
+        answers,
+        pool: orgs.orgs.map((org) => ({ id: org.name, name: org.name })),
+        noun: 'organisations',
+      });
+    }
   }
-  for (const [region, answers] of [...regions].sort((a, b) => b[1].length - a[1].length)) {
-    add(`${prefix}:region:${region}`, `${pool.label} qualifiers from ${region}`, answers, field);
-  }
 
-  // ---------------------------------------------------------- countries --
-  // Only the well-represented ones: "the two Norwegians who qualified" is a
-  // trivia question, not a list.
-  const countries = new Map<string, RosterPlayer[]>();
+  region('South America', 'South America', from('South America'), 'the FNCS’s Brazil region');
+
+  // 6: answered with countries.
+  const byCountry = new Map<string, RosterPlayer[]>();
   for (const player of players) {
     if (!player.countryName) continue;
-    const list = countries.get(player.countryName);
+    const list = byCountry.get(player.countryName);
     if (list) list.push(player);
-    else countries.set(player.countryName, [player]);
+    else byCountry.set(player.countryName, [player]);
   }
-  for (const [country, answers] of [...countries].sort((a, b) => b[1].length - a[1].length)) {
-    add(`${prefix}:country:${country}`, `${pool.label} qualifiers from ${country}`, answers, field);
+  if (byCountry.size >= MIN_FIELD) {
+    const known = [...new Set(everyone.flatMap((player) => player.countryName ?? []))].sort();
+    out.push({
+      id: `${prefix}:countries`,
+      title: `Countries with a player at ${pool.label}`,
+      subtitle: `${field} — by each player’s first nationality`,
+      answers: [...byCountry.keys()].sort().map((name) => ({ id: name, name })),
+      pool: known.map((name) => ({ id: name, name })),
+      noun: 'countries',
+    });
   }
 
-  // ------------------------------------------------------------- titles --
+  region('Middle East', 'the Middle East', from('Middle East'), 'by the region they compete in');
+
+  // 8
   add(
     `${prefix}:fncs`,
     `${pool.label} qualifiers who have won an FNCS`,
     players.filter((player) => player.fncsWins > 0),
-    `${field} — FNCS grand finals won across every season and region`,
+    `${field} — regional FNCS grand finals won across every season and region`,
   );
+
+  // 9 is subscribers, which the export does not have.
+
+  region(
+    'Asia-Oceania',
+    'Asia or Oceania',
+    players.filter((player) => player.region === 'Asia' || player.region === 'Oceania'),
+    'the two regions together',
+  );
+
+  // 11 wants the field's duos, which Liquipedia only pairs once they have played.
+
+  // 12: the LANs just before this one — for a Globals, the season's Summit.
+  const earlier = facts.events
+    .filter((event) => event.lan && event.date < pool.date)
+    .sort((a, b) => (a.date < b.date ? 1 : -1))
+    .slice(0, 3);
+  for (const event of earlier) {
+    const there = facts.playedAt(event.index);
+    add(
+      `${prefix}:also:${event.index}`,
+      `${pool.label} qualifiers who also played ${event.short}`,
+      players.filter((player) => there.has(player.id)),
+      `${field} — on the ${event.short} field too`,
+    );
+  }
+
+  // 13 to 16 and 18 need who qualified from where and what happened at the
+  // event itself; neither is in the export yet.
+
+  // 17
+  for (const threshold of [50_000, 100_000]) {
+    add(
+      `${prefix}:earned-${year}:${threshold}`,
+      `${pool.label} qualifiers who earned ${moneyShort(threshold)}+ in ${year}`,
+      players.filter((player) => (player.earningsByYear[year] ?? 0) >= threshold),
+      `${field} — prize money won during ${year}`,
+    );
+  }
+
+  // 19
+  for (const threshold of [500_000, 1_000_000]) {
+    add(
+      `${prefix}:earned:${threshold}`,
+      `${pool.label} qualifiers with ${moneyShort(threshold)}+ career earnings`,
+      players.filter((player) => player.earnings >= threshold),
+      `${field} — career prize money across every tournament on record`,
+    );
+  }
+
+  // ------------------------------------------------ after the planned ones --
+  add(`${prefix}:all`, `Everyone who qualified for ${pool.label}`, players, pool.event);
+
+  // Only the well-represented countries: "the two Norwegians who qualified" is
+  // a trivia question, not a list.
+  for (const [country, answers] of [...byCountry].sort((a, b) => b[1].length - a[1].length)) {
+    add(`${prefix}:country:${country}`, `${pool.label} qualifiers from ${country}`, answers, field, MIN_ANSWERS);
+  }
+
   add(
     `${prefix}:lan`,
     `${pool.label} qualifiers who have won a LAN`,
     players.filter((player) => facts.of(player.id).wins.lan > 0),
-    `${field} — major LANs only: the World Cup, the Globals and Epic’s other offline finals`,
+    `${field} — Epic’s offline majors only: the World Cup, the Globals, the Summit and the other LANs`,
   );
   add(
     `${prefix}:no-fncs`,
@@ -493,8 +603,6 @@ export function buildPoolCriteria(
     players.filter((player) => player.fncsWins === 0),
     field,
   );
-
-  // ------------------------------------------------------------- status --
   add(
     `${prefix}:retired`,
     `${pool.label} qualifiers who are no longer competing`,

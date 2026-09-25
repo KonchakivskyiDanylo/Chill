@@ -1,6 +1,6 @@
 import { ref, type GamePayloads, type Outcome } from '@/analytics/types';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
-import { makeRng, pick, randInt, sample, shuffle, type Rng } from '@/lib/rng';
+import { makeRng, pick, sample, shuffle, type Rng } from '@/lib/rng';
 import {
   buildCriteria,
   hasNestedPair,
@@ -25,6 +25,9 @@ export const MAX_MISTAKES = 4;
  * milliseconds.
  */
 const GENERATION_ATTEMPTS = 1500;
+
+/** Deals tried with one draw of kinds before drawing again — see `generatePuzzle`. */
+const TRIES_PER_DRAW = 20;
 
 export interface Group {
   id: string;
@@ -81,9 +84,6 @@ const GROUP_KINDS = new Set<CriterionKind>([
   'earnings',
 ]);
 
-/** Board players who satisfy two or more of the four connections. */
-export const MIN_TRAPS = 2;
-
 /**
  * Kinds that are the same question wearing different clothes.
  *
@@ -106,8 +106,9 @@ const familyOf = (criterion: PlayerCriterion) => FAMILY[criterion.kind] ?? crite
  * A connection that is not in play but lands on *exactly four* of the sixteen,
  * across more than one group, is a wrong answer that looks completely right —
  * four French names on a board where France is not a group. Five or more is
- * not the same problem: there is no clean four to pick, and an overlap you can
- * see but cannot resolve is the trap this game is supposed to have.
+ * left alone: there is no clean four to pick, and on a board of names people
+ * know, "is from the United States" or "competes in North America" lands on
+ * five most of the time — ruling that out would rule out the famous names.
  */
 
 /** Rank gap allowed between the easiest and hardest group. */
@@ -127,11 +128,11 @@ function combinations(indices: number[], size: number): number[][] {
 /**
  * How many ways the sixteen split into four connected fours.
  *
- * This is the whole promise of the puzzle: one solution. With overlap allowed a
- * player can satisfy two connections, so the intended split is no longer the
- * only conceivable one and has to be checked rather than assumed — count the
- * exact covers of the board by four-subsets that each sit inside some
- * connection, and insist on exactly one.
+ * This is the whole promise of the puzzle: one solution. `deal` keeps it by
+ * construction, since every connection lands on its own four and nobody else;
+ * this is the same promise checked from outside — the exact covers of the
+ * board by four-subsets that each sit inside some connection — so that
+ * `check:games` holds the generator to it rather than taking its word.
  *
  * Counted over the four connections in play, which is the promise the game can
  * actually keep: any four names share *something*, and a generator that tried
@@ -171,41 +172,86 @@ function splits(board: RosterPlayer[], criteria: PlayerCriterion[], stopAt = 2):
   return found;
 }
 
+/** How often each fame tier is drawn — `RANDOM_MIX`, on Random. */
+export type FameMix = Readonly<Record<string, number>>;
+
+const TIERS = ['easy', 'medium', 'hard'] as const;
+
 /**
- * Sixteen distinct players, four per connection.
+ * The fame tier of each of a group's `count` places: `mix` shared out as
+ * evenly as whole places allow, the remainder drawn by weight. At `RANDOM_MIX`
+ * that is two household names, one regular, and a regular or a deep cut.
+ *
+ * Every group gets the same share rather than drawing each player's tier on
+ * its own, which let one group take four household names and another four
+ * deep cuts — and the balance check threw out nine boards in ten that had no
+ * earnings group to exempt.
+ */
+function tiersFor(rng: Rng, count: number, mix: FameMix): string[] {
+  const exact = TIERS.map((tier) => (mix[tier] ?? 0) * count);
+  const places = TIERS.flatMap((tier, index) => Array<string>(Math.floor(exact[index])).fill(tier));
+  const rest = exact.map((share) => share - Math.floor(share));
+  while (places.length < count) {
+    let roll = rng() * rest.reduce((sum, share) => sum + share, 0);
+    const index = rest.findIndex((share) => (roll -= share) < 0);
+    places.push(TIERS[index < 0 ? TIERS.length - 1 : index]);
+  }
+  return places;
+}
+
+/**
+ * `count` players, at the fame tiers `mix` asks for (`tiersFor`), falling back
+ * to the nearest tier the pool has when it runs out of one. Without a mix, an
+ * even draw.
+ */
+function draw(rng: Rng, players: RosterPlayer[], count: number, mix?: FameMix): RosterPlayer[] {
+  if (!mix) return sample(rng, players, count);
+  const left = [...players];
+  const out: RosterPlayer[] = [];
+  for (const wanted of tiersFor(rng, count, mix)) {
+    const at = TIERS.indexOf(wanted as (typeof TIERS)[number]);
+    const nearest = [...TIERS]
+      .sort((a, b) => Math.abs(TIERS.indexOf(a) - at) - Math.abs(TIERS.indexOf(b) - at))
+      .find((tier) => left.some((player) => player.tier === tier));
+    if (!nearest) break;
+    const chosen = pick(rng, left.filter((player) => player.tier === nearest));
+    out.push(chosen);
+    left.splice(left.indexOf(chosen), 1);
+  }
+  return out;
+}
+
+/**
+ * Four players per connection, none of whom fits any of the other three.
+ *
+ * So every connection lands on exactly its own four. The generator before this
+ * let up to two players per group fit a second connection as well — the
+ * overlap was meant to be the trap — and what it produced was five Poles on a
+ * board with a Poland group: a fifth name that is plainly right and plainly
+ * wrong at once, placed only by knowing which of the five also fits something
+ * else. Every board it made had a connection on five or more of the sixteen,
+ * and "has earned $100K+" reached nine.
+ *
+ * The overlap did bring in famous names — the FaZe player who has won an FNCS
+ * — and an even draw from the exclusive pools is a board of deep cuts, so on
+ * Random each player's fame tier is drawn first (`mix`), the way every game
+ * deals its secret player there.
  *
  * Scarcest connection first: a group with six candidates has to take its four
  * before a group with forty spends them.
- *
- * Each group takes up to `TRAPS_PER_GROUP` players who *also* fit one of the
- * other three, then fills up with players who fit only it. That is the whole
- * difference from the old generator, which took none of the first kind: the
- * crossed players are the famous ones — the FaZe player who has won an FNCS —
- * and a board built without them is a board of the two most obscure halves.
- * Capping how many there are is what keeps the split unique and checkable.
  */
-const TRAPS_PER_GROUP = 2;
-
 function deal(
   criteria: PlayerCriterion[],
   rng: Rng,
+  mix?: FameMix,
 ): { criterion: PlayerCriterion; players: RosterPlayer[] }[] | null {
   const order = [...criteria].sort((a, b) => a.matches.length - b.matches.length);
-  const used = new Set<string>();
   const dealt: { criterion: PlayerCriterion; players: RosterPlayer[] }[] = [];
   for (const criterion of order) {
     const others = criteria.filter((other) => other.id !== criterion.id);
-    const free = criterion.matches.filter((player) => !used.has(player.id));
-    const crossed = free.filter((player) => others.some((other) => other.test(player)));
-    const only = free.filter((player) => !others.some((other) => other.test(player)));
-
-    const wanted = Math.min(crossed.length, randInt(rng, 0, TRAPS_PER_GROUP));
-    const traps = sample(rng, crossed, wanted);
-    if (only.length < GROUP_SIZE - traps.length) return null;
-    const players = [...traps, ...sample(rng, only, GROUP_SIZE - traps.length)];
-
-    for (const player of players) used.add(player.id);
-    dealt.push({ criterion, players });
+    const only = criterion.matches.filter((player) => !others.some((other) => other.test(player)));
+    if (only.length < GROUP_SIZE) return null;
+    dealt.push({ criterion, players: draw(rng, only, GROUP_SIZE, mix) });
   }
   return dealt;
 }
@@ -216,38 +262,41 @@ function deal(
  * Measured as where each group's players sit in the board's own earnings order.
  * A board with the four biggest names in one group and four nobodies in another
  * is solved in that order and the second half is a shrug.
+ *
+ * An earnings group sits out. Now that nobody else on the board may clear its
+ * line, it is the richest four by definition, so it always read as the easy
+ * group and the kind was never dealt — 0 of 60 boards.
  */
-function balanced(groups: { players: RosterPlayer[] }[], board: RosterPlayer[]): boolean {
+function balanced(groups: { criterion: PlayerCriterion; players: RosterPlayer[] }[]): boolean {
+  const compared = groups.filter((group) => group.criterion.kind !== 'earnings');
+  const players = compared.flatMap((group) => group.players);
   const rank = new Map(
-    [...board]
+    [...players]
       .sort((a, b) => a.earnings - b.earnings)
       .map((player, index) => [player.id, index] as const),
   );
-  const means = groups.map(
+  const means = compared.map(
     (group) => group.players.reduce((sum, p) => sum + (rank.get(p.id) ?? 0), 0) / GROUP_SIZE,
   );
-  return Math.max(...means) - Math.min(...means) <= BALANCE;
+  const allowed = (BALANCE * players.length) / (GROUP_SIZE * GROUP_COUNT);
+  return Math.max(...means) - Math.min(...means) <= allowed;
 }
 
 /**
  * Builds a board of four groups of four.
  *
- * Groups may overlap, and are meant to: the trap in this game is the player who
- * fits two of the connections and can only be filed under one. The old
- * generator drew each group from the *exclusive* pool — players who fit that
- * connection and none of the other three — which guaranteed a clean answer by
- * barring exactly the players who make the puzzle interesting. With "has played
- * for FaZe" and "has won an FNCS" both in play it threw out every FaZe player
- * who has won one, leaving the two most obscure halves of each.
+ * Each connection lands on exactly its own four (`deal`), which makes the
+ * split unique by construction. What is left to check is the board as a
+ * whole: no connection outside the four sitting on it as a decoy, and four
+ * groups of comparable difficulty (`balanced`).
  *
- * So overlap is allowed and every guard it used to get for free is now checked
- * for: one split (`splits`), enough overlap to be worth it (`MIN_TRAPS`), no
- * fifth connection sitting on the board unused (`DECOY_SPAN`), and four groups
- * of comparable difficulty (`balanced`).
+ * `mix` weights the draw towards famous names; the game passes `RANDOM_MIX`
+ * on Random, and nothing when a tier or an event field has been chosen.
  */
 export function generatePuzzle(
   source: CriteriaSource,
   seed: string = String(Date.now()),
+  mix?: FameMix,
 ): Puzzle | null {
   const rng = makeRng(seed);
   const candidates = buildCriteria(source, {
@@ -263,75 +312,85 @@ export function generatePuzzle(
     else byKind.set(criterion.kind, [criterion]);
   }
 
-  for (let attempt = 0; attempt < GENERATION_ATTEMPTS; attempt++) {
+  for (let attempt = 0, draws = 0; attempt < GENERATION_ATTEMPTS; draws++) {
     /*
-     * One connection per kind, then four of those — not four out of the hat.
+     * Four kinds, then one connection of each — not four out of the hat.
      *
      * A flat draw is a nationality generator: there are eighty countries and
      * exactly one "has won a LAN", so four-from-the-hat served country nearly
-     * every board and the rest never came up. Drawing kinds first gives every kind the same seat at the table, and
-     * every fourth attempt goes back to the flat draw so that two countries can
-     * still be two groups — France and Brazil is a good puzzle.
+     * every board and the rest never came up. Drawing kinds first gives every
+     * kind the same seat at the table, and every fourth draw goes back to the
+     * flat one so that two countries can still be two groups — France and
+     * Brazil is a good puzzle.
+     *
+     * The kinds are then kept for `TRIES_PER_DRAW` deals rather than redrawn
+     * after every failure. Redrawing let whichever kinds pass the checks most
+     * easily crowd out the rest: once an earnings group sat out the balance
+     * check, it was on 54 of 60 boards.
      */
-    const picked =
-      attempt % 4 === 3
+    const flat = draws % 4 === 3;
+    const kinds = sample(rng, [...byKind.keys()], GROUP_COUNT);
+    for (let tries = 0; tries < TRIES_PER_DRAW && attempt < GENERATION_ATTEMPTS; tries++, attempt++) {
+      const picked = flat
         ? sample(rng, candidates, GROUP_COUNT)
-        : sample(rng, [...byKind.values()].map((bucket) => pick(rng, bucket)), GROUP_COUNT);
-    if (picked.length < GROUP_COUNT) continue;
+        : kinds.map((kind) => pick(rng, byKind.get(kind)!));
+      if (picked.length < GROUP_COUNT) {
+        attempt++;
+        break;
+      }
 
-    /*
-     * Three groups about where somebody is from make a flat puzzle — but a
-     * small pool may have nothing else to offer, and a flat board beats "could
-     * not find four groups". The family cap holds for the first three quarters
-     * of the attempts and then falls back to the per-kind one.
-     */
-    const grouping = attempt < GENERATION_ATTEMPTS * 0.75 ? familyOf : (c: PlayerCriterion) => c.kind;
-    const families = new Map<string, number>();
-    for (const criterion of picked) {
-      const family = grouping(criterion);
-      families.set(family, (families.get(family) ?? 0) + 1);
+      /*
+       * Three groups about where somebody is from make a flat puzzle — but a
+       * small pool may have nothing else to offer, and a flat board beats
+       * "could not find four groups". The family cap holds for the first three
+       * quarters of the attempts and then falls back to the per-kind one.
+       */
+      const grouping = attempt < GENERATION_ATTEMPTS * 0.75 ? familyOf : (c: PlayerCriterion) => c.kind;
+      const families = new Map<string, number>();
+      for (const criterion of picked) {
+        const family = grouping(criterion);
+        families.set(family, (families.get(family) ?? 0) + 1);
+      }
+      if ([...families.values()].some((count) => count > 2)) {
+        // A family is decided by the kinds alone, so these kinds never pass.
+        if (flat) continue;
+        attempt++;
+        break;
+      }
+      /*
+       * "3+ FNCS titles" inside "has won an FNCS" is not two connections, and
+       * neither is a pair that is only nearly nested. Exact implication let
+       * "has won a major tournament" and "has won an FNCS title" share a board,
+       * because one of the 165 major winners has no FNCS title — so every major
+       * winner on the board fitted both groups, and nobody could say which four
+       * were meant.
+       */
+      if (hasNestedPair(picked, NEAR_NESTED)) continue;
+
+      const dealt = deal(picked, rng, mix);
+      if (!dealt) continue;
+      const board = dealt.flatMap((entry) => entry.players);
+      if (!balanced(dealt)) continue;
+
+      const groupOf = new Map<string, number>();
+      dealt.forEach((entry, index) => entry.players.forEach((p) => groupOf.set(p.id, index)));
+      const decoy = candidates.some((criterion) => {
+        if (picked.some((inPlay) => inPlay.id === criterion.id)) return false;
+        const hits = board.filter((player) => criterion.test(player));
+        if (hits.length !== GROUP_SIZE) return false;
+        return new Set(hits.map((player) => groupOf.get(player.id))).size > 1;
+      });
+      if (decoy) continue;
+
+      return {
+        groups: dealt.map((entry) => ({
+          id: entry.criterion.id,
+          label: entry.criterion.label,
+          players: entry.players,
+        })),
+        board: shuffle(rng, board),
+      };
     }
-    if ([...families.values()].some((count) => count > 2)) continue;
-    /*
-     * "3+ FNCS titles" inside "has won an FNCS" is not two connections, and
-     * neither is a pair that is only nearly nested. Exact implication let
-     * "has won a major tournament" and "has won an FNCS title" share a board,
-     * because one of the 165 major winners has no FNCS title — so every major
-     * winner on the board fitted both groups, and nobody could say which four
-     * were meant.
-     */
-    if (hasNestedPair(picked, NEAR_NESTED)) continue;
-
-    const dealt = deal(picked, rng);
-    if (!dealt) continue;
-    const board = dealt.flatMap((entry) => entry.players);
-    if (new Set(board.map((player) => player.id)).size !== GROUP_SIZE * GROUP_COUNT) continue;
-
-    const traps = board.filter(
-      (player) => picked.filter((criterion) => criterion.test(player)).length > 1,
-    ).length;
-    if (traps < MIN_TRAPS) continue;
-    if (!balanced(dealt, board)) continue;
-    if (splits(board, picked) !== 1) continue;
-
-    const groupOf = new Map<string, number>();
-    dealt.forEach((entry, index) => entry.players.forEach((p) => groupOf.set(p.id, index)));
-    const decoy = candidates.some((criterion) => {
-      if (picked.some((inPlay) => inPlay.id === criterion.id)) return false;
-      const hits = board.filter((player) => criterion.test(player));
-      if (hits.length !== GROUP_SIZE) return false;
-      return new Set(hits.map((player) => groupOf.get(player.id))).size > 1;
-    });
-    if (decoy) continue;
-
-    return {
-      groups: dealt.map((entry) => ({
-        id: entry.criterion.id,
-        label: entry.criterion.label,
-        players: entry.players,
-      })),
-      board: shuffle(rng, board),
-    };
   }
   return null;
 }
@@ -339,9 +398,7 @@ export function generatePuzzle(
 /**
  * How many ways a finished board splits into four connected fours.
  *
- * The generator already insists this is 1 before it hands a puzzle over; this
- * is the same question asked from the outside, so `check:games` can hold it to
- * that rather than taking its word.
+ * `check:games` holds every generated board to 1 (see `splits`).
  */
 export function solutions(puzzle: Puzzle, source: CriteriaSource): number {
   const inPlay = connectionsOf(puzzle, source);
@@ -349,12 +406,15 @@ export function solutions(puzzle: Puzzle, source: CriteriaSource): number {
   return splits(puzzle.board, inPlay, 3);
 }
 
-/** Board players who fit more than one of the four connections — the traps. */
-export function overlap(puzzle: Puzzle, source: CriteriaSource): number {
-  const inPlay = connectionsOf(puzzle, source);
-  return puzzle.board.filter(
-    (player) => inPlay.filter((criterion) => criterion.test(player)).length > 1,
-  ).length;
+/**
+ * Connections in play that land on more than their own four — a fifth Pole
+ * beside the Poland group. The generator never deals one; this asks from the
+ * outside so `check:games` can hold it to that.
+ */
+export function crowded(puzzle: Puzzle, source: CriteriaSource): string[] {
+  return connectionsOf(puzzle, source)
+    .filter((criterion) => puzzle.board.filter((player) => criterion.test(player)).length > GROUP_SIZE)
+    .map((criterion) => criterion.label);
 }
 
 function connectionsOf(puzzle: Puzzle, source: CriteriaSource): PlayerCriterion[] {

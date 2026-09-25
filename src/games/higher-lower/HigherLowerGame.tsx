@@ -6,6 +6,7 @@ import { GiveUpButton } from '@/components/GiveUpButton';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { LevelSetup, type LevelOption } from '@/components/PoolSetup';
 import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
+import { loadFacts, type Facts } from '@/data/liquipedia/facts';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import type { Pools } from '@/data/liquipedia/pools';
@@ -29,6 +30,7 @@ import {
   WINDOW,
   type Answer,
   type Category,
+  type Contender,
   type Difficulty,
   type GameState,
   record as roundRecord,
@@ -85,18 +87,22 @@ const LEVELS: LevelOption<Difficulty>[] = [
   },
 ];
 
-function displayValue(player: RosterPlayer, category: Category): string {
+function displayValue(player: Contender, category: Category): string {
   if (category === 'age') return `${player.age} years old`;
   if (category === 'fncsWins') return plural(player.fncsWins, 'FNCS win');
+  if (category === 'fncsFinals') return plural(player.fncsFinals ?? 0, 'FNCS final');
   return playerMoney(player);
 }
 
 /**
  * The fact shown under the revealed value: something true about the player
- * that is not the answer to the round they just played.
+ * that is not the answer to the round they just played. Not the wins on an
+ * FNCS Finals round, where a player's titles are a floor under their finals.
  */
-function secondaryFact(player: RosterPlayer, category: Category): string {
-  return category === 'fncsWins' ? playerMoney(player) : plural(player.fncsWins, 'FNCS win');
+function secondaryFact(player: Contender, category: Category): string {
+  return category === 'fncsWins' || category === 'fncsFinals'
+    ? playerMoney(player)
+    : plural(player.fncsWins, 'FNCS win');
 }
 
 export default function HigherLowerGame() {
@@ -142,23 +148,52 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   const { best, submit: submitBest } = useBestScore(scope);
 
   /**
+   * `facts.json`, fetched the first time FNCS Finals is picked. It is the one
+   * category that needs it, and 577 KB is a lot to charge everyone who came to
+   * play Career Earnings.
+   */
+  const [facts, setFacts] = useState<Facts | null>(null);
+  const [factsFailed, setFactsFailed] = useState(false);
+  useEffect(() => {
+    if (category !== 'fncsFinals' || facts) return;
+    let cancelled = false;
+    loadFacts().then(
+      (loaded) => !cancelled && setFacts(loaded),
+      () => !cancelled && setFactsFailed(true),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [category, facts]);
+
+  /**
    * The whole roster, or the event's field. The level narrows it round by
    * round from the top earners down, so nothing is cut from it up front.
    */
-  const players = useMemo(() => {
+  const players = useMemo((): Contender[] => {
     const field = poolPlayers(roster, pools, event);
-    return field.length > 0 ? field : roster.players;
-  }, [roster, pools, event]);
+    const base = field.length > 0 ? field : roster.players;
+    return facts ? base.map((p) => ({ ...p, fncsFinals: facts.of(p.id).fncsApps })) : base;
+  }, [roster, pools, event, facts]);
 
   const start = useCallback(() => {
-    const created = createGame(players, category, difficulty);
+    if (category === 'fncsFinals' && !facts) {
+      setError(
+        factsFailed
+          ? 'FNCS finals come from facts.json, which could not be loaded.'
+          : 'Still loading the FNCS finals — try again in a moment.',
+      );
+      return;
+    }
+    // A field takes its regions in turn; the whole scene has no such promise.
+    const created = createGame(players, category, difficulty, undefined, Boolean(pools?.get(event)));
     if (!created) {
       setError('Not enough players in this field have that value on record.');
       return;
     }
     setError(null);
     setGame(created);
-  }, [players, category, difficulty]);
+  }, [players, category, difficulty, pools, event, facts, factsFailed]);
 
   // Reveal the answer for a beat, then slide to the next pair.
   useEffect(() => {

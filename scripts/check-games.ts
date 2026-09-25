@@ -20,7 +20,8 @@ import { loadFacts } from '@/data/liquipedia/facts';
 import { loadOrgs } from '@/data/liquipedia/orgs';
 import { loadPools } from '@/data/liquipedia/pools';
 import { loadRankings, membersOf } from '@/data/liquipedia/rankings';
-import { deal, dealWeighted } from '@/games/shared/rotation';
+import { deal, dealInTurn, dealWeighted } from '@/games/shared/rotation';
+import { TERMS, termsIn, type TermId } from '@/games/shared/glossary';
 import { DEFAULT_POOL, RANDOM_MIX } from '@/games/shared/pool';
 import { GAMES, getGame } from '@/games/registry';
 import {
@@ -46,7 +47,7 @@ import * as wordle from '@/games/wordle/engine';
 import * as career from '@/games/career-path/engine';
 import * as whoAreYa from '@/games/who-are-ya/engine';
 import * as tenaball from '@/games/tenaball/engine';
-import { buildCriteria as buildListCriteria } from '@/games/list/criteria';
+import { buildCriteria as buildListCriteria, buildPoolCriteria } from '@/games/list/criteria';
 import { poolBoards } from '@/games/tenaball/pool-boards';
 import { derivedBoards } from '@/games/tenaball/derived-boards';
 import * as griefer from '@/games/impostor/engine';
@@ -124,17 +125,29 @@ const teammates = await optional(loadTeammates, 'teammates.json');
 // keeps the promises the schedule makes: it opens on famous names, never
 // leaves the level's cap, never deals a free tie, and once the schedule has
 // reached "close" it never serves an obvious pair — the 1-versus-5 on round
-// thirty that started all this.
-for (const category of ['age', 'earnings', 'fncsWins'] as const) {
-  const ranked = [...hl.eligible(roster.players, category)].sort((a, b) => b.earnings - a.earnings);
+// thirty that started all this. And that the answers cannot be read off the
+// board: not by flipping the last one, not by the nought on the left.
+// FNCS Finals reads `facts.json`, attached to the roster the way the page does it.
+const contenders: hl.Contender[] = facts
+  ? roster.players.map((p) => ({ ...p, fncsFinals: facts.of(p.id).fncsApps }))
+  : roster.players;
+const hlCategories: hl.Category[] = facts ? ['age', 'earnings', 'fncsWins', 'fncsFinals'] : ['age', 'earnings', 'fncsWins'];
+for (const category of hlCategories) {
+  const ranked = [...hl.eligible(contenders, category)].sort((a, b) => b.earnings - a.earnings);
   const rank = new Map(ranked.map((player, index) => [player.id, index + 1]));
   for (const difficulty of ['easy', 'medium', 'hard'] as const) {
     let rounds = 0;
     let onSchedule = 0;
     let ties = 0;
     let deepest = 0;
+    // Consecutive answers that flipped direction, and shown noughts that went
+    // up — the two ways Hard's FNCS Wins could be read without knowing anyone.
+    let turns = 0;
+    let flips = 0;
+    let fromNought = 0;
+    let noughtUp = 0;
     for (let run = 0; run < 5; run++) {
-      let state = hl.createGame(roster.players, category, difficulty, `hl-${category}-${difficulty}-${run}`);
+      let state = hl.createGame(contenders, category, difficulty, `hl-${category}-${difficulty}-${run}`);
       check(state !== null, `higher-lower: could not start ${category}/${difficulty}`);
       if (!state) continue;
       check(
@@ -142,6 +155,7 @@ for (const category of ['age', 'earnings', 'fncsWins'] as const) {
         `higher-lower ${category}/${difficulty}: round one was not top 20 against top 20`,
       );
 
+      let previous: hl.Answer | null = null;
       while (state.status === 'playing' && hl.roundOf(state) <= 40) {
         const round = hl.roundOf(state);
         const scheduled = hl.closenessFor(difficulty, round);
@@ -160,11 +174,14 @@ for (const category of ['age', 'earnings', 'fncsWins'] as const) {
           truth !== 'equal' || hl.hasEqualButton(difficulty),
           `higher-lower ${where}: dealt a tie with no Equal button`,
         );
-        if (category === 'fncsWins') {
-          check(
-            state.current.fncsWins > 0 || state.challenger.fncsWins > 0,
-            `higher-lower ${where}: nought against nought`,
-          );
+        if (previous && previous !== 'equal' && truth !== 'equal') {
+          turns++;
+          if (previous !== truth) flips++;
+        }
+        previous = truth;
+        if (category === 'fncsWins' && state.current.fncsWins === 0) {
+          fromNought++;
+          if (truth === 'higher') noughtUp++;
         }
         if (category !== 'fncsWins' && (scheduled === 'close' || scheduled === 'very-close')) {
           check(
@@ -180,10 +197,28 @@ for (const category of ['age', 'earnings', 'fncsWins'] as const) {
       }
     }
     const share = onSchedule / Math.max(rounds, 1);
+    const flipped = flips / Math.max(turns, 1);
     notes.push(
       `higher-lower ${category}/${difficulty}: ${rounds} rounds, ${Math.round(share * 100)}% in the ` +
-        `scheduled band, deepest challenger #${deepest}, ${ties} ties`,
+        `scheduled band, deepest challenger #${deepest}, ${ties} ties, ` +
+        `${Math.round(flipped * 100)}% of answers flipped direction`,
     );
+    // An answer that just went up used to be followed by one going down: 93%
+    // of Hard's FNCS answers flipped, so "the opposite of last time" won the
+    // game. A fair coin flips half the time; three in four is the alarm.
+    check(
+      flipped < 0.75,
+      `higher-lower ${category}/${difficulty}: ${Math.round(flipped * 100)}% of answers flipped direction`,
+    );
+    // On Hard a shown nought can be equal, and must sometimes be — it used to
+    // go up every time, because nought against nought was never dealt.
+    if (category === 'fncsWins' && difficulty === 'hard') {
+      check(fromNought > 0, 'higher-lower fncsWins/hard: no nought was ever shown');
+      check(
+        noughtUp < fromNought * 0.75,
+        `higher-lower fncsWins/hard: ${noughtUp} of ${fromNought} shown noughts went up`,
+      );
+    }
     // FNCS Wins runs on small integers and a few hundred title-holders, so its
     // bands are often unreachable and the nearest miss stands in — measured,
     // not held to a number.
@@ -715,49 +750,68 @@ if (facts && orgs) {
   }
 
   // ---- Connections
-  let puzzles = 0;
-  let crossed = 0;
-  for (let seed = 0; seed < 40; seed++) {
-    const puzzle = connections.generatePuzzle(source, `c-${seed}`);
-    if (!puzzle) continue;
-    puzzles++;
-    check(puzzle.board.length === 16, `connections: puzzle ${seed} has ${puzzle.board.length} tiles`);
-    const ids = new Set(puzzle.board.map((p) => p.id));
-    check(ids.size === 16, `connections: puzzle ${seed} repeats a player`);
+  // On a chosen tier, and on Random over the whole roster with the fame mix
+  // the game passes there — the pool most people play and the one where an
+  // exclusive draw would otherwise be all deep cuts.
+  const everyone: CriteriaSource = {
+    players: (['easy', 'medium', 'hard'] as const).flatMap((tier) =>
+      roster.exactly(tier, { eligible: facts.eligible(3) }),
+    ),
+    facts,
+    orgs,
+  };
+  for (const setup of [
+    { name: 'medium', source, mix: undefined, seeds: 40, least: 35 },
+    { name: 'random', source: everyone, mix: RANDOM_MIX, seeds: 20, least: 18 },
+  ]) {
+    const inPlay = buildCriteria(setup.source, { minMatches: 4, maxShare: 0.5 });
+    let puzzles = 0;
+    const tiers = { easy: 0, medium: 0, hard: 0 };
+    for (let seed = 0; seed < setup.seeds; seed++) {
+      const where = `connections ${setup.name}: puzzle ${seed}`;
+      const puzzle = connections.generatePuzzle(setup.source, `c-${seed}`, setup.mix);
+      if (!puzzle) continue;
+      puzzles++;
+      check(puzzle.board.length === 16, `${where} has ${puzzle.board.length} tiles`);
+      const ids = new Set(puzzle.board.map((p) => p.id));
+      check(ids.size === 16, `${where} repeats a player`);
+      for (const player of puzzle.board) tiers[player.tier]++;
 
-    let game = connections.createGame(puzzle);
-    for (const group of puzzle.groups) {
-      for (const player of group.players) game = connections.toggle(game, player);
-      game = connections.submit(game);
+      let game = connections.createGame(puzzle);
+      for (const group of puzzle.groups) {
+        for (const player of group.players) game = connections.toggle(game, player);
+        game = connections.submit(game);
+      }
+      check(game.status === 'won', `${where} rejected its own groups`);
+      check(game.mistakes === 0, `${where} charged a mistake on perfect play`);
+      check(connections.livesLeft(game) === connections.MAX_MISTAKES, `${where} lost a life`);
+
+      // One way to split the sixteen.
+      const ways = connections.solutions(puzzle, setup.source);
+      check(ways === 1, `${where} splits ${ways} ways, not 1`);
+      // And no group lands on a fifth player — five Poles beside a Poland group.
+      const crowded = connections.crowded(puzzle, setup.source);
+      check(crowded.length === 0, `${where} has a fifth player for "${crowded.join('", "')}"`);
+      // "Has won a major" beside "has won an FNCS title": 164 of 165 in both.
+      const groups = puzzle.groups.map((group) => inPlay.find((c) => c.id === group.id));
+      if (groups.every((c) => c !== undefined)) {
+        check(
+          !hasNestedPair(groups as PlayerCriterion[], NEAR_NESTED),
+          `${where} has two nearly identical groups (${puzzle.groups.map((g) => g.label).join(' / ')})`,
+        );
+      }
     }
-    check(game.status === 'won', `connections: puzzle ${seed} rejected its own groups`);
-    check(game.mistakes === 0, `connections: puzzle ${seed} charged a mistake on perfect play`);
-    check(connections.livesLeft(game) === connections.MAX_MISTAKES, `connections: puzzle ${seed} lost a life`);
-
-    // The promise the overlap rework has to keep: one way to split the sixteen.
-    const ways = connections.solutions(puzzle, source);
-    check(ways === 1, `connections: puzzle ${seed} splits ${ways} ways, not 1`);
-    // And the reason for the rework: somebody on the board fits two groups.
-    const traps = connections.overlap(puzzle, source);
     check(
-      traps >= connections.MIN_TRAPS,
-      `connections: puzzle ${seed} has ${traps} players fitting two groups`,
+      puzzles >= setup.least,
+      `connections ${setup.name}: only ${puzzles} of ${setup.seeds} seeds produced a board`,
     );
-    crossed += traps;
-    // "Has won a major" beside "has won an FNCS title": 164 of 165 in both.
-    const groups = puzzle.groups.map((group) => criteria.find((c) => c.id === group.id));
-    if (groups.every((c) => c !== undefined)) {
-      check(
-        !hasNestedPair(groups as PlayerCriterion[], NEAR_NESTED),
-        `connections: puzzle ${seed} has two nearly identical groups (${puzzle.groups.map((g) => g.label).join(' / ')})`,
-      );
-    }
+    const dealt = Math.max(puzzles * 16, 1);
+    notes.push(
+      `connections ${setup.name}: ${puzzles} of ${setup.seeds} seeds produced a board; tiles ` +
+        `${Math.round((tiers.easy / dealt) * 100)}% easy, ${Math.round((tiers.medium / dealt) * 100)}% medium, ` +
+        `${Math.round((tiers.hard / dealt) * 100)}% hard`,
+    );
   }
-  check(puzzles >= 35, `connections: only ${puzzles} of 40 seeds produced a board`);
-  notes.push(
-    `connections: ${puzzles} of 40 seeds produced a board, ` +
-      `${(crossed / Math.max(puzzles, 1)).toFixed(1)} overlapping players each`,
-  );
 
   // A near miss must report how many belonged to one group.
   {
@@ -1091,8 +1145,99 @@ if (pools.pools.length > 0) {
     notes.push(`pool ${pool.label}: ${playable.length} of ${pool.players.length} playable`);
     check(playable.length >= 20, `pools: ${pool.label} only has ${playable.length} playable players`);
   }
+
+  for (const pool of pools.pools) {
+    const field = pool.players.flatMap((id) => byId.get(id) ?? []);
+    const year = pool.date.slice(0, 4);
+
+    // Tenaball: one heading, and the planned boards first and in order. A board
+    // the field cannot fill is dropped, so this checks order, not presence.
+    const boards = poolBoards(pool, field, facts, orgs);
+    check(new Set(boards.map((b) => b.group)).size === 1, `event ${pool.label}: field boards under several headings`);
+    const planned = ['earnings', 'youngest', 'earnings-least', 'fncs', 'earnings:Europe', 'countries',
+      'earnings-year', 'oldest', 'orgs', 'earnings:North America', 'lans', 'fncs-apps'];
+    const at = planned.map((id) => boards.findIndex((b) => b.id === `pool:${pool.id}:${id}`)).filter((i) => i >= 0);
+    check(at.every((index, i) => i === 0 || index > at[i - 1]), `event ${pool.label}: field boards out of order`);
+    check(at.length >= 10, `event ${pool.label}: only ${at.length} of the ${planned.length} planned boards built`);
+    notes.push(`event ${pool.label}: ${boards.length} Tenaball boards, ${at.length} of ${planned.length} planned`);
+
+    // List: the planned lists, and the two answered with names that are not
+    // players search a population wider than their answers.
+    if (facts) {
+      const lists = buildPoolCriteria(pool, field, facts, orgs, roster.players);
+      const ids = lists.map((c) => c.id.replace(`pool:${pool.id}:`, ''));
+      for (const id of ['region:Europe', `fncs-${year}`, 'region:North America', 'orgs', 'region:South America',
+        'countries', 'region:Middle East', 'fncs', 'region:Asia-Oceania']) {
+        check(ids.includes(id), `event ${pool.label}: no "${id}" list`);
+      }
+      check(ids.some((id) => id.startsWith('also:')), `event ${pool.label}: no "also played the last LAN" list`);
+      for (const list of lists.filter((c) => c.pool)) {
+        const searchable = new Set(list.pool!.map((entry) => entry.id));
+        check(list.answers.every((a) => searchable.has(a.id)), `event ${pool.label}: "${list.title}" has an answer you cannot type`);
+        check(list.pool!.length > list.answers.length * 2, `event ${pool.label}: "${list.title}" searches little more than its answers`);
+      }
+      notes.push(`event ${pool.label}: ${lists.length} List lists — ${lists.slice(0, 4).map((c) => c.title).join('; ')}…`);
+    }
+
+    // The secret-player games: regions in turn, so any run of as many deals as
+    // there are regions shows every one of them.
+    const regions = new Set(field.map((p) => p.region ?? ''));
+    let seen: string[] = [];
+    const dealt: string[] = [];
+    const rng = makeRng(`turns-${pool.id}`);
+    for (let i = 0; i < regions.size * 4; i++) {
+      const drawn = dealInTurn(field, seen, (p) => p.region ?? '', rng)!;
+      seen = drawn.seen;
+      dealt.push(drawn.pick.region ?? '');
+    }
+    for (let i = 0; i + regions.size <= dealt.length; i += regions.size) {
+      const window = new Set(dealt.slice(i, i + regions.size));
+      check(window.size === regions.size, `event ${pool.label}: deals ${i + 1}-${i + regions.size} miss a region`);
+    }
+
+    // Higher or Lower leans to the region it has shown least; measured against
+    // the same runs without the lean.
+    const spread = (on: boolean) => {
+      let total = 0;
+      for (let run = 0; run < 5; run++) {
+        let state = hl.createGame(field, 'earnings', 'easy', `spread-${run}`, on);
+        const shown = new Set<string>();
+        while (state && state.status === 'playing' && hl.roundOf(state) <= 12) {
+          shown.add(state.challenger.region ?? '');
+          state = hl.nextRound(hl.submitAnswer(state, hl.correctAnswer(state)));
+        }
+        total += shown.size;
+      }
+      return total / 5;
+    };
+    const [flat, leaned] = [spread(false), spread(true)];
+    check(leaned >= flat, `event ${pool.label}: Higher or Lower's region lean shows fewer regions (${leaned} vs ${flat})`);
+    notes.push(`event ${pool.label}: Higher or Lower shows ${leaned.toFixed(1)} regions in 12 rounds with the lean, ${flat.toFixed(1)} without`);
+  }
 } else {
   skipped.push('pools.json (no event pools)');
+}
+
+// ------------------------------------------------------------ 12b. the glossary
+// The definitions are matched to titles by their words; the traps are the ones
+// that read alike — a region after "from", the one board whose LAN is wide.
+{
+  const expect = (title: string, id: string, has: TermId[], lacks: TermId[] = []) => {
+    const found = termsIn(title, id);
+    for (const term of has) check(found.includes(term), `glossary: "${title}" is missing ${term}`);
+    for (const term of lacks) check(!found.includes(term), `glossary: "${title}" wrongly explains ${term}`);
+  };
+  expect('Top 10 by LAN wins', 'lan-wins', ['lan-wide'], ['lan']);
+  expect('Players who have won a LAN', 'lan-winners', ['lan'], ['lan-wide']);
+  expect('Players from Poland who have won an FNCS', 'country-fncs:Poland', ['nationality', 'fncs-title']);
+  expect('FNCS 2026 Globals qualifiers from Europe', 'pool:x:region:Europe', ['region', 'field'], ['nationality']);
+  expect('Top 10 by major tournament wins', 'major-wins', ['major']);
+  expect('Players with 20+ FNCS grand finals', 'fncs-apps:20', ['fncs-final'], ['fncs-title']);
+  if (facts) {
+    const lans = TERMS.lan.events!(facts).names;
+    check(lans.length === facts.events.filter((e) => e.lan).length, 'glossary: the LAN list is not every LAN');
+    notes.push(`glossary: ${lans.length} LANs listed — ${lans.join(', ')}`);
+  }
 }
 
 // ------------------------------------------------------------------- report --

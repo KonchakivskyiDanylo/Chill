@@ -3,7 +3,7 @@ import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
 import type { RegionChoice } from '@/components/RegionPicker';
 import { useLocalState } from '@/lib/storage';
 import { DIFFICULTIES, type Difficulty } from './difficulty';
-import { deal, dealWeighted, type Deal } from './rotation';
+import { deal, dealInTurn, dealWeighted, type Deal } from './rotation';
 
 /**
  * Who a game may ask about.
@@ -183,9 +183,11 @@ export const RANDOM_MIX: Readonly<Record<Difficulty, number>> = { easy: 0.5, med
 /**
  * Deals the next secret player for a game that has one.
  *
- * Random weights the draw by tier (see `RANDOM_MIX`). Everything else deals
- * evenly: an event field is the field, a chosen tier is one tier, and Choose →
- * Any promises "no ranking applied" and keeps it.
+ * Random weights the draw by tier (see `RANDOM_MIX`). An event field takes its
+ * regions in turn (see `dealInTurn`), because a field is lopsided and an even
+ * draw over it hardly ever reached the small regions. Everything else deals
+ * evenly: a chosen tier is one tier, and Choose → Any promises "no ranking
+ * applied" and keeps it.
  */
 export function dealSecret<T extends RosterPlayer>(
   players: readonly T[],
@@ -194,7 +196,8 @@ export function dealSecret<T extends RosterPlayer>(
   event: string | null,
   choice: PoolChoice,
 ): Deal<T> | null {
-  if (!pools?.get(event) && choice.mode === 'random') {
+  if (pools?.get(event)) return dealInTurn(players, seen, (player) => player.region ?? '');
+  if (choice.mode === 'random') {
     return dealWeighted(players, seen, (player) => player.tier, RANDOM_MIX);
   }
   return deal(players, seen);

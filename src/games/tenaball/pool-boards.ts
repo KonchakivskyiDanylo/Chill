@@ -26,10 +26,17 @@ import { money, plural } from '@/lib/format';
  */
 
 /**
- * Every board this field can fill.
+ * Every board this field can fill, in the order they are offered.
  *
- * Deliberately a short list of boards that read as questions — "who earned the
- * most", "who is the youngest" — rather than everything the columns permit.
+ * Deliberately boards that read as questions — "who earned the most", "who is
+ * the youngest" — rather than everything the columns permit.
+ *
+ * One heading and a fixed order. These were filed under Players, Countries and
+ * Organisations like the shipped boards, which scattered a field's dozen
+ * boards across three headings in no particular order; a field is one subject.
+ * The order is the one planned for an event's fortnight in LIMITED_MODE.md,
+ * where the boards that need the event's own results — the top ten of day
+ * one, eliminations, upsets — are listed too. Those wait for the data.
  */
 export function poolBoards(
   pool: Pool,
@@ -42,8 +49,9 @@ export function poolBoards(
     if (made) out.push(made);
   };
   const prefix = `pool:${pool.id}`;
+  const group = pool.label;
+  const year = Number(pool.date.slice(0, 4));
 
-  // ------------------------------------------------------------ players --
   const player = (p: RosterPlayer, value: number, display: string): Ranked => ({
     key: p.id,
     label: p.name,
@@ -58,17 +66,7 @@ export function poolBoards(
     value: p.earnings,
     display: money(p.earnings),
   });
-
-  add(
-    board(
-      `${prefix}:earnings`,
-      'Players',
-      `${pool.label} — top 10 by career earnings`,
-      'player',
-      `Career prize money across every tournament on record, not just ${pool.label}.`,
-      byValue(players.filter((p) => p.earningsKnown).map(earner)),
-    ),
-  );
+  const earners = players.filter((p) => p.earningsKnown);
 
   /*
    * Youngest and oldest rank on the birth *date*, not the age in years.
@@ -91,73 +89,6 @@ export function poolBoards(
   const BIRTHDAY_NOTE =
     'Age today, from published birthdays. Players with no birthday on record cannot be ranked and are not answers.';
 
-  add(
-    board(
-      `${prefix}:youngest`,
-      'Players',
-      `${pool.label} — the 10 youngest`,
-      'player',
-      `${BIRTHDAY_NOTE} Ranked on the date itself, so two players showing the same age are ordered by who was born later.`,
-      byValue(withAge.map(born)),
-    ),
-  );
-  add(
-    board(
-      `${prefix}:oldest`,
-      'Players',
-      `${pool.label} — the 10 oldest`,
-      'player',
-      `${BIRTHDAY_NOTE} Ranked on the date itself, so two players showing the same age are ordered by who was born earlier.`,
-      byValue(withAge.map(born), true),
-      true,
-    ),
-  );
-
-  add(
-    board(
-      `${prefix}:fncs`,
-      'Players',
-      `${pool.label} — top 10 by FNCS wins`,
-      'player',
-      `FNCS grand finals won across every season and region. ${TIE_EARNINGS}`,
-      byValue(
-        players.filter((p) => p.fncsWins > 0).map((p) => player(p, p.fncsWins, plural(p.fncsWins, 'win'))),
-      ),
-    ),
-  );
-
-  if (facts) {
-    add(
-      board(
-        `${prefix}:apps`,
-        'Players',
-        `${pool.label} — top 10 by tournaments played`,
-        'player',
-        `Every tournament in the export, not just this field's. ${TIE_EARNINGS}`,
-        byValue(
-          players
-            .map((p) => player(p, facts.of(p.id).apps, plural(facts.of(p.id).apps, 'tournament')))
-            .filter((row) => row.value > 0),
-        ),
-      ),
-    );
-    add(
-      board(
-        `${prefix}:lans`,
-        'Players',
-        `${pool.label} — top 10 by LAN appearances`,
-        'player',
-        `Major LANs only — the World Cup, the Globals and Epic’s other offline finals. ${TIE_EARNINGS}`,
-        byValue(
-          players
-            .map((p) => player(p, facts.of(p.id).lanApps, plural(facts.of(p.id).lanApps, 'LAN')))
-            .filter((row) => row.value > 0),
-        ),
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------- countries --
   // Keyed by the country's name, because that is what the guess box resolves
   // to for a country board — see `searchPool` in the game.
   const countries = new Map<string, { players: number; earnings: number }>();
@@ -169,13 +100,80 @@ export function poolBoards(
     countries.set(p.countryName, entry);
   }
 
+  const regional = (region: string, who: string) =>
+    board(
+      `${prefix}:earnings:${region}`,
+      group,
+      `Top 10 ${who} by career earnings`,
+      'player',
+      `Qualifiers who compete in ${region}, by career prize money across every tournament on record. Straight prize-money order.`,
+      byValue(earners.filter((p) => p.region === region).map(earner)),
+    );
+
+  // 1 ---------------------------------------------------------------------------
+  add(
+    board(
+      `${prefix}:earnings`,
+      group,
+      'Top 10 by career earnings',
+      'player',
+      `Career prize money across every tournament on record, not just ${pool.label}. Straight prize-money order.`,
+      byValue(earners.map(earner)),
+    ),
+  );
+
+  // 2 ---------------------------------------------------------------------------
+  add(
+    board(
+      `${prefix}:youngest`,
+      group,
+      'The 10 youngest',
+      'player',
+      `${BIRTHDAY_NOTE} Ranked on the date itself, so two players showing the same age are ordered by who was born later.`,
+      byValue(withAge.map(born)),
+    ),
+  );
+
+  // 3 ---------------------------------------------------------------------------
+  // The other end of the money: who got here on the least. A better question
+  // than it sounds, because the answers are the field's breakouts.
+  add(
+    board(
+      `${prefix}:earnings-least`,
+      group,
+      'The 10 lowest career earners',
+      'player',
+      'Least career prize money across every tournament on record, lowest first. Straight prize-money order.',
+      byValue(earners.map(earner), true),
+      true,
+    ),
+  );
+
+  // 4 ---------------------------------------------------------------------------
+  add(
+    board(
+      `${prefix}:fncs`,
+      group,
+      'Top 10 by FNCS wins',
+      'player',
+      `Regional FNCS grand finals won, across every season and region. ${TIE_EARNINGS}`,
+      byValue(
+        players.filter((p) => p.fncsWins > 0).map((p) => player(p, p.fncsWins, plural(p.fncsWins, 'win'))),
+      ),
+    ),
+  );
+
+  // 5 ---------------------------------------------------------------------------
+  add(regional('Europe', 'European players'));
+
+  // 6 ---------------------------------------------------------------------------
   add(
     board(
       `${prefix}:countries`,
-      'Countries',
-      `${pool.label} — top 10 countries by players in the field`,
+      group,
+      'Top 10 countries by players',
       'country',
-      `How many of the field each country sent. ${TIE_GROUP_EARNINGS}`,
+      `How many of the field each country sent, by each player’s first nationality. ${TIE_GROUP_EARNINGS}`,
       byValue(
         [...countries].map(([name, entry]) => ({
           key: name,
@@ -187,25 +185,42 @@ export function poolBoards(
       ),
     ),
   );
+
+  // 7 ---------------------------------------------------------------------------
   add(
     board(
-      `${prefix}:countries-money`,
-      'Countries',
-      `${pool.label} — top 10 countries by the field's career earnings`,
-      'country',
-      `The career earnings of this field, added up per country.`,
+      `${prefix}:earnings-year`,
+      group,
+      `Top 10 by earnings in ${year}`,
+      'player',
+      `Prize money won during ${year}, at every tournament on record. Straight prize-money order.`,
       byValue(
-        [...countries].map(([name, entry]) => ({
-          key: name,
-          label: name,
-          value: entry.earnings,
-          display: money(entry.earnings),
-        })),
+        players
+          .map((p) => ({
+            key: p.id,
+            label: p.name,
+            value: p.earningsByYear[year] ?? 0,
+            display: money(p.earningsByYear[year] ?? 0),
+          }))
+          .filter((row) => row.value > 0),
       ),
     ),
   );
 
-  // ------------------------------------------------------ organisations --
+  // 8 ---------------------------------------------------------------------------
+  add(
+    board(
+      `${prefix}:oldest`,
+      group,
+      'The 10 oldest',
+      'player',
+      `${BIRTHDAY_NOTE} Ranked on the date itself, so two players showing the same age are ordered by who was born earlier.`,
+      byValue(withAge.map(born), true),
+      true,
+    ),
+  );
+
+  // 9 ---------------------------------------------------------------------------
   if (orgs) {
     const inField = new Map(players.map((p) => [p.id, p]));
     const counted = orgs.orgs
@@ -226,14 +241,92 @@ export function poolBoards(
     add(
       board(
         `${prefix}:orgs`,
-        'Organisations',
-        `${pool.label} — top 10 organisations by players in the field`,
+        group,
+        'Top 10 organisations by players',
         'org',
         `Counted from each player's current organisation, so a player with no org counts for nobody. ${TIE_GROUP_EARNINGS}`,
         byValue(counted),
       ),
     );
   }
+
+  // 10 --------------------------------------------------------------------------
+  add(regional('North America', 'North American players'));
+
+  // 11 is subscribers, which the export does not have.
+
+  // 12 --------------------------------------------------------------------------
+  // Appearances at the kind of event this is: LANs for a LAN, FNCS grand finals
+  // for an FNCS event, and both for a Globals.
+  if (facts) {
+    const event = facts.events.find((candidate) => candidate.name === pool.event);
+    if (event?.lan ?? true) {
+      add(
+        board(
+          `${prefix}:lans`,
+          group,
+          'Top 10 by LAN appearances',
+          'player',
+          `Epic’s offline majors only — the World Cup, the Globals, the Summit and the other LANs. ${TIE_EARNINGS}`,
+          byValue(
+            players
+              .map((p) => player(p, facts.of(p.id).lanApps, plural(facts.of(p.id).lanApps, 'LAN')))
+              .filter((row) => row.value > 0),
+          ),
+        ),
+      );
+    }
+    if (pool.event.includes('FNCS')) {
+      add(
+        board(
+          `${prefix}:fncs-apps`,
+          group,
+          'Top 10 by FNCS grand finals played',
+          'player',
+          `Every regional grand final reached, plus the FNCS events played offline. ${TIE_EARNINGS}`,
+          byValue(
+            players
+              .map((p) => player(p, facts.of(p.id).fncsApps, plural(facts.of(p.id).fncsApps, 'final')))
+              .filter((row) => row.value > 0),
+          ),
+        ),
+      );
+    }
+
+    // The rest, after the planned twelve.
+    add(
+      board(
+        `${prefix}:apps`,
+        group,
+        'Top 10 by tournaments played',
+        'player',
+        `Every tournament on record, not just this field's. ${TIE_EARNINGS}`,
+        byValue(
+          players
+            .map((p) => player(p, facts.of(p.id).apps, plural(facts.of(p.id).apps, 'tournament')))
+            .filter((row) => row.value > 0),
+        ),
+      ),
+    );
+  }
+
+  add(
+    board(
+      `${prefix}:countries-money`,
+      group,
+      'Top 10 countries by career earnings',
+      'country',
+      'The career earnings of this field, added up per country. Straight prize-money order.',
+      byValue(
+        [...countries].map(([name, entry]) => ({
+          key: name,
+          label: name,
+          value: entry.earnings,
+          display: money(entry.earnings),
+        })),
+      ),
+    ),
+  );
 
   return out;
 }

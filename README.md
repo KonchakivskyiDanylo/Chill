@@ -11,12 +11,13 @@ the same licence — see [CREDITS.md](CREDITS.md).
 
 ```bash
 npm install
-npm run dev          # http://localhost:5173
+npm run dev:all      # the site on http://localhost:5173 and its API on :3000
 ```
 
 | Script | What it does |
 | --- | --- |
 | `npm run dev` | Vite dev server |
+| `npm run dev:all` | The site and the API together in one terminal, output tagged `site` / `api`, Ctrl+C stops both. The API runs with `ADMIN_OPEN=1`, so `#/analytics` opens without a password, and the site with `VITE_RECORD=1`, so rounds you play land on it (in `server/.data`, this machine only) |
 | `npm run build` | Typecheck + production build to `dist/` |
 | `npm run typecheck` | TypeScript only |
 | `npm run check:games` | Drives all ten games through a full round headlessly. Career Path and Who Are Ya report SKIPPED until their generated files exist |
@@ -31,11 +32,13 @@ export, and the derived files are built by the cells in
 
 **Where the data comes from and how to extend it: see [DATA.md](DATA.md).**
 
+**Every game's algorithm, the server, the tests and what to decide next, in one place: see [PROJECT_GUIDE.md](PROJECT_GUIDE.md).**
+
 ## The games
 
 | Game | Modes | Notes |
 | --- | --- | --- |
-| Higher or Lower | Age / Career earnings / FNCS wins × Easy / Medium / Hard | Endless, one mistake ends the run, best score in `localStorage`. Round one is two of the top 20 earners; each round widens that window (to 250 / 1,000 / everyone) and narrows the gap on a four-rounds-a-step schedule. Only Hard deals ties, and has the Equal button |
+| Higher or Lower | Age / Career earnings / FNCS wins / FNCS finals × Easy / Medium / Hard | Endless, one mistake ends the run, best score in `localStorage`. Round one is two of the top 20 earners; each round widens that window (to 250 / 1,000 / everyone) and narrows the gap on a four-rounds-a-step schedule. The answer is drawn before the player, so it cannot be read off the last one. Only Hard deals ties, and has the Equal button |
 | Fortnitedle | — | 6 guesses, digits are playable characters. Nothing is given away before guess 3; then one digit after 3, a second after 4, the rest by 5 — and a revealed digit turns green on the keyboard |
 | Career Path | Order / Random | 10 clues, picked for a mix of finishes on recognisable stages, spread across the career, never opening on a famous player's signature result, and describing exactly one player wherever the career allows it (a duo partner is ruled out). Order reads them by date, Random in no order |
 | Who Are Ya? | Counts shown / hidden / Random order | Ten clues drawn across up to fifty teammates, number one always among them, revealed fewest-shared first. Needs 3+ teammates and 5+ tournaments on record |
@@ -43,7 +46,7 @@ export, and the derived files are built by the cells in
 | List | Easy / Hard | ~180 categories. 90s, +5s per correct answer, −3s per miss on Hard. Naming everyone ends the round as a win |
 | Griefer | All at once / One by one | Ten cards, four to six of which **fit** the rule, and the board never says how many. Cards show the handle only |
 | Tic Tac Toe | Easy / Medium / Hard | Type any player; the grid only offers cells that keep the board solvable, and places them itself when there is one. Easy boards have 3+ household names per cell, Medium 2+ regulars; Hard may have one answer and gives 9 guesses |
-| Connections | — | 16 players, 4 overlapping groups with one valid split, 4 lives shown as hearts. No birth-year groups |
+| Connections | — | 16 players, 4 groups that each land on exactly their own four, 4 lives shown as hearts. No birth-year groups |
 | Guess the Player | Exact / Direction | 8 attributes — including FNCS finals played and "played together" (10+ events as teammates) — green or red, 8 guesses |
 
 Six of the ten share a **setup step** (`components/PoolSetup`), and it opens
@@ -56,7 +59,22 @@ Above all of them sits the **event mode** (`games/shared/mode.ts`), chosen on
 the home page and shown in the header. Pick a tournament and every game draws
 only from that field until you leave it — the eight setup screens collapse to a
 Start button, and Tenaball and List swap their categories for field-scoped ones
-derived in the browser.
+derived in the browser, under one heading and in a planned order. A field is
+lopsided (46 of the 2026 Globals' 101 are European), so the four secret-player
+games take its regions in turn and Higher or Lower leans towards the region a
+run has shown least.
+
+The event mode is the testing ground for a **limited mode**: a fortnight
+around one event, daily puzzles, and nothing else on the site. The plan —
+dates, the day-by-day Tenaball and List categories, the daily schedule per game
+and what each needs from the data — is in [LIMITED_MODE.md](LIMITED_MODE.md).
+
+Every game's "How to play" ends with **What the words mean**
+(`games/shared/glossary.ts`): what a tournament, a major, a LAN, a Global
+Championship, an FNCS win and a nationality mean here, with the events each
+covers listed from `facts.json`. A Tenaball board or a List prompt shows the
+same definitions for the words in its own title under "What counts here".
+Where a game can tie, its rules say how.
 
 Fortnitedle, Career Path, Who Are Ya and Guess the Player deal their secret
 player from a **no-repeat rotation** (`games/shared/rotation.ts`): the pool
@@ -236,11 +254,21 @@ gracefully rather than dead-ending:
 - Tic Tac Toe boards are only offered if all nine cells can be filled with nine
   *different* players; during play a player is only ever offered cells that
   keep that true, so a move can never soft-lock the board.
-- Connections lets its groups overlap — a player who fits two connections is
-  the point of the game — and then proves the board has exactly one way to
-  split into four connected fours before showing it. It also rejects a board
-  where a connection that is *not* in play lands on exactly four players across
-  different groups, which is the "four French names that are not a group" trap.
+- Connections deals every group from players who fit none of the other three,
+  so each connection lands on exactly its own four — never a fifth Pole beside
+  the Poland group — and the split is unique by construction (`check:games`
+  still proves it). It also rejects a board where a connection that is *not*
+  in play lands on exactly four players across different groups, which is the
+  "four French names that are not a group" trap. On Random each group is two
+  household names, a regular and one more, by the same mix Random uses
+  everywhere, so the exclusive draw does not turn into a board of deep cuts.
+- Higher or Lower picks the answer before the player: an even draw between
+  Higher and Lower (Equal one round in five on Hard), leaning back toward the
+  middle only when a side is down to its last few players. Letting the answer
+  fall out of a random draw leaked it — Hard's FNCS Wins settled into
+  1-0-1-0-1-0 and nine answers in ten could be called without knowing anyone.
+  On Hard a player on nought can be level with another; on Easy and Medium,
+  with no Equal button, a shown nought is still a free Higher.
 - Tenaball's tournament boards rank *placements*, so a duos or trios event puts
   the whole team in one slot and only fills it once every name is in. It skips
   an event where two teams share a place in the top eleven, where a player is

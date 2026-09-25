@@ -5,6 +5,7 @@ import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PlayerSearch } from '@/components/PlayerSearch';
 import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
+import { WhatCounts } from '@/components/Glossary';
 import type { Board } from '@/data/liquipedia/rankings';
 import { loadFacts, type Facts } from '@/data/liquipedia/facts';
 import type { Orgs } from '@/data/liquipedia/orgs';
@@ -16,6 +17,7 @@ import { usePools } from '@/data/liquipedia/usePools';
 import { useRankings } from '@/data/liquipedia/useRankings';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import { activePool, useEventMode } from '@/games/shared/mode';
+import { termsIn } from '@/games/shared/glossary';
 import { poolPlayers } from '@/games/shared/pool';
 import type { Searchable } from '@/lib/text';
 import { useBestScore } from '@/lib/storage';
@@ -90,12 +92,12 @@ function Game({
   /**
    * Career facts, loaded only inside an event mode.
    *
-   * Two of the nine field boards — tournaments played, LAN appearances — are
-   * the only thing in this game that needs `facts.json`, and it is 577 KB.
-   * Everyone who opens Tenaball on the whole scene would be paying for two
-   * boards they cannot reach, so this is a deliberate conditional load rather
-   * than another `useFacts()` at the top. The boards appear when it lands;
-   * `poolBoards` simply omits them until then.
+   * Three of the field boards — LAN appearances, FNCS grand finals played,
+   * tournaments played — are the only thing in this game that needs
+   * `facts.json`, and it is 577 KB. Everyone who opens Tenaball on the whole
+   * scene would be paying for boards they cannot reach, so this is a
+   * deliberate conditional load rather than another `useFacts()` at the top.
+   * The boards appear when it lands; `poolBoards` simply omits them until then.
    */
   const [facts, setFacts] = useState<Facts | null>(null);
   useEffect(() => {
@@ -347,6 +349,7 @@ function Game({
             <h2 className="tb-head__title">{board.title}</h2>
           </div>
           <p className="tiny faint">{board.tieRule}</p>
+          <WhatCounts terms={termsIn(`${board.group} ${board.title}`, board.id)} />
         </section>
 
         <ol className="tb-list list-reset">

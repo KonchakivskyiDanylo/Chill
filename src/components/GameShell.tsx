@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { EXPORT_DATE, SOURCE } from '@/data/liquipedia/roster';
 import { readLocal, writeLocal } from '@/lib/storage';
 import type { GameMeta } from '@/games/registry';
+import { Glossary } from './Glossary';
 import { Modal } from './ui';
 
 /**
@@ -139,6 +140,13 @@ function Rules({
           <RulesList rules={section.items} />
         </div>
       ))}
+
+      {game.terms?.length ? (
+        <div className="stack-sm">
+          <h3>What the words mean</h3>
+          <Glossary terms={game.terms} />
+        </div>
+      ) : null}
     </div>
   );
 }

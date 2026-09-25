@@ -17,7 +17,7 @@ import {
  *
  * Rounds are only sent from a production build, so playing on `npm run dev`
  * does not fill the dashboard with test games — set `VITE_RECORD=1` to send
- * them anyway while working on the server. Sending never blocks or breaks a
+ * them anyway, as `npm run dev:all` does. Sending never blocks or breaks a
  * game: every request is fire-and-forget and a failure is swallowed.
  */
 const SEND_ROUNDS = import.meta.env.PROD || import.meta.env.VITE_RECORD === '1';

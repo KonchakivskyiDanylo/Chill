@@ -104,6 +104,56 @@ export function dealWeighted<T extends { id: string }>(
   return { ...drawn, seen: [...kept, drawn.pick.id] };
 }
 
+/**
+ * Deals from several bags in turn: always the one that has waited longest.
+ *
+ * `dealWeighted` chooses a bag by chance, which is right when the bags are fame
+ * tiers and some should come up more than others. An event field wants the
+ * opposite. The 2026 Globals is 46 Europeans and 33 North Americans out of
+ * 101, so an even draw over the field was an EU and NA quiz with the Middle
+ * East's four turning up once in a blue moon. Taking the regions in turn puts
+ * every region on the screen every six rounds, whatever it sent.
+ *
+ * The turn is read off `seen` — the bag whose latest draw is furthest back
+ * goes next, a bag never drawn from goes first — so it needs no storage of its
+ * own and survives a reload like the cycle does. Each bag is still its own
+ * no-repeat cycle, as in `dealWeighted`.
+ */
+export function dealInTurn<T extends { id: string }>(
+  pool: readonly T[],
+  seen: readonly string[],
+  groupOf: (item: T) => string,
+  seed: string | number | Rng = Date.now(),
+): Deal<T> | null {
+  const rng: Rng = typeof seed === 'function' ? seed : makeRng(seed);
+  const groups = new Map<string, T[]>();
+  for (const item of pool) {
+    const key = groupOf(item);
+    const group = groups.get(key);
+    if (group) group.push(item);
+    else groups.set(key, [item]);
+  }
+  if (groups.size <= 1) return deal(pool, seen, rng);
+
+  const groupOfId = new Map(pool.map((item) => [item.id, groupOf(item)]));
+  const lastDrawn = new Map<string, number>();
+  seen.forEach((id, index) => {
+    const key = groupOfId.get(id);
+    if (key !== undefined) lastDrawn.set(key, index);
+  });
+  const waited = [...groups.keys()].map((key) => ({ key, at: lastDrawn.get(key) ?? -1 }));
+  const longest = Math.min(...waited.map((entry) => entry.at));
+  const next = waited.filter((entry) => entry.at === longest);
+  const chosen = next[Math.floor(rng() * next.length)].key;
+
+  const members = groups.get(chosen)!;
+  const ids = new Set(members.map((item) => item.id));
+  const drawn = deal(members, seen.filter((id) => ids.has(id)), rng);
+  if (!drawn) return null;
+  const kept = drawn.wrapped ? seen.filter((id) => !ids.has(id)) : [...seen];
+  return { ...drawn, seen: [...kept, drawn.pick.id] };
+}
+
 /** localStorage key for one pool's cycle. Scope it by every choice that changes the pool. */
 export function rotationKey(game: string, ...scope: (string | null | undefined)[]): string {
   return `seen:${game}:${scope.map((part) => part ?? 'all').join(':')}`;

@@ -14,7 +14,7 @@ import { useOrgs } from '@/data/liquipedia/useOrgs';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import { useEventMode } from '@/games/shared/mode';
-import { resolvePool, usePoolChoice } from '@/games/shared/pool';
+import { RANDOM_MIX, resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { getGame } from '@/games/registry';
 import {
   createGame,
@@ -84,14 +84,17 @@ function Game({
   );
 
   const start = useCallback(() => {
-    const puzzle = generatePuzzle({ players, facts, orgs });
+    // Random leans towards names people know, as every game's Random does; a
+    // chosen tier or an event field is dealt evenly.
+    const mix = !pools?.get(event) && choice.mode === 'random' ? RANDOM_MIX : undefined;
+    const puzzle = generatePuzzle({ players, facts, orgs }, undefined, mix);
     if (!puzzle) {
       setError('Could not find four clean groups of four in this pool. Try a wider one.');
       return;
     }
     setError(null);
     setGame(createGame(puzzle));
-  }, [players, facts, orgs]);
+  }, [players, facts, orgs, pools, event, choice.mode]);
 
   if (!game) {
     return (

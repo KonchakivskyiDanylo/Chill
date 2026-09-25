@@ -5,6 +5,7 @@ import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PlayerSearch } from '@/components/PlayerSearch';
 import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
+import { WhatCounts } from '@/components/Glossary';
 import type { Facts } from '@/data/liquipedia/facts';
 import { loadOrgs, type Orgs } from '@/data/liquipedia/orgs';
 import type { Pools } from '@/data/liquipedia/pools';
@@ -18,6 +19,7 @@ import { formatClock } from '@/lib/format';
 import { useBestScore } from '@/lib/storage';
 import { getGame } from '@/games/registry';
 import { activePool, useEventMode } from '@/games/shared/mode';
+import { termsIn } from '@/games/shared/glossary';
 import { poolPlayers } from '@/games/shared/pool';
 import { buildCriteria, buildPoolCriteria, type Criterion } from './criteria';
 import './list.css';
@@ -84,7 +86,13 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
 
   const criteria = useMemo(() => {
     if (pool) {
-      const scoped = buildPoolCriteria(pool, poolPlayers(roster, pools, event), facts);
+      const scoped = buildPoolCriteria(
+        pool,
+        poolPlayers(roster, pools, event),
+        facts,
+        extra.orgs,
+        roster.players,
+      );
       if (scoped.length > 0) return scoped;
     }
     return buildCriteria(roster, facts, pools, extra.orgs, extra.teammates);
@@ -303,6 +311,7 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
           <p className="tiny faint">
             {criterion.answers.length} {noun} fit.
           </p>
+          <WhatCounts terms={termsIn(`${criterion.title} ${criterion.subtitle ?? ''}`, criterion.id)} />
         </section>
 
         {idle ? (
