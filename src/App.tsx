@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { Link, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
-import { getGame } from '@/games/registry';
+import { getGame, OPEN_HIDDEN } from '@/games/registry';
 import { Credits } from '@/pages/Credits';
 import { Home } from '@/pages/Home';
 
@@ -22,7 +22,8 @@ function GamePage() {
   const { slug } = useParams<{ slug: string }>();
   const game = slug ? getGame(slug) : undefined;
 
-  if (!game) return <Navigate to="/" replace />;
+  // A hidden game is not on the live site at all, address included.
+  if (!game || (game.hidden && !OPEN_HIDDEN)) return <Navigate to="/" replace />;
 
   const { Component } = game;
   return (

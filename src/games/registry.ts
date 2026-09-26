@@ -37,6 +37,13 @@ export interface GameMeta {
    * under "What the words mean". See `games/shared/glossary.ts`.
    */
   terms?: TermId[];
+  /**
+   * Not ready to host: left off the home page and the side nav, and a
+   * production build sends its address back home. A dev server still opens it
+   * by URL, so it can be worked on; `check:games` still plays it. Delete the
+   * flag to bring it back.
+   */
+  hidden?: boolean;
   Component: LazyExoticComponent<ComponentType>;
 }
 
@@ -58,34 +65,6 @@ const POOL_SECTION: RuleSection = {
     'Region — play one region’s scene only. Difficulty is then ranked inside that region, so Easy means “well known in Asia”, not “well known worldwide”.',
     'Difficulty — Easy 🟢 is the names everyone knows, Medium 🟡 the regulars of the scene, Hard 🔴 the deep cuts.',
     ...(SHOW_STATUS ? ['Active, retired or everyone — the export says which players are still competing.'] : []),
-  ],
-};
-
-/**
- * The event mode, explained in the games it changes.
- *
- * Separate from `POOL_SECTION` because it is not a setting on this screen: it
- * is chosen on the home page and shown in the header, and while it is on the
- * section above does not apply at all.
- */
-const MODE_SECTION: RuleSection = {
-  title: 'Event mode',
-  items: [
-    'On the home page you can swap the whole scene for one tournament’s field, such as the FNCS Globals.',
-    'Every game then draws from that field and nothing else, and says so in the header until you leave it.',
-    'A field is a fixed list of players, so the region and difficulty choices do not apply to it: a hundred players is already the narrowest these games can run on. A game’s own Easy / Medium / Hard still does.',
-  ],
-};
-
-/**
- * The event mode in the four games with one secret player, which deal a field
- * differently from the rest — see `dealInTurn`.
- */
-const MODE_SECTION_SECRET: RuleSection = {
-  title: MODE_SECTION.title,
-  items: [
-    ...MODE_SECTION.items,
-    'The secret player comes from each of the field’s regions in turn, so every region is on the screen every few rounds — the four players the Middle East sent come up as often as Europe’s forty-six.',
   ],
 };
 
@@ -118,7 +97,6 @@ export const GAMES: GameMeta[] = [
           'For earnings a step is a share of the bigger figure: obvious is one player on half the other’s money or less, very close is within 10%. For age it is years (6+ apart down to 0–1), for FNCS wins titles (3+ down to 0–1), and for FNCS finals whole finals (8+ down to 0–1).',
           'Which is why you will not get a 1-versus-5 on round thirty.',
           'Which way: the answer is drawn before the player, Higher and Lower about equally often whatever the last one was. Guessing the opposite of last time will not carry a run — knowing the players will.',
-          'In an event mode the new player leans towards the region the run has shown least, so a Globals run is not all Europe and North America.',
         ],
       },
       {
@@ -138,7 +116,6 @@ export const GAMES: GameMeta[] = [
           'Career earnings are never dealt level. Two careers equal to the dollar would be a coincidence nobody could know.',
         ],
       },
-      MODE_SECTION,
     ],
     terms: ['earnings', 'age', 'fncs-title', 'fncs-final'],
     Component: lazy(() => import('./higher-lower/HigherLowerGame')),
@@ -164,7 +141,7 @@ export const GAMES: GameMeta[] = [
         items: [
           'A digit is the one thing in this game you cannot reason your way to: a letter tile tells you something every round, a digit tells you nothing until you happen to try it.',
           'So they are given away, never before your third guess and all of them by guess 5 — how much depends on the difficulty.',
-          'Easy 🟢 shows the digit itself, Medium 🟡 only a # where it sits, Hard 🔴 nothing at all. On Random it goes by how well known the player is.',
+          'Easy 🟢 shows the digit itself, Medium 🟡 only a # where it sits. Hard 🔴 and Random 🎲 show nothing at all.',
         ],
       },
       POOL_SECTION,
@@ -185,8 +162,7 @@ export const GAMES: GameMeta[] = [
     rules: [
       'Clues are majors only: the Epic-run grand finals since the 2019 World Cup — FNCS regionals, the Globals, the World Cup itself.',
       'Each clue is one tournament and where the player finished.',
-      'Only players with at least five majors on record can be the answer — except in event mode, where anyone in the field with a major can.',
-      'A career shorter than five majors still gets five guesses: the ones after its last clue reveal nothing new.',
+      'Only players with at least five majors on record can be the answer.',
       'Get it right and the rest of the ten clues turn face up, dimmed, so you can see what you would have been shown next.',
     ],
     sections: [
@@ -210,7 +186,6 @@ export const GAMES: GameMeta[] = [
         ],
       },
       POOL_SECTION,
-      MODE_SECTION_SECRET,
     ],
     terms: ['major', 'global', 'lan'],
     Component: lazy(() => import('./career-path/CareerPathGame')),
@@ -227,9 +202,7 @@ export const GAMES: GameMeta[] = [
     ],
     rules: [
       'Teammates are ranked by how many tournaments the pair entered together, counted across every tournament in the export.',
-      'A pair counts once per result they share, so two solo players at the same event are not teammates.',
-      'Ten clues are drawn from up to fifty teammates, spread across the whole list — so the same player deals a different hand each time. The number one teammate is always one of them.',
-      'The answer needs at least three recorded teammates and five tournaments on record.',
+      'A clue is a teammate who entered at least three tournaments with the answer. The answer needs three such teammates and five majors on record.',
       'Get it right and the rest of the clue list turns face up, dimmed, with the counts shown.',
     ],
     sections: [
@@ -238,12 +211,11 @@ export const GAMES: GameMeta[] = [
         items: [
           'Counts shown — fewest → most shared tournaments, with the number on each teammate.',
           'Counts hidden — the same order, without the numbers.',
-          'Random order — no ramp-up, and the counts stay hidden.',
+          'Random order — no ramp-up, and the counts stay hidden. The top teammate is never one of the first four clues.',
           'Teammates on the same number of shared tournaments can come out in either order — the count is the clue, not the position.',
         ],
       },
       POOL_SECTION,
-      MODE_SECTION_SECRET,
     ],
     terms: ['teammates', 'tournament'],
     Component: lazy(() => import('./who-are-ya/WhoAreYaGame')),
@@ -268,11 +240,10 @@ export const GAMES: GameMeta[] = [
       {
         title: 'Categories',
         items: [
-          'Nearly three hundred boards, grouped: players, regions, countries, tournaments, organisations, paydays.',
+          'Nearly four hundred boards, grouped: players, regions, countries, tournaments, FNCS grand finals by region, organisations, paydays.',
           'Some are about the whole career — earnings, FNCS wins, LAN appearances. Some are about one year, one region, one country or one tournament.',
           'Not every board wants a player. An organisations board wants org names, a countries board wants country names, and a paydays board wants the tournament where the money was won — the prompt above the input says which.',
           'Hit Random for a board you did not choose, or search the list if you have one in mind.',
-          'In an event mode all of them are replaced by that field’s own boards, under one heading and in a fixed order: career earnings, the youngest, the lowest earners, FNCS wins, Europe’s top earners, countries by players, this year’s earnings, the oldest, organisations by players, North America’s top earners, then LAN and FNCS grand-final appearances.',
         ],
       },
       {
@@ -286,7 +257,6 @@ export const GAMES: GameMeta[] = [
           'A tournament where two teams share a place in the top eleven is not offered either.',
         ],
       },
-      MODE_SECTION,
     ],
     terms: [
       'tournament',
@@ -331,15 +301,8 @@ export const GAMES: GameMeta[] = [
           'FNCS grand final winners, split by region, because Europe’s winners and North America’s are two different memories.',
           'LAN winners — Epic’s offline majors only; “What counts here” under the list names every one of them.',
           'Major tournament winners, year by year — Epic’s tier-1 finals: FNCS grand finals, the Globals, the World Cup and Epic’s LANs.',
-          'In an event mode the lists are all about that field instead, in a fixed order: the qualifiers from each region, this year’s FNCS winners, the organisations and the countries with a player there, everyone who has won an FNCS, who else played the last LANs, and who has earned what — then everyone who qualified.',
-          'A field list can be short. The Middle East sent four players to the 2026 Globals, and naming all four is a round of its own.',
         ],
       },
-      {
-        title: 'Ties',
-        items: ['A list has no order, so there is nothing to tie: everyone who fits counts, however many there are.'],
-      },
-      MODE_SECTION,
     ],
     terms: [
       'field',
@@ -392,9 +355,11 @@ export const GAMES: GameMeta[] = [
         ],
       },
       POOL_SECTION,
-      MODE_SECTION,
     ],
     terms: ['org', 'fncs-title', 'lan', 'global', 'earnings', 'nationality', 'region'],
+    // Hidden 26 Sep 2026: one of Griefer, Connections and Tic Tac Toe for now, and
+    // Tic Tac Toe is the one kept. Griefer's griefers are random outsiders.
+    hidden: true,
     Component: lazy(() => import('./impostor/ImpostorGame')),
   },
   {
@@ -435,7 +400,6 @@ export const GAMES: GameMeta[] = [
           'Cells show the handle alone, for the same reason Griefer does.',
         ],
       },
-      MODE_SECTION,
     ],
     terms: ['nationality', 'region', 'org', 'fncs-title', 'lan', 'global', 'major', 'earnings', 'age'],
     Component: lazy(() => import('./tic-tac-toe/TicTacToeGame')),
@@ -456,8 +420,10 @@ export const GAMES: GameMeta[] = [
       'A wrong guess tells you when three of your four belonged to one group, and says nothing otherwise.',
       'Nothing otherwise is deliberate: two of any four landing in the same group is close to chance on a sixteen-card board, so reporting it every time buried the one hint worth reading.',
     ],
-    sections: [POOL_SECTION, MODE_SECTION],
+    sections: [POOL_SECTION],
     terms: ['nationality', 'region', 'org', 'fncs-title', 'lan', 'major', 'earnings'],
+    // Hidden 26 Sep 2026 in favour of Tic Tac Toe; thin pools cannot build a board.
+    hidden: true,
     Component: lazy(() => import('./connections/ConnectionsGame')),
   },
   {
@@ -494,9 +460,10 @@ export const GAMES: GameMeta[] = [
         ],
       },
       POOL_SECTION,
-      MODE_SECTION_SECRET,
     ],
     terms: ['region', 'nationality', 'age', 'earnings', 'fncs-title', 'fncs-final', 'teammates'],
+    // Hidden 26 Sep 2026: needs more than the columns it has before it is hosted.
+    hidden: true,
     Component: lazy(() => import('./guess-the-player/GuessThePlayerGame')),
   },
 ];
@@ -510,6 +477,12 @@ export const GAMES: GameMeta[] = [
  * router always resolves to the game whose URL was actually requested, and a
  * link to a game's old slug — which is still its id — keeps working.
  */
+/** The games players see — everything not `hidden`. */
+export const VISIBLE_GAMES: GameMeta[] = GAMES.filter((game) => !game.hidden);
+
+/** Whether a hidden game's page opens at all: on a dev server, yes; on the live site, no. */
+export const OPEN_HIDDEN = import.meta.env?.DEV === true;
+
 export function getGame(key: string): GameMeta | undefined {
   return GAMES.find((game) => game.slug === key) ?? GAMES.find((game) => game.id === key);
 }

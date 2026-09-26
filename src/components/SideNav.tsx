@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { GAMES } from '@/games/registry';
+import { VISIBLE_GAMES } from '@/games/registry';
 
 /**
  * The games list, permanently down the left of every page.
@@ -38,7 +38,7 @@ export function SideNav({
       </div>
 
       <nav className="side-nav__list">
-        {GAMES.map((game) => (
+        {VISIBLE_GAMES.map((game) => (
           <NavLink
             key={game.id}
             to={`/game/${game.slug}`}

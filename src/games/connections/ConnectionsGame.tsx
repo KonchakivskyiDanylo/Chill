@@ -13,8 +13,8 @@ import { useFacts } from '@/data/liquipedia/useFacts';
 import { useOrgs } from '@/data/liquipedia/useOrgs';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
-import { useEventMode } from '@/games/shared/mode';
-import { RANDOM_MIX, resolvePool, usePoolChoice } from '@/games/shared/pool';
+import { activePool, useEventMode } from '@/games/shared/mode';
+import { everyone, RANDOM_MIX, resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { getGame } from '@/games/registry';
 import {
   createGame,
@@ -77,7 +77,11 @@ function Game({
   }));
   const [error, setError] = useState<string | null>(null);
 
-  const eligible = useMemo(() => facts.eligible(3), [facts]);
+  // A board needs players with enough recorded career to satisfy a rule — on
+  // the whole roster. An event field is dealt whole: a qualifier with two majors
+  // on record still has a country, a region and an organisation to fit.
+  const inField = Boolean(activePool(pools, event));
+  const eligible = useMemo(() => (inField ? everyone : facts.eligible(3)), [facts, inField]);
   const players = useMemo(
     () => resolvePool(roster, pools, event, choice, eligible, 80),
     [roster, pools, event, choice, eligible],

@@ -10,7 +10,7 @@ import { PoolSetup } from '@/components/PoolSetup';
 import { Banner } from '@/components/ui';
 import { rotationKey } from '@/games/shared/rotation';
 import { useEventMode } from '@/games/shared/mode';
-import { dealSecret, levelOf, poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
+import { chosenLevel, dealSecret, poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
 import type { Pools } from '@/data/liquipedia/pools';
 import { type Roster } from '@/data/liquipedia/roster';
 import { usePools } from '@/data/liquipedia/usePools';
@@ -117,8 +117,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   useRoundRecorder('wordle', game !== null && game.status !== 'playing', () => ({
     title: `Fortnitedle — ${game!.secret.name}`,
     data: EXPORT_DATE,
-    // The level the round was played at, so Random rounds can be split by it too.
-    setup: { ...poolSetup(event, choice), level: game!.level },
+    setup: poolSetup(event, choice),
     ...roundRecord(game!),
   }));
   const [draft, setDraft] = useState('');
@@ -144,7 +143,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
     const key = rotationKey(meta.id, ...poolScope(event, choice));
     const drawn = dealSecret(players, readLocal<string[]>(key, []), pools, event, choice);
     if (drawn) writeLocal(key, drawn.seen);
-    setGame(drawn ? gameFor(drawn.pick, levelOf(drawn.pick, event, choice)) : null);
+    setGame(drawn ? gameFor(drawn.pick, chosenLevel(event, choice)) : null);
     setWrapped(drawn?.wrapped ?? false);
     setDraft('');
     setMessage(null);

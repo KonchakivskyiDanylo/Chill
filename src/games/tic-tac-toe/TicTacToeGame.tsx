@@ -125,8 +125,9 @@ function Game({
   const field = useMemo(() => poolPlayers(roster, pools, event), [roster, pools, event]);
   const accepted = field.length > 0 ? field : roster.players;
   const answers = useMemo(() => {
+    // A field is dealt whole — see the same note in Griefer.
+    if (field.length > 0) return field;
     const eligible = facts.eligible(3);
-    if (field.length > 0) return eligible(field);
     return BANDS[difficulty].flatMap((band) => roster.exactly(band, { eligible }));
   }, [facts, field, roster, difficulty]);
 

@@ -16,7 +16,7 @@ import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import { rotationKey } from '@/games/shared/rotation';
 import { activePool, useEventMode } from '@/games/shared/mode';
-import { dealSecret, poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
+import { dealSecret, poolPlayers, poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { moneyShort, ordinal, playerMoney, plural } from '@/lib/format';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { getGame } from '@/games/registry';
@@ -80,8 +80,16 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
   const field = activePool(pools, event);
   const eligible = field ? majors.inField : majors.eligible;
 
-  /** Everyone the game could ever ask about — what the search box covers. */
-  const answerable = useMemo(() => eligible(roster.players), [roster, eligible]);
+  /** Who the guess box takes: every usual answer, plus the field's own when one is in force. */
+  const answerable = useMemo(() => {
+    const usual = majors.eligible(roster.players);
+    if (!field) return usual;
+    const known = new Set(usual.map((player) => player.id));
+    return [
+      ...usual,
+      ...majors.inField(poolPlayers(roster, pools, event)).filter((player) => !known.has(player.id)),
+    ];
+  }, [roster, majors, field, pools, event]);
 
   const players = useMemo(
     () => resolvePool(roster, pools, event, choice, eligible, 10),

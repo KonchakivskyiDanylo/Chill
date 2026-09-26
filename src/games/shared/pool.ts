@@ -128,6 +128,9 @@ export function matchesStatus(player: RosterPlayer, status: StatusChoice): boole
 /** A game's own eligibility filter, e.g. "has at least five tournaments". */
 export type Eligible = (players: RosterPlayer[]) => RosterPlayer[];
 
+/** No filter at all — what an event field uses where the roster has a minimum. */
+export const everyone: Eligible = (players) => players;
+
 /** `eligible` with the status filter folded in, so difficulty counts stay honest. */
 function withStatus(status: StatusChoice, eligible?: Eligible): Eligible {
   return (players) => {
@@ -248,17 +251,12 @@ export function poolScope(event: string | null, choice: PoolChoice): (string | n
 }
 
 /**
- * The difficulty a dealt secret player is played at.
- *
- * The one you chose, when you chose one. Otherwise — Random, Choose → Any, an
- * event field — the player's own band, read the same way the pool read it: the
- * regional band when a region is chosen, since Asia's Easy is not Europe's.
- * Fortnitedle hangs its digit help off this, so a Random round of a household
- * name plays like Easy and a deep cut like Hard.
+ * The difficulty somebody picked on Choose, or null — Random, Choose → Any and
+ * an event field have none. Fortnitedle's digit help hangs off it, and gives
+ * nothing when there is no difficulty to go by.
  */
-export function levelOf(player: RosterPlayer, event: string | null, choice: PoolChoice): Difficulty {
-  if (event) return player.tier;
-  const { region, difficulty } = effective(choice);
-  if (difficulty !== 'any') return difficulty;
-  return region ? player.regionTier : player.tier;
+export function chosenLevel(event: string | null, choice: PoolChoice): Difficulty | null {
+  if (event) return null;
+  const { difficulty } = effective(choice);
+  return difficulty === 'any' ? null : difficulty;
 }

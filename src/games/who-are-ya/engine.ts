@@ -1,5 +1,5 @@
 import { ref, type GamePayloads, type Outcome } from '@/analytics/types';
-import { clueOutcome } from '@/games/career-path/engine';
+import { lastGuess } from '@/games/career-path/engine';
 import type { TeammateClue } from '@/data/liquipedia/teammates';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 import { makeRng, randInt, shuffle, type Rng } from '@/lib/rng';
@@ -18,14 +18,43 @@ export const MAX_CLUES = 10;
 export const MIN_CLUES = 3;
 
 /**
- * Tournaments a secret player needs on record.
+ * Majors a secret player needs on record (`facts.json`'s `apps`: majors and
+ * LANs played). The name says tournaments for history; the count is majors.
  *
  * Separate from the teammate count and stricter than it. A player can pick up
  * three teammates across three tournaments in a career that is otherwise
  * invisible, and being asked to name them from three names is not a puzzle,
- * it is a coin toss. Five entries means there is a career to recognise.
+ * it is a coin toss. Five majors means there is a career to recognise.
+ *
+ * Neither minimum applies to an event field, which asks about everyone in it
+ * with a teammate at all — a short hand gets `MIN_GUESSES` guesses instead.
  */
 export const MIN_TOURNAMENTS = 5;
+
+/**
+ * Tournaments a teammate must have shared with the secret player to be a clue.
+ *
+ * Nearly half of every hand used to be pickup partners from one or two cash
+ * cups (44–48% of clues, whatever the answer's fame): names nobody could
+ * connect to the answer, there only because the draw spread across fifty.
+ * Three shared tournaments is a partnership somebody might remember.
+ */
+export const MIN_SHARED = 3;
+
+/** The teammates worth a clue, most shared first — `MIN_CLUES` counts these. */
+export function usableClues(clues: readonly TeammateClue[]): TeammateClue[] {
+  return clues.filter((clue) => clue.events >= MIN_SHARED);
+}
+
+/**
+ * How many clues the number one teammate is held back behind in Random order.
+ *
+ * Usually the duo partner, and for a known player the one name that ends the
+ * round on sight. A plain shuffle dealt them first one round in ten, and the
+ * other nine clues went to waste. Counts shown and hidden already save them
+ * for last.
+ */
+export const TOP_HELD_BACK = 4;
 
 export interface GameState {
   mode: Mode;
@@ -43,6 +72,8 @@ export interface GameState {
   /** Every guess and every skip, with the clue showing at the time — as in Career Path. */
   steps: { clue: number; guess: RosterPlayer | null }[];
   status: 'playing' | 'won' | 'lost';
+  /** Ended by Give up rather than by running out — see the same field in Career Path. */
+  gaveUp: boolean;
 }
 
 /** Shared-tournament counts are only shown on the first mode. */
@@ -82,9 +113,14 @@ function draw(clues: readonly TeammateClue[], rng: Rng): TeammateClue[] {
  * A round on a secret player the caller has already chosen.
  *
  * `clues` must be that player's teammates most-shared first, which is how
- * `Teammates.cluesFor` returns them. Ten are drawn from them (see `draw`);
+ * `Teammates.cluesFor` returns them. Those under `MIN_SHARED` are dropped,
+ * and ten are drawn from the rest (see `draw`);
  * Easy and Hard then walk those backwards so the weakest hint lands first and
- * the strongest last, and Random shuffles.
+ * the strongest last, and Random shuffles — with the top teammate held back
+ * (see `TOP_HELD_BACK`).
+ *
+ * Who may be the answer is the caller's call (`MIN_CLUES`, `MIN_TOURNAMENTS`,
+ * or anyone in an event field); a player with no usable teammate has no round.
  */
 export function createGame(
   secret: RosterPlayer,
@@ -92,10 +128,11 @@ export function createGame(
   mode: Mode,
   seed: string = String(Date.now()),
 ): GameState | null {
-  if (clues.length < MIN_CLUES) return null;
+  const usable = usableClues(clues);
+  if (usable.length === 0) return null;
   const rng = makeRng(seed);
-  const hand = draw(clues, rng);
-  const ordered = mode === 'random' ? shuffle(rng, hand) : [...hand].reverse();
+  const hand = draw(usable, rng);
+  const ordered = mode === 'random' ? holdBackTop(shuffle(rng, hand), hand[0], rng) : [...hand].reverse();
   return {
     mode,
     secret,
@@ -105,7 +142,19 @@ export function createGame(
     guesses: [],
     steps: [],
     status: 'playing',
+    gaveUp: false,
   };
+}
+
+/** Moves `top` out of the first `TOP_HELD_BACK` clues, to a random later one — the last in a short hand. */
+function holdBackTop(order: TeammateClue[], top: TeammateClue, rng: Rng): TeammateClue[] {
+  const at = order.indexOf(top);
+  const earliest = Math.min(TOP_HELD_BACK, order.length - 1);
+  if (at >= earliest) return order;
+  const to = randInt(rng, earliest, order.length - 1);
+  const out = [...order];
+  [out[at], out[to]] = [out[to], out[at]];
+  return out;
 }
 
 export function submitGuess(state: GameState, guess: RosterPlayer): GameState {
@@ -120,7 +169,10 @@ export function submitGuess(state: GameState, guess: RosterPlayer): GameState {
   if (guess.id === state.secret.id) {
     return { ...state, guesses, steps, revealed: state.clues.length, status: 'won' };
   }
-  if (state.revealed >= state.clues.length) return { ...state, guesses, steps, status: 'lost' };
+  // Out of clues: a short hand's spare guesses first, then the end.
+  if (state.revealed >= state.clues.length) {
+    return { ...state, guesses, steps, status: lastGuess(state) ? 'lost' : 'playing' };
+  }
   const revealed = state.revealed + 1;
   return { ...state, guesses, steps, revealed, earned: revealed };
 }
@@ -135,7 +187,7 @@ export function revealNext(state: GameState): GameState {
 /** Ends the round unsolved, with every remaining teammate revealed. */
 export function giveUp(state: GameState): GameState {
   if (state.status !== 'playing') return state;
-  return { ...state, revealed: state.clues.length, status: 'lost' };
+  return { ...state, revealed: state.clues.length, status: 'lost', gaveUp: true };
 }
 
 export function cluesLeft(state: GameState): number {
@@ -145,7 +197,7 @@ export function cluesLeft(state: GameState): number {
 /** The round as the analytics record it. A clue is the teammate, not the slot. */
 export function record(state: GameState): { outcome: Outcome; r: GamePayloads['who-are-ya'] } {
   return {
-    outcome: clueOutcome(state),
+    outcome: state.status === 'won' ? 'won' : state.gaveUp ? 'gave-up' : 'lost',
     r: {
       secret: ref(state.secret),
       clues: state.clues.map((clue) => ref(clue.player)),

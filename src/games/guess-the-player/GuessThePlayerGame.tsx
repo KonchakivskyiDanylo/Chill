@@ -18,13 +18,14 @@ import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import { useTeammates } from '@/data/liquipedia/useTeammates';
 import { rotationKey } from '@/games/shared/rotation';
-import { useEventMode } from '@/games/shared/mode';
+import { activePool, useEventMode } from '@/games/shared/mode';
 import { dealSecret, poolPlayers, poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { playerMoney } from '@/lib/format';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { getGame } from '@/games/registry';
 import {
   answerable,
+  answerableInField,
   gameFor,
   giveUp,
   guessesLeft,
@@ -126,9 +127,11 @@ function Game({
   }));
   const [error, setError] = useState<string | null>(null);
 
+  // A field deals everyone in it, a missing birthday included — see `answerableInField`.
+  const eligible = activePool(pools, event) ? answerableInField : answerable;
   const players = useMemo(
-    () => resolvePool(roster, pools, event, choice, answerable, 20),
-    [roster, pools, event, choice],
+    () => resolvePool(roster, pools, event, choice, eligible, 20),
+    [roster, pools, event, choice, eligible],
   );
   /*
    * Who the guess box takes: anyone, the way Tic Tac Toe does. It used to be
@@ -165,7 +168,7 @@ function Game({
             event={event}
             value={choice}
             onChange={setChoice}
-            eligible={answerable}
+            eligible={eligible}
             onStart={start}
             startLabel={settled ? 'Start' : 'Loading…'}
             canStart={settled}
@@ -277,7 +280,8 @@ function Game({
                 <div className="bold">{game.secret.name}</div>
                 <div className="small muted">
                   <CountryBadge code={game.secret.country} name={game.secret.countryName} />{' '}
-                  {game.secret.countryName} · {game.secret.region} · {game.secret.age} yrs ·{' '}
+                  {game.secret.countryName} · {game.secret.region} ·{' '}
+                  {game.secret.age === null ? 'age unknown' : `${game.secret.age} yrs`} ·{' '}
                   {playerMoney(game.secret)} · {game.secret.fncsWins} FNCS
                 </div>
               </div>
@@ -293,6 +297,11 @@ function Game({
           <div className="row small">
             <span className="gp-swatch gp-swatch--hit" /> match
             <span className="gp-swatch gp-swatch--miss" /> no match
+            {game.secret.age === null ? (
+              <>
+                <span className="gp-swatch gp-swatch--unknown" /> no birthday on record
+              </>
+            ) : null}
           </div>
           <p className="tiny faint">
             {game.mode === 'exact'

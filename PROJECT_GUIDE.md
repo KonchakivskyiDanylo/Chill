@@ -21,6 +21,8 @@ The site is React, Vite and TypeScript. Every game splits in two: a pure `engine
 | Connections | Sort 16 players into four groups of four | `connections` |
 | Guess the Player | Close in on a secret player attribute by attribute, eight guesses | `guess-the-player` |
 
+**Hidden for now (26 Sep 2026): Guess the Player, Connections and Griefer.** A `hidden` flag in the registry takes a game off the home page and the side nav, and the live site sends its address home. A dev server still opens it by URL, and `check:games` still plays it. Guess the Player needs more than it has. Of the three rule-grid games only one is kept, Tic Tac Toe: every board builds at every level and none repeats over 200 deals. Its Easy level is the thin one, with 30 distinct rules, and "won the EU FNCS" and "$1M+ earner" each sit on 41% of Easy boards. Delete the flag to bring a game back.
+
 Two folders keep old names: Fortnitedle lives in `wordle` and Griefer in `impostor`. The ids stay unchanged because best scores are stored under them.
 
 How it runs:
@@ -41,7 +43,7 @@ Every game reads one Liquipedia export in `liquipedia_data/clean_data/fortnite/`
 | `teammates.json` | each player's 50 most frequent teammates | cell 6 | Who Are Ya, List |
 | `orgs.json` | 979 organisations, with current and past players | the export | Griefer, Tic Tac Toe, Connections, Tenaball, List |
 | `facts.json` | per player: tournaments played, LAN and FNCS appearances, wins by kind, which headline events they played | notebook appendix | the criteria games, List, Tenaball's field boards, FNCS Finals, the glossary |
-| `rankings.json` | 284 precomputed Tenaball boards, plus the tournament names the paydays boards answer from | cells 2–4 | Tenaball |
+| `rankings.json` | 375 precomputed Tenaball boards (284 until cells 2–4 are re-run), plus the tournament names the paydays boards answer from | cells 2–4 | Tenaball |
 | `pools.json` | event fields; today one, the FNCS 2026 Globals with 101 players | cell 5 | event mode |
 
 Three rules keep this safe:
@@ -110,6 +112,8 @@ On the home page you can swap the whole scene for one tournament's field; today 
 - **Field categories.** Tenaball and List swap to boards and lists built from the field in the browser, under one heading, in a planned order.
 - **Regions in turn for the secret-player games.** Taking regions in turn (`dealInTurn`) puts every region on screen every six rounds. Europe sent 46 players and the Middle East 4, so an even draw almost never reached the small regions.
 - **Region lean in Higher or Lower.** The next player leans towards the region the run has shown least: 4.8 regions in the first 12 rounds instead of 3.2.
+- **The whole field, not the roster's minimums.** A qualifier is never left out for falling short of a bar the roster uses. Career Path takes anyone in the field with a major and Who Are Ya anyone with a teammate; either gives a short hand five guesses. Guess the Player takes the players with no birthday, and their Age column goes grey. Griefer, Connections and Tic Tac Toe drop their three-major minimum. At the 2026 Globals every secret-player game deals all 101 (Career Path once cell 7 has run). Only Higher or Lower's Age leaves out the 11 with no birthday, because there is nothing to compare.
+- **Not in How to play.** Event mode is not described in any game's rules. Limited mode will get rules of its own.
 
 ### Criteria: the rules Griefer, Tic Tac Toe and Connections use
 
@@ -220,7 +224,7 @@ They come out from guess 3, one per guess, all of them by guess 5. How much each
 | Medium | a # where it sits, not which digit; the keyboard stays as it was |
 | Hard | nothing |
 
-The difficulty is the one chosen on Choose. On Random, Choose → Any and in event mode it is the secret player's own tier (the regional tier when a region is chosen). The round records it as `setup.level`. Before the first digit lands the strip is not shown at all, because a row of blanks would give away that the name has a digit.
+It follows the difficulty chosen on Choose. Random, Choose → Any and event mode have no chosen difficulty, so they give nothing, like Hard. Before the first digit lands the strip is not shown at all, because a row of blanks would give away that the name has a digit.
 
 **The secret is dealt** from the no-repeat bag with the Random mix, or region by region in event mode.
 
@@ -262,11 +266,13 @@ You name a secret player from the people they have played tournaments with, reve
 
 **Teammates are counted from every tournament on record.** Two players are teammates at a tournament when they share one result, such as a duo or trio. A pair's count is the number of tournaments entered together; two solo players at the same event are not teammates. `teammates.json` keeps each player's 50 most frequent.
 
-**Who can be the answer:** 1,179 players with at least three teammates and five tournaments on record.
+**A clue is a teammate with 3+ shared tournaments** (`MIN_SHARED`). Before that, 44–48% of clues were pickup partners from one or two cash cups.
+
+**Who can be the answer:** 1,165 players with at least three such teammates and five majors on record (`facts.json`'s `apps`, which the code calls `MIN_TOURNAMENTS`). In event mode, anyone in the field with a teammate; a hand shorter than five gets five guesses.
 
 ### How the ten clues are drawn
 
-The hand always holds the number one teammate, usually the duo partner and the fact that makes the chain solvable. The other nine are drawn one from each slice of the remaining list, so a hand looks like teammates 1, 3, 9, 14, 19, 25, 30, 36, 41 and 47.
+The hand always holds the number one teammate, usually the duo partner and the fact that makes the chain solvable. The other nine are drawn one from each slice of the rest of the list (teammates with 3+ shared tournaments only). For a long list a hand looks like teammates 1, 3, 9, 14, 19, 25, 30, 36, 41 and 47.
 
 That spread means you are never dealt the ten weakest, and meeting the same player twice gives a different hand. The old version always showed the top ten in the same order.
 
@@ -276,9 +282,9 @@ That spread means you are never dealt the ten weakest, and meeting the same play
 | --- | --- | --- |
 | Counts shown | fewest shared tournaments first, the partner last | yes |
 | Counts hidden | the same order | no |
-| Random order | shuffled | no |
+| Random order | shuffled, but the number one teammate is never in the first four (`TOP_HELD_BACK`) | no |
 
-Teammates on the same count can come out in either order; the count is the clue, not the position. After the round the whole list turns face up, dimmed, with the counts.
+A plain shuffle dealt the duo partner first one round in ten, which ended a known player's round on clue one. Teammates on the same count can come out in either order; the count is the clue, not the position. After the round the whole list turns face up, dimmed, with the counts.
 
 ## Tenaball
 
@@ -291,7 +297,7 @@ You get one top-10 board and ten empty slots, and name the ten. A correct answer
 
 ### The boards
 
-284 boards come precomputed from the notebook (`rankings.json`), because they are aggregated from 442,736 placements. Eleven more are built in the browser from the roster.
+375 boards come precomputed from the notebook (`rankings.json`), because they are aggregated from 442,736 placements. Eleven more are built in the browser from the roster.
 
 | Group | Boards | Answered with |
 | --- | --- | --- |
@@ -302,7 +308,12 @@ You get one top-10 board and ten empty slots, and name the ten. A correct answer
 | Countries | 20 | country names |
 | Paydays | 20 | the tournament where the money was won |
 | Organisations | 11 | organisation names |
-| Tournaments | 8 | a tournament's top ten placements |
+| FNCS finals — North America | 44 | an FNCS grand final's top ten placements: every NA final |
+| FNCS finals — Europe | 26 | every EU final |
+| FNCS finals — other regions | 21 | the other regions' 2025 and 2026 finals and the 2021 Grand Royale |
+| Tournaments | 8 | a LAN's top ten placements |
+
+Seven FNCS finals are left out by the rules below: a finisher the roster cannot name, a shared place in the top eleven, or a player listed twice.
 
 ### Ties
 
@@ -492,7 +503,7 @@ You guess any player and get a row of comparisons against the secret one, then u
 
 There are only two colours, green and red; the arrows already say which way to go. A number equal to the secret player's is green in both styles.
 
-**Who can be the answer:** 3,027 players with a published birthday and an earnings figure, so the secret never has a blank. You may guess anyone; a guess with no birthday shows a dash for age.
+**Who can be the answer:** 3,027 players with a published birthday and an earnings figure, so the secret never has a blank. In event mode the birthday is not required: for a secret without one, every Age cell is grey (`unknown`) rather than red. You may guess anyone; a guess with no birthday shows a dash for age.
 
 **The secret is dealt** from the no-repeat bag, with the Random mix: over 3,000 test deals it came out 50% Easy, 34% Medium, 16% Hard. In event mode the field's regions are taken in turn.
 
@@ -578,6 +589,8 @@ It plays every game with a perfect player, generating the random games many time
 - **Definitions:** the matcher explains the right terms for tricky titles, and the LAN list names every LAN.
 - **Fortnitedle:** three guesses into a digit answer, Easy has handed the digit over, Medium a # with no key coloured, Hard nothing.
 - **Career Path:** a two-clue round lasts exactly five wrong guesses, a ten-clue round ten, and giving up is never recorded as running out.
+- **Who Are Ya:** the number one teammate is last in the ramped orders and never in Random's first four; a two-clue hand lasts five wrong guesses.
+- **Whole field:** every secret-player game deals all of an event field that its data allows, and Griefer, Connections and Tic Tac Toe build boards from the whole field.
 - **Analytics:** one real round per game, recorded and aggregated the way the dashboard reads it; the filters narrow every table, and the player view finds its player.
 
 A generated data file that is missing makes its games report SKIPPED and the suite still passes, so a fresh clone is testable before the notebook runs.

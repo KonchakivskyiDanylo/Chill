@@ -1,19 +1,25 @@
 # Notebook cells to run
 
-> **To run now (26 Sep 2026) — three cells: 1, then the `facts.json`
+> **To run now (26 Sep 2026) — cells 1, 2, 3, 4, then the `facts.json`
 > appendix, then 7.** Majors no longer include MrBeast's Extreme Survival
-> Challenge, and Career Path's file now carries every player with a major so an
-> event field can ask about its short careers. Proved against the dump with
-> every write sent to a scratch folder:
+> Challenge, Tenaball gets FNCS grand-final boards, and Career Path's file now
+> carries every player with a major so an event field can ask about its short
+> careers. Proved against the dump with every write sent to a scratch folder:
 >
+> - `rankings.json` — 284 boards become 375, and the 284 come out identical.
+>   The 91 new ones are "Top 10 at" an FNCS grand final, in three new groups:
+>   Europe (26, every final), North America (44, every final) and other regions
+>   (21: the 2025 and 2026 finals and the 2021 Grand Royale). Seven are left out
+>   by the usual rules — a finisher the roster cannot name (three early NA West
+>   finals, the Middle East and Asia Grand Royales), a shared 1st place (2025
+>   Major 1 Oceania), a player twice (2026 Solos Europe) — and the 2026 Globals
+>   until it is played.
 > - `facts.json` — 188 headline events become 187. Anas loses his one "major
 >   win" (that was it); De_Tibbe, Hiimtylerh and Keroro, who played nothing
 >   else, drop out; Favs, LazarP and Trippernn lose one appearance.
 > - `career_path.json` — the same 187 tournaments and the same results for all
 >   1,175 players it has now, plus 2,173 with one to four majors. 22 of the
 >   101 at the 2026 Globals become answerable in event mode; none has zero.
-> - `rankings.json` — cells 2–4 re-run give a byte-for-byte identical set of
->   boards, so they do not need running for this.
 
 Cells **in this order, top to bottom**. One kernel, started from the repo
 root — `BASE` is a relative path. Cell 1 loads `placements.json` (154 MB,
@@ -416,7 +422,8 @@ for a in anchors:
           rank_fame(mates[a], NAME), count('tournament'))
 
 # ----------------------------------------------------------- one tournament --
-# Offline events only, per your note: globals, World Cup, DreamHack, EWC.
+# Epic's LANs (the Globals, the World Cup finals, the Invitational, the Summit),
+# and below them FNCS grand finals by region.
 #
 # A row per finishing *position*, not per player. These events are played in
 # duos and trios, so 1st place is two or three people and the slot only fills
@@ -438,35 +445,71 @@ def team_row(place, team):
             'value': place, 'display': f'{place}',
             'members': [{'key': pg, 'label': NAME(pg)} for pg in pages]}
 
+# FNCS grand finals too (26 Sep 2026), by region: every European and North
+# American final, and the other regions' 2025 and 2026 finals plus the 2021
+# Grand Royale. The Globals, the Invitational and the Summit are LANs and
+# already above. Newest first inside each group — the season people remember
+# is the one at the top.
+FNCS_GROUPS = ['FNCS finals — Europe', 'FNCS finals — North America',
+               'FNCS finals — other regions']
+
+def fncs_group(t):
+    region = region_of(t)
+    if region == 'Europe':
+        return FNCS_GROUPS[0]
+    if region == 'North America':
+        return FNCS_GROUPS[1]
+    if year_of(t) in (2025, 2026) or 'Grand Royale' in t['name']:
+        return FNCS_GROUPS[2]
+    return None
+
+def fncs_short(name):
+    """'FNCS 2025 - Major 3: Europe - Grand Finals' -> 'FNCS 2025 - Major 3: Europe'."""
+    s = re.sub(r'\s*[-–:]?\s*Grand Finals?\s*[-–:]?\s*', ' ', name, flags=re.I)
+    s = re.sub(r'\s{2,}', ' ', s).strip()
+    return re.sub(r'[-–:]\s*$', '', s).strip()
+
+fncs_events = [n for n in FNCS - LANS if fncs_group(tour_of[n])]
+fncs_events.sort(key=lambda n: (str(tour_of[n].get('startdate') or ''), n), reverse=True)
+fncs_events.sort(key=lambda n: FNCS_GROUPS.index(fncs_group(tour_of[n])))
+
+# (tournament, group, the name in the title)
+EVENT_BOARDS = ([(n, 'Tournaments', n) for n in sorted(LANS)] +
+                [(n, fncs_group(tour_of[n]), fncs_short(n)) for n in fncs_events])
+wanted_events = {n for n, _, _ in EVENT_BOARDS}
+
 # Straight off `placements` rather than PLACED, which drops the participants it
 # cannot resolve: a team missing a member is a slot nobody can close, and the
 # board has to be able to see that and refuse.
-lan_places = defaultdict(lambda: defaultdict(list))
+event_places = defaultdict(lambda: defaultdict(list))
 for row in placements:
     n = row.get('tournament')
-    if n not in LANS:
+    if n not in wanted_events:
         continue
     r = rank_of(row.get('placement'))
     if r is None:
         continue
-    lan_places[n][r].append([resolve(p.get('player') or '')
-                             for p in (row.get('participants') or [])])
+    event_places[n][r].append([resolve(p.get('player') or '')
+                               for p in (row.get('participants') or [])])
 
-for n in sorted(LANS):
-    places = sorted(lan_places[n])[:SLOTS + 1]
-    teams = [lan_places[n][p][0] if len(lan_places[n][p]) == 1 else [] for p in places]
+event_skipped = Counter()
+for n, group, shown in EVENT_BOARDS:
+    places = sorted(event_places[n])[:SLOTS + 1]
+    teams = [event_places[n][p][0] if len(event_places[n][p]) == 1 else [] for p in places]
     if len(places) < SLOTS + 1 or any(not t or not all(t) for t in teams):
+        event_skipped[group] += 1
         continue     # fewer than 11 placements, two teams on one place, or a
                      # member this export cannot name — see the note above
     named = [pg for t in teams for pg in t]
     if len(set(named)) != len(named):
+        event_skipped[group] += 1
         continue     # the same player twice in the eleven — no single right answer
     spare = team_row(places[SLOTS], teams[SLOTS])
     del spare['display']             # the 11th is a near-miss test, never shown
     solo = max(len(t) for t in teams) == 1
     boards.append({
-        'id': f'tournament:{n}', 'group': 'Tournaments',
-        'title': f'Top 10 at {n}', 'entity': 'player',
+        'id': f'tournament:{n}', 'group': group,
+        'title': f'Top 10 at {shown}', 'entity': 'player',
         'tieRule': 'Ranked by finishing position at this event.' if solo else
                    ('Ranked by finishing position at this event. Each place is a '
                     'team, and it only fills once every player on it is named.'),
@@ -529,6 +572,8 @@ with open(OUT, 'w', encoding='utf-8') as fh:
 
 print(f'{len(boards)} boards, {os.path.getsize(OUT)/1e6:.2f} MB')
 print(Counter(b['group'] for b in boards))
+print('tournaments left out (under 11 places, a shared place, or a finisher the roster cannot name):',
+      dict(event_skipped))
 for bid in ('career-earnings', 'lan-earnings', 'fncs-apps', 'org-earnings',
             'country-total-earnings'):
     b = next((x for x in boards if x['id'] == bid), None)
@@ -666,13 +711,15 @@ Expected output — I ran all four cells against the real dump before writing
 this, with the writes redirected to a scratch directory:
 
 ```
-286 boards, 639 tournament names, 0.32 MB
-Counter({'By country': 76, 'By region': 60, 'Teammates': 59, 'Players': 32,
+375 boards, 639 tournament names, 0.52 MB
+2 boards left out, level at the cut: ['region-year-earnings:Asia:2018', 'mode-earnings-squad']
+Counter({'By country': 76, 'By region': 59, 'Teammates': 59, 'FNCS finals — North America': 44,
+         'Players': 31, 'FNCS finals — Europe': 26, 'FNCS finals — other regions': 21,
          'Countries': 20, 'Paydays': 20, 'Organisations': 11, 'Tournaments': 8})
 ```
 
-**220 boards in, 286 out.** Nothing existing moves; `rankings.json` goes from
-0.21 MB to 0.32 MB, and it is loaded only when somebody opens Tenaball.
+(26 Sep 2026, with cell 2's FNCS boards.) `rankings.json` is 0.52 MB and is
+loaded only when somebody opens Tenaball.
 
 ```python
 import bisect

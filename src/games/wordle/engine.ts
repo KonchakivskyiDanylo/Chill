@@ -14,7 +14,8 @@ export const MAX_GUESSES = 6;
  *
  *   digit      the digit itself, in place, and its key goes green — Easy
  *   position   a # where a digit sits, and not which one — Medium
- *   none       nothing; find it yourself — Hard
+ *   none       nothing; find it yourself — Hard, and any round with no
+ *              difficulty chosen: Random, Choose → Any, an event field
  */
 export type DigitHelp = 'digit' | 'position' | 'none';
 
@@ -31,8 +32,8 @@ export interface GameState {
   secret: RosterPlayer;
   /** The secret reduced to A-Z0-9 — what the player actually types. */
   answer: string;
-  /** The round's difficulty — see `levelOf` in `games/shared/pool.ts`. Sets the digit help. */
-  level: Difficulty;
+  /** The difficulty chosen for the round, or null for none (see `chosenLevel`). Sets the digit help. */
+  level: Difficulty | null;
   guesses: string[];
   status: 'playing' | 'won' | 'lost';
 }
@@ -65,7 +66,7 @@ export function eligible(players: readonly RosterPlayer[]): RosterPlayer[] {
  * from a no-repeat rotation (`games/shared/rotation.ts`) and hands the result
  * here, so the choice of player and the rules of the round stay apart.
  */
-export function gameFor(secret: RosterPlayer, level: Difficulty = 'easy'): GameState {
+export function gameFor(secret: RosterPlayer, level: Difficulty | null = 'easy'): GameState {
   return { secret, answer: normalizeName(secret.name), level, guesses: [], status: 'playing' };
 }
 
@@ -76,13 +77,12 @@ export function createGame(
   const pool = eligible(players);
   if (pool.length === 0) return null;
   const rng = makeRng(seed);
-  const secret = pool[Math.floor(rng() * pool.length)];
-  return gameFor(secret, secret.tier);
+  return gameFor(pool[Math.floor(rng() * pool.length)], null);
 }
 
 /** How much this round's digits give away. */
 export function digitHelp(state: GameState): DigitHelp {
-  return DIGIT_HELP[state.level] ?? 'digit';
+  return state.level ? DIGIT_HELP[state.level] : 'none';
 }
 
 // ------------------------------------------------------- digit reveals --

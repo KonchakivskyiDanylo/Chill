@@ -17,8 +17,9 @@ import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import { useTeammates } from '@/data/liquipedia/useTeammates';
 import { rotationKey } from '@/games/shared/rotation';
-import { useEventMode } from '@/games/shared/mode';
-import { dealSecret, poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
+import { activePool, useEventMode } from '@/games/shared/mode';
+import { dealSecret, poolPlayers, poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
+import { guessesLeft, MIN_GUESSES } from '@/games/career-path/engine';
 import { playerMoney, plural } from '@/lib/format';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { getGame } from '@/games/registry';
@@ -34,6 +35,7 @@ import {
   type GameState,
   type Mode,
   record as roundRecord,
+  usableClues,
 } from './engine';
 
 const meta = getGame('who-are-ya')!;
@@ -48,7 +50,11 @@ const meta = getGame('who-are-ya')!;
 const MODES: { id: Mode; label: string; hint: string }[] = [
   { id: 'easy', label: 'Counts shown', hint: 'Fewest → most shared tournaments, with the count on each.' },
   { id: 'hard', label: 'Counts hidden', hint: 'Same order, but you do not get to see the numbers.' },
-  { id: 'random', label: 'Random order', hint: 'No ramp-up: any teammate could come first. Counts hidden.' },
+  {
+    id: 'random',
+    label: 'Random order',
+    hint: 'No ramp-up, counts hidden — but the top teammate is never one of the first four.',
+  },
 ];
 
 export default function WhoAreYaGame() {
@@ -95,16 +101,22 @@ function Game({
 
   const byId = useMemo(() => new Map(roster.players.map((player) => [player.id, player])), [roster]);
   const cluesFor = useCallback(
-    (playerId: string) => teammates.cluesFor(playerId, byId),
+    // Only teammates worth a clue (`MIN_SHARED`), so every count below is a count of real hands.
+    (playerId: string) => usableClues(teammates.cluesFor(playerId, byId)),
     [teammates, byId],
   );
 
   /**
-   * A player can only be the answer with enough teammates *and* enough
-   * tournaments — an `unused` teammate has no row to show and no name to
-   * guess, and a three-tournament career is not something anyone can recognise.
+   * A player can only be the answer with enough teammates *and* enough majors
+   * — an `unused` teammate has no row to show and no name to guess, and a
+   * three-major career is not something anyone can recognise.
+   *
+   * An event field asks about everyone in it with a teammate at all: a player
+   * who qualified is worth a round however short their record, and a short
+   * hand still gets `MIN_GUESSES` guesses.
    */
-  const eligible = useCallback(
+  const field = activePool(pools, event);
+  const onRoster = useCallback(
     (players: RosterPlayer[]) =>
       players.filter(
         (player) =>
@@ -112,8 +124,19 @@ function Game({
       ),
     [cluesFor, facts],
   );
+  const inField = useCallback(
+    (players: RosterPlayer[]) => players.filter((player) => cluesFor(player.id).length > 0),
+    [cluesFor],
+  );
+  const eligible = field ? inField : onRoster;
 
-  const answerable = useMemo(() => eligible(roster.players), [eligible, roster]);
+  /** Who the guess box takes: every usual answer, plus the field's own when one is in force. */
+  const answerable = useMemo(() => {
+    const usual = onRoster(roster.players);
+    if (!field) return usual;
+    const known = new Set(usual.map((player) => player.id));
+    return [...usual, ...inField(poolPlayers(roster, pools, event)).filter((player) => !known.has(player.id))];
+  }, [onRoster, inField, roster, field, pools, event]);
   const players = useMemo(
     () => resolvePool(roster, pools, event, choice, eligible, 10),
     [roster, pools, event, choice, eligible],
@@ -124,14 +147,16 @@ function Game({
     const drawn = dealSecret(players, readLocal<string[]>(key, []), pools, event, choice);
     if (!drawn) {
       setError(
-        `No player in this pool has ${MIN_CLUES} recorded teammates and ${MIN_TOURNAMENTS} tournaments.`,
+        field
+          ? 'Nobody in this field has a teammate on record.'
+          : `No player in this pool has ${MIN_CLUES} recorded teammates and ${MIN_TOURNAMENTS} majors.`,
       );
       return;
     }
     writeLocal(key, drawn.seen);
     setError(null);
     setGame(createGame(drawn.pick, cluesFor(drawn.pick.id), mode));
-  }, [players, pools, event, choice, cluesFor, mode]);
+  }, [players, pools, event, choice, cluesFor, mode, field]);
 
   const note = <RosterNote what="Teammates" generated={teammates.generated} />;
 
@@ -171,8 +196,9 @@ function Game({
             </Banner>
           ) : null}
           <p className="tiny faint center">
-            {plural(answerable.length, 'player')} with at least {MIN_CLUES} recorded teammates and{' '}
-            {MIN_TOURNAMENTS} tournaments
+            {field
+              ? `${players.length} of the field's ${plural(field.players.length, 'player')} with a teammate on record`
+              : `${plural(answerable.length, 'player')} with at least ${MIN_CLUES} recorded teammates and ${MIN_TOURNAMENTS} majors`}
           </p>
         </div>
       </GameShell>
@@ -183,6 +209,9 @@ function Game({
   const visible = game.clues.slice(0, game.revealed);
   const guessedIds = new Set(game.guesses.map((p) => p.id));
   const withMatches = showsMatches(game.mode);
+  /** A hand shorter than the guesses every round gets — see `MIN_GUESSES`. */
+  const short = game.clues.length < MIN_GUESSES;
+  const left = guessesLeft(game);
 
   return (
     <GameShell
@@ -202,7 +231,7 @@ function Game({
       <div className="stack">
         <div className="stats">
           <Stat label="Clues used" value={`${finished ? game.earned : game.revealed}/${game.clues.length}`} />
-          <Stat label="Guesses" value={game.guesses.length} />
+          <Stat label="Guesses" value={short ? `${game.guesses.length}/${MIN_GUESSES}` : game.guesses.length} />
           <Stat label="Order" value={MODES.find((m) => m.id === game.mode)!.label} />
         </div>
 
@@ -245,6 +274,12 @@ function Game({
               {game.clues.length - game.earned === 1 ? 'was' : 'were'} still to come.
             </p>
           ) : null}
+          {short && !finished ? (
+            <p className="tiny faint" style={{ margin: 0 }}>
+              A short list: {plural(game.clues.length, 'teammate')} on record. You still get {MIN_GUESSES}{' '}
+              guesses — the ones after the last clue reveal nothing new.
+            </p>
+          ) : null}
           <p className="tiny faint">
             Ranked by tournaments entered together, across every event in the export
             {game.mode === 'random' ? ', shown in random order.' : ', fewest first.'}
@@ -258,7 +293,11 @@ function Game({
               title={
                 game.status === 'won'
                   ? `Got it after ${plural(game.earned, 'clue')}!`
-                  : 'Out of clues'
+                  : game.gaveUp
+                    ? 'Round over'
+                    : short
+                      ? 'Out of guesses'
+                      : 'Out of clues'
               }
             >
               The player was <strong>{game.secret.name}</strong>.
@@ -295,9 +334,11 @@ function Game({
                 onClick={() => setGame(revealNext(game))}
                 disabled={cluesLeft(game) === 0}
               >
-                {cluesLeft(game) === 0
-                  ? 'All teammates revealed — last guess!'
-                  : `Reveal next teammate (${cluesLeft(game)} left)`}
+                {cluesLeft(game) > 0
+                  ? `Reveal next teammate (${cluesLeft(game)} left)`
+                  : left > 1
+                    ? `All teammates revealed — ${left} guesses left`
+                    : 'All teammates revealed — last guess!'}
               </button>
               <GiveUpButton onGiveUp={() => setGame(giveUp(game))} variant="danger" />
             </div>

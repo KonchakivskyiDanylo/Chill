@@ -38,8 +38,12 @@ export type AttributeKey =
  * within 20% of the earnings — and it was taken out. The arrows already say
  * which way to go, and amber on top of them was a second, vaguer answer to
  * the same question.
+ *
+ * `unknown` is not a third answer but the absence of one: an event field can
+ * deal a secret player with no published birthday, and every Age cell against
+ * them is grey rather than a red that would claim the ages differ.
  */
-export type CellState = 'hit' | 'miss';
+export type CellState = 'hit' | 'miss' | 'unknown';
 
 /**
  * What the two newer columns read, when their files have loaded.
@@ -98,6 +102,18 @@ export function answerable(players: readonly RosterPlayer[]): RosterPlayer[] {
   return players.filter((player) => player.age !== null && player.earningsKnown);
 }
 
+/**
+ * Who an event field may ask about: everyone in it with an earnings figure.
+ *
+ * Eleven of the 101 at the 2026 Globals have no birthday on Liquipedia, and a
+ * field that quietly never deals a tenth of its players is not the field.
+ * For them the Age column says nothing (`unknown`) and the other six carry the
+ * round.
+ */
+export function answerableInField(players: readonly RosterPlayer[]): RosterPlayer[] {
+  return players.filter((player) => player.earningsKnown);
+}
+
 function numericResult(
   key: AttributeKey,
   label: string,
@@ -131,7 +147,16 @@ export function compare(
   mode: FeedbackMode,
   extras: Extras = {},
 ): AttributeResult[] {
-  const secretAge = secret.age ?? 0;
+  const guessAge = guess.age === null ? '—' : String(guess.age);
+  const age: AttributeResult =
+    secret.age === null
+      ? // No birthday on the secret's page: nothing to compare against.
+        { key: 'age', label: 'Age', display: guessAge, state: guess.id === secret.id ? 'hit' : 'unknown' }
+      : guess.age === null
+        ? // Any player can be guessed, and nearly half the roster has no
+          // published birthday. That is a blank, not an age of nought.
+          { key: 'age', label: 'Age', display: '—', state: 'miss' }
+        : numericResult('age', 'Age', guessAge, guess.age, secret.age, mode);
 
   // Career earnings always show a direction: exact matching on a six-figure
   // number would never land.
@@ -166,11 +191,7 @@ export function compare(
       display: guess.status === 'active' ? 'Active' : 'Retired',
       state: (guess.status === 'active') === (secret.status === 'active') ? 'hit' : 'miss',
     },
-    // Any player can be guessed, and nearly half the roster has no published
-    // birthday. That is a blank, not an age of nought — no match, no arrow.
-    guess.age === null
-      ? { key: 'age', label: 'Age', display: '—', state: 'miss' }
-      : numericResult('age', 'Age', String(guess.age), guess.age, secretAge, mode),
+    age,
     earnings,
     numericResult('fncsWins', 'FNCS wins', String(guess.fncsWins), guess.fncsWins, secret.fncsWins, mode),
   ];

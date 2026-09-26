@@ -34,13 +34,13 @@ export function ModePicker() {
       {/*
         Said plainly, because the cards alone do not explain the consequence.
         "FNCS 2026 Globals — 101 players" reads as a filter on one list; what it
-        actually does is change the answer to every question in all ten games,
+        actually does is change the answer to every question in every game,
         on every page, until you leave it.
       */}
       <p className="small muted" style={{ margin: 0 }}>
         Pick a tournament and every game asks only about the players who qualified for it — so in
-        Globals mode the answer is always one of those 101, never anyone else. Stays on across all
-        ten games until you leave it from the header.
+        Globals mode the answer is always one of those 101, never anyone else. Stays on across every
+        game until you leave it from the header.
       </p>
       <div className="options options--compact">
         <button

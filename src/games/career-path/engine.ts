@@ -12,11 +12,11 @@ export type Mode = 'order' | 'random';
 export const MAX_CLUES = 10;
 
 /**
- * Guesses a round always gets, however short the career.
+ * Guesses a round always gets, however short the hand — here and in Who Are Ya.
  *
  * A round has one guess per clue, which was all it needed while every answer
  * had five majors or more. An event field asks about anyone in it with a major
- * at all, and a two-major career would have been two guesses. So a career
+ * at all, and a two-major career would have been two guesses. So a hand
  * shorter than this makes the difference up after its last clue: guesses that
  * reveal nothing new, until five have been made.
  */
@@ -51,8 +51,9 @@ export interface GameState {
   status: 'playing' | 'won' | 'lost';
   /**
    * Ended by Give up rather than by running out. The steps used to tell the two
-   * apart (see `clueOutcome`), but with spare guesses after the last clue a
-   * wrong guess on it no longer ends the round, so it is said outright.
+   * apart — running out was a wrong guess on the last clue — but with spare
+   * guesses after the last clue that no longer ends the round, so it is said
+   * outright.
    */
   gaveUp: boolean;
 }
@@ -299,13 +300,24 @@ export function createGame(
   };
 }
 
-/** Guesses a short career gets after its last clue — see `MIN_GUESSES`. */
-function spareGuesses(state: GameState): number {
+/**
+ * A round of clues revealed one at a time — Career Path's and Who Are Ya's.
+ * The guess budget below is written against this so both games share it.
+ */
+export interface ClueRound {
+  clues: readonly unknown[];
+  revealed: number;
+  secret: { id: string };
+  steps: readonly { clue: number; guess: { id: string } | null }[];
+}
+
+/** Guesses a short hand gets after its last clue — see `MIN_GUESSES`. */
+function spareGuesses(state: ClueRound): number {
   return Math.max(0, MIN_GUESSES - state.clues.length);
 }
 
 /** Wrong guesses made with every clue already showing. */
-function wrongAtEnd(state: GameState): number {
+function wrongAtEnd(state: ClueRound): number {
   const last = state.clues.length - 1;
   return state.steps.filter(
     (step) => step.clue === last && step.guess !== null && step.guess.id !== state.secret.id,
@@ -316,8 +328,13 @@ function wrongAtEnd(state: GameState): number {
  * Guesses still to come, the one that would end the round included: a clue's
  * worth for every clue still hidden, one on the last clue, and the spares.
  */
-export function guessesLeft(state: GameState): number {
-  return cluesLeft(state) + 1 + spareGuesses(state) - wrongAtEnd(state);
+export function guessesLeft(state: ClueRound): number {
+  return state.clues.length - state.revealed + 1 + spareGuesses(state) - wrongAtEnd(state);
+}
+
+/** Whether a wrong guess now, with every clue showing, ends the round. */
+export function lastGuess(state: ClueRound): boolean {
+  return wrongAtEnd(state) >= spareGuesses(state);
 }
 
 export function submitGuess(state: GameState, guess: RosterPlayer): GameState {
@@ -336,8 +353,7 @@ export function submitGuess(state: GameState, guess: RosterPlayer): GameState {
   // A wrong guess burns a clue. With none left it spends one of a short
   // career's spare guesses, and with none of those either the round is over.
   if (state.revealed >= state.clues.length) {
-    const out = wrongAtEnd(state) >= spareGuesses(state);
-    return { ...state, guesses, steps, status: out ? 'lost' : 'playing' };
+    return { ...state, guesses, steps, status: lastGuess(state) ? 'lost' : 'playing' };
   }
   const revealed = state.revealed + 1;
   return { ...state, guesses, steps, revealed, earned: revealed };
@@ -385,22 +401,4 @@ export function record(state: GameState): { outcome: Outcome; r: GamePayloads['c
       })),
     },
   };
-}
-
-/**
- * Won, lost on the last clue, or given up — for a game whose last clue is its
- * last guess, which Who Are Ya's always is. Career Path says it outright
- * instead (`gaveUp`), since a short career's spare guesses come after it.
- *
- * `giveUp` and running out both end on `lost`, so the steps tell them apart:
- * running out is a wrong guess while the final clue was showing.
- */
-export function clueOutcome(state: {
-  status: 'playing' | 'won' | 'lost';
-  clues: unknown[];
-  steps: { clue: number; guess: { id: string } | null }[];
-}): Outcome {
-  if (state.status === 'won') return 'won';
-  const last = state.steps[state.steps.length - 1];
-  return last?.guess && last.clue === state.clues.length - 1 ? 'lost' : 'gave-up';
 }

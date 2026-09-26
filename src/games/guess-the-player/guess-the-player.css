@@ -47,6 +47,12 @@
   border-color: rgba(239, 68, 68, 0.35);
   color: var(--danger);
 }
+/* The secret has no birthday on record, so an Age cell has nothing to say. */
+.gp-cell--unknown {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text-faint);
+}
 
 .gp-arrow {
   font-size: 0.7rem;
@@ -66,4 +72,8 @@
 }
 .gp-swatch--miss {
   background: rgba(239, 68, 68, 0.45);
+}
+.gp-swatch--unknown {
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
 }

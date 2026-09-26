@@ -47,7 +47,13 @@ try {
   /* not running under Vite — `readFromDisk` below takes over */
 }
 
-/** Node-only: read the file straight off disk, relative to the repo root. */
+/**
+ * Node-only: read the file straight off disk, relative to the repo root.
+ *
+ * `OFFSPAWN_DATA` points it at another folder instead: a notebook run written
+ * to a scratch directory, so `check:games` can prove new data before it
+ * replaces the real files.
+ */
 async function readFromDisk(name: DataFile): Promise<unknown> {
   const [{ readFile }, { fileURLToPath }, path] = await Promise.all([
     import(/* @vite-ignore */ 'node:fs/promises'),
@@ -55,8 +61,8 @@ async function readFromDisk(name: DataFile): Promise<unknown> {
     import(/* @vite-ignore */ 'node:path'),
   ]);
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const file = path.join(here, DIR, `${name}.json`);
-  return JSON.parse(await readFile(file, 'utf8'));
+  const dir = globalThis.process?.env?.OFFSPAWN_DATA || path.join(here, DIR);
+  return JSON.parse(await readFile(path.join(dir, `${name}.json`), 'utf8'));
 }
 
 /**

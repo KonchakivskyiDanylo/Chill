@@ -23,7 +23,7 @@ import { loadRankings, membersOf } from '@/data/liquipedia/rankings';
 import { deal, dealInTurn, dealWeighted } from '@/games/shared/rotation';
 import { TERMS, termsIn, type TermId } from '@/games/shared/glossary';
 import { DEFAULT_POOL, RANDOM_MIX } from '@/games/shared/pool';
-import { GAMES, getGame } from '@/games/registry';
+import { GAMES, getGame, VISIBLE_GAMES } from '@/games/registry';
 import {
   buildCriteria,
   hasNestedPair,
@@ -82,6 +82,14 @@ for (const game of GAMES) {
   check(getGame(game.id) === game, `registry: getGame('${game.id}') did not find ${game.title}`);
 }
 check(GAMES.length === 10, `registry: expected 10 games, found ${GAMES.length}`);
+// Hidden games leave the lists, not the registry: they are still played below.
+check(
+  VISIBLE_GAMES.length > 0 && VISIBLE_GAMES.every((game) => !game.hidden),
+  'registry: a hidden game is still listed',
+);
+notes.push(
+  `registry: ${VISIBLE_GAMES.length} games listed, hidden: ${GAMES.filter((g) => g.hidden).map((g) => g.title).join(', ') || 'none'}`,
+);
 
 const roster = await loadRoster();
 notes.push(`roster: ${roster.players.length} playable players (export ${EXPORT_DATE})`);
@@ -465,14 +473,15 @@ if (teammates && facts) {
   const byId = new Map(roster.players.map((p) => [p.id, p]));
   const answerable = roster.players.filter(
     (p) =>
-      teammates.cluesFor(p.id, byId).length >= whoAreYa.MIN_CLUES &&
+      whoAreYa.usableClues(teammates.cluesFor(p.id, byId)).length >= whoAreYa.MIN_CLUES &&
       facts.of(p.id).apps >= whoAreYa.MIN_TOURNAMENTS,
   );
   check(answerable.length > 0, 'who-are-ya: nobody is answerable');
   notes.push(
-    `who-are-ya: ${answerable.length} answerable (${whoAreYa.MIN_CLUES}+ teammates, ${whoAreYa.MIN_TOURNAMENTS}+ tournaments)`,
+    `who-are-ya: ${answerable.length} answerable (${whoAreYa.MIN_CLUES}+ teammates, ${whoAreYa.MIN_TOURNAMENTS}+ majors)`,
   );
 
+  let early = 0;
   for (const mode of ['easy', 'hard', 'random'] as const) {
     for (const secret of answerable.slice(0, 120)) {
       const clues = teammates.cluesFor(secret.id, byId);
@@ -483,6 +492,18 @@ if (teammates && facts) {
         !game.clues.some((clue) => clue.player.id === secret.id),
         `who-are-ya: ${secret.name} is listed as their own teammate`,
       );
+      check(
+        game.clues.every((clue) => clue.events >= whoAreYa.MIN_SHARED),
+        `who-are-ya: ${secret.name}'s hand has a teammate under ${whoAreYa.MIN_SHARED} shared tournaments`,
+      );
+      // The number one teammate: last in the two ramped orders, and never in
+      // the first four of Random.
+      const top = game.clues.findIndex((clue) => clue.player.id === clues[0].player.id);
+      if (mode === 'random') {
+        if (top < Math.min(whoAreYa.TOP_HELD_BACK, game.clues.length - 1)) early++;
+      } else {
+        check(top === game.clues.length - 1, `who-are-ya ${mode}: ${secret.name}'s top teammate is not last`);
+      }
       const solved = whoAreYa.submitGuess(game, secret);
       check(solved.status === 'won', 'who-are-ya: correct guess did not win');
       check(
@@ -491,6 +512,17 @@ if (teammates && facts) {
       );
     }
   }
+  check(early === 0, `who-are-ya random: the top teammate came in the first ${whoAreYa.TOP_HELD_BACK} clues ${early} times`);
+
+  // A two-teammate hand — an event field's short record — still plays five
+  // wrong guesses, and giving up on the spares is not running out.
+  const secret = answerable[0];
+  const two = whoAreYa.createGame(secret, teammates.cluesFor(secret.id, byId).slice(0, 2), 'easy', 'short')!;
+  const others = roster.players.filter((p) => p.id !== secret.id);
+  const wrongs = (n: number) => others.slice(0, n).reduce((state, p) => whoAreYa.submitGuess(state, p), two);
+  check(wrongs(career.MIN_GUESSES - 1).status === 'playing', 'who-are-ya: a two-clue hand ended before five guesses');
+  check(wrongs(career.MIN_GUESSES).status === 'lost', 'who-are-ya: a two-clue hand outlived five guesses');
+  check(whoAreYa.record(whoAreYa.giveUp(wrongs(3))).outcome === 'gave-up', 'who-are-ya: giving up on the spares read as running out');
 }
 
 // ---------------------------------------------------------------- 6. Tenaball
@@ -1081,7 +1113,7 @@ if (facts) {
   // Who Are Ya: out of clues is a loss, not a give-up.
   if (teammates && facts) {
     const byId = new Map(roster.players.map((p) => [p.id, p]));
-    const who = roster.players.find((p) => teammates.cluesFor(p.id, byId).length >= 3)!;
+    const who = roster.players.find((p) => whoAreYa.usableClues(teammates.cluesFor(p.id, byId)).length >= 3)!;
     let game = whoAreYa.createGame(who, teammates.cluesFor(who.id, byId), 'easy', 'analytics')!;
     const wrongs = roster.players.filter((p) => p.id !== who.id);
     for (let i = 0; game.status === 'playing'; i++) game = whoAreYa.submitGuess(game, wrongs[i]);
@@ -1288,6 +1320,43 @@ if (pools.pools.length > 0) {
     const [flat, leaned] = [spread(false), spread(true)];
     check(leaned >= flat, `event ${pool.label}: Higher or Lower's region lean shows fewer regions (${leaned} vs ${flat})`);
     notes.push(`event ${pool.label}: Higher or Lower shows ${leaned.toFixed(1)} regions in 12 rounds with the lean, ${flat.toFixed(1)} without`);
+
+    // Every game deals the whole field where the data allows: a qualifier is
+    // never left out for falling short of a minimum the roster uses. Career
+    // Path can only once cell 7 has written its short careers.
+    const reach: [string, number][] = [
+      ['Fortnitedle', wordle.eligible(field).length],
+      ['Guess the Player', gtp.answerableInField(field).length],
+    ];
+    if (teammates) {
+      reach.push(['Who Are Ya', field.filter((p) => whoAreYa.usableClues(teammates.cluesFor(p.id, byId)).length > 0).length]);
+    }
+    const shortCareers = majors && roster.players.some((p) => {
+      const n = majors.resultsFor(p.id).length;
+      return n > 0 && n < majors.minAppearances;
+    });
+    if (majors && shortCareers) reach.push(['Career Path', majors.inField(field).length]);
+    for (const [game, n] of reach) check(n === field.length, `event ${pool.label}: ${game} deals ${n} of ${field.length}`);
+    notes.push(
+      `event ${pool.label}: ${reach.map(([game, n]) => `${game} ${n}`).join(', ')} of ${field.length}` +
+        (majors && !shortCareers ? ` (Career Path ${majors.inField(field).length} until cell 7 runs)` : ''),
+    );
+
+    // The board games take the whole field too, and still build.
+    if (facts && orgs) {
+      const source: CriteriaSource = { players: field, facts, orgs };
+      let rounds = 0;
+      let puzzles = 0;
+      let grids = 0;
+      for (let seed = 0; seed < 8; seed++) {
+        if (griefer.createRound(source, `field-g-${seed}`)) rounds++;
+        if (connections.generatePuzzle(source, `field-c-${seed}`)) puzzles++;
+        const level = (['easy', 'medium', 'hard'] as const)[seed % 3];
+        if (ttt.generateBoard({ facts, orgs }, { answers: field, accepted: field }, level, `field-t-${seed}`)) grids++;
+      }
+      check(rounds === 8 && puzzles >= 6 && grids >= 6, `event ${pool.label}: whole-field boards — Griefer ${rounds}/8, Connections ${puzzles}/8, Tic Tac Toe ${grids}/8`);
+      notes.push(`event ${pool.label}: whole-field boards — Griefer ${rounds}/8, Connections ${puzzles}/8, Tic Tac Toe ${grids}/8`);
+    }
   }
 } else {
   skipped.push('pools.json (no event pools)');
