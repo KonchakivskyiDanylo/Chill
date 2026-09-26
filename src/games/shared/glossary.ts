@@ -66,7 +66,7 @@ export const TERMS: Record<TermId, Term> = {
     id: 'major',
     name: 'Major',
     text:
-      'An Epic-run main event that Liquipedia rates tier 1, from the 2019 World Cup on: every regional FNCS grand final, every Global Championship, the World Cup finals and Epic’s other LANs. Qualifiers, showmatches, cash cups, console, mobile and Twitch events are not majors, and neither is a third-party event however big, or anything before the World Cup.',
+      'An Epic-run main event that Liquipedia rates tier 1, from the 2019 World Cup on: every regional FNCS grand final, every Global Championship, the World Cup finals and Epic’s other LANs. Qualifiers, showmatches, cash cups, console, mobile and Twitch events are not majors, and neither are challenge events like MrBeast’s Extreme Survival Challenge, a third-party event however big, or anything before the World Cup.',
     events: (facts) => {
       const regional = facts.events.filter(isRegional).length;
       return {

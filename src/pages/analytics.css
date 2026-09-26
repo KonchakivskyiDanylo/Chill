@@ -29,37 +29,245 @@
   text-transform: capitalize;
 }
 
-.an-tab[aria-pressed='true'] {
+.an-tab[aria-pressed='true'],
+.an-tab.is-active {
   border-color: var(--primary);
   color: var(--primary);
 }
 
-.an-range {
+a.an-tab {
+  text-decoration: none;
+}
+
+/* ---------------------------------------------------------------- games -- */
+
+.an-games {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.an-game {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.an-game:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.an-game.is-active {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.an-game__n {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+  font-weight: 500;
+}
+
+/* -------------------------------------------------------------- filters -- */
+
+.an-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.an-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.an-select {
   width: auto;
+  min-height: 36px;
+  max-width: 200px;
+  padding: 0 8px;
+  font-size: 0.84rem;
 }
 
-.an-bars {
+.an-clear {
+  align-self: center;
+  margin-left: auto;
+}
+
+.an-search {
+  width: 240px;
+  max-width: 100%;
+  min-height: 38px;
+  font-size: 0.86rem;
+}
+
+.an-card-head {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* --------------------------------------------------------------- charts -- */
+
+.an-cols {
+  margin: 0;
   display: flex;
-  align-items: flex-end;
-  gap: 3px;
-  height: 90px;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.an-bars__bar {
+/* Columns grow from one hairline baseline; the hover target is the whole
+   slot, not the bar, so a day with one round is as easy to point at as the
+   busiest. */
+.an-cols__plot {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 120px;
+  border-bottom: 1px solid var(--border-strong);
+  padding-top: 16px;
+}
+
+.an-cols__max {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.an-cols__col {
   flex: 1;
-  height: 100%;
   display: flex;
   align-items: flex-end;
-  background: var(--surface-2);
-  border-radius: 3px;
+  justify-content: center;
+  min-width: 0;
 }
 
-.an-bars__bar span {
+.an-cols__bar {
   display: block;
-  width: 100%;
+  width: min(100%, 24px);
   background: var(--primary);
-  border-radius: 3px;
-  min-height: 1px;
+  border-radius: 4px 4px 0 0;
+  opacity: 0.85;
+}
+
+.an-cols__bar.is-hover {
+  opacity: 1;
+}
+
+.an-cols__axis {
+  display: flex;
+  justify-content: space-between;
+}
+
+.an-tip {
+  position: absolute;
+  top: -8px;
+  transform: translateX(-50%);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: var(--shadow-sm);
+  z-index: 2;
+}
+
+.an-mix {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px 28px;
+}
+
+.an-share {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.an-share__row {
+  display: grid;
+  grid-template-columns: minmax(96px, 38%) 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.an-share__label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.an-share__hint {
+  line-height: 1.3;
+}
+
+.an-share__track {
+  height: 10px;
+  background: var(--surface-3);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.an-share__fill {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  border-radius: 0 4px 4px 0;
+}
+
+.an-share__value {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+  min-width: 64px;
+}
+
+/* --------------------------------------------------------------- tables -- */
+
+.an-num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.an-sort {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.an-sort:hover {
+  color: var(--text);
+}
+
+.an-link-left {
+  text-align: left;
+  padding: 0;
 }
 
 .an-table {
@@ -83,11 +291,6 @@
   color: var(--text-faint);
 }
 
-.an-setup {
-  display: block;
-}
-
-.an-section > summary,
 .an-row > summary {
   cursor: pointer;
 }

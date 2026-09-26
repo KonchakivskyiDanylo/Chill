@@ -39,7 +39,7 @@ file and reload.
 | file | holds | read through |
 | --- | --- | --- |
 | `players.json` | 5,678 playable rows: handle, aliases, country, birthday, earnings, status | `Roster` |
-| `career_path.json` | 188 majors and 1,175 players' finishes in them | `Majors` |
+| `career_path.json` | 187 majors and every player's finishes in them (1,175 with five or more) | `Majors` |
 | `teammates.json` | each player's fifty most-played-with teammates | `Teammates` |
 | `orgs.json` | 979 organisations, with who has ever played for them | `Orgs` |
 | `facts.json` | per player: tournaments played, LAN and FNCS appearances, wins by kind, where and when they won, which headline events they played | `Facts` |
@@ -110,7 +110,7 @@ Griefer and Piece Control are written around having that, and it is still the
 only source that publishes FNCS titles per player.
 
 The Liquipedia export is **wide**: 5,678 players, and — once the notebook has
-reduced `placements.json` — their finishes at 188 majors and who they queued
+reduced `placements.json` — their finishes at 187 majors and who they queued
 with across all 14,645 tournaments. Higher or Lower and Fortnitedle only ever
 need "who exists and what are they worth"; Career Path and Who Are Ya need the
 two derived files as well, and get a far better game out of them than the
@@ -147,9 +147,11 @@ excluded folder. The rules now open each folder level in turn.
 
 **Career Path** takes the tournaments the notebook calls majors — currently
 Liquipedia tier 1, no tier type, organised by Epic Games, from the 2019 World
-Cup on, minus the console / mobile / Twitch brackets: 188 of them, 9,458
-placement rows. A player needs five to be a possible answer, which leaves
-1,175 — 92 Easy, 567 Medium, 516 Hard. Rows with no numeric placement (`''`,
+Cup on, minus the console / mobile / Twitch brackets and challenge events
+(MrBeast's): 187 of them. The file carries every player with one (cell 7 in
+`notebook_cells.md`), but a player needs five to be a possible answer on the
+whole roster, which leaves 1,175 — 92 Easy, 567 Medium, 516 Hard. An event
+field asks about anyone in it with one, and a short career gets five guesses. Rows with no numeric placement (`''`,
 `DNP`, `DQ` — 352 of them) are dropped; a range like `35-36` reads as 35.
 
 **Who Are Ya** counts a pair once per placement row they share, which is what

@@ -4,7 +4,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { gzip } from 'node:zlib';
-import { aggregate } from '@/analytics/aggregate';
+import { aggregate, parseFilter, playerIndex, playerLens, readSince } from '@/analytics/aggregate';
 import {
   GAME_IDS,
   MAX_MESSAGE_CHARS,
@@ -23,7 +23,9 @@ import { openStore } from './store';
  *   POST /api/rounds    a finished round (anyone)
  *   POST /api/support   a support request (anyone)
  *   POST /api/errors    a browser error (anyone)
- *   /api/admin/*        the dashboard behind `#/analytics` (you)
+ *   /api/admin/*        the dashboard behind `#/analytics` (you): the dashboard,
+ *                       the player index and one player's view, all filtered
+ *                       by the same query string; the inbox; the errors
  *
  * No framework: seven routes and a static folder do not need one, and one
  * dependency (`pg`) is easier to keep current than twelve.
@@ -215,10 +217,22 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL): Promise
 
   if (route === 'GET /api/admin/me') return send(res, 204);
 
+  // The three read the same query string: `days` for the range (0 or absent
+  // is all time) and the dashboard's filters — see `parseFilter`.
+  const days = Math.max(0, Math.floor(Number(url.searchParams.get('days')) || 0));
+  const scope = { days, filter: parseFilter(url.searchParams) };
+
   if (route === 'GET /api/admin/dashboard') {
-    const days = Number(url.searchParams.get('days'));
+    return send(res, 200, aggregate(await store.rounds(readSince(days)), scope));
+  }
+  if (route === 'GET /api/admin/players') {
     const since = days > 0 ? new Date(Date.now() - days * 86_400_000) : undefined;
-    return send(res, 200, aggregate(await store.rounds(since)));
+    return send(res, 200, playerIndex(await store.rounds(since), scope));
+  }
+  const lens = /^GET \/api\/admin\/players\/(.+)$/.exec(route);
+  if (lens) {
+    const since = days > 0 ? new Date(Date.now() - days * 86_400_000) : undefined;
+    return send(res, 200, playerLens(await store.rounds(since), decodeURIComponent(lens[1]), scope));
   }
   if (route === 'GET /api/admin/support') return send(res, 200, await store.support());
   if (route === 'GET /api/admin/errors') return send(res, 200, await store.errors(200));

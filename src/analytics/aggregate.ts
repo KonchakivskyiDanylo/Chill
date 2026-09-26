@@ -27,12 +27,117 @@ export interface Count {
   count: number;
 }
 
+/**
+ * Where a round's players came from — the first question about how the site
+ * is played.
+ *
+ *   random   the shared picker on Random, the default
+ *   chosen   the shared picker on Choose: a region and a difficulty
+ *   event    an event field was in force (the site-wide event mode)
+ *   own      a game with no shared picker — Higher or Lower, Tic Tac Toe,
+ *            Tenaball, List — on the whole roster, set up by its own level
+ *            or category
+ */
+export type Source = 'random' | 'chosen' | 'event' | 'own';
+export const SOURCES: Source[] = ['random', 'chosen', 'event', 'own'];
+
+export function sourceOf(setup: Setup | undefined): Source {
+  if (setup?.event) return 'event';
+  if (setup?.pick === 'random') return 'random';
+  if (setup?.pick === 'custom') return 'chosen';
+  return 'own';
+}
+
+/** The region a Chosen round narrowed to — `all` for Choose with no region — or null. */
+function regionOf(setup: Setup | undefined): string | null {
+  return sourceOf(setup) === 'chosen' ? (setup?.region ?? 'all') : null;
+}
+
+/** The fame band a Chosen round narrowed to, or null. Random always reads `any`, which says nothing. */
+function difficultyOf(setup: Setup | undefined): string | null {
+  return sourceOf(setup) === 'chosen' ? (setup?.difficulty ?? null) : null;
+}
+
+/**
+ * How a set of rounds was set up, one tally per question.
+ *
+ * Every tally is over the rounds the question applies to: `regions` and
+ * `difficulty` over Chosen rounds only, `events` over event rounds, `level`
+ * over rounds that had one. Labels are the raw values (`europe`, `easy`,
+ * `globals-2026`); the page names them.
+ */
+export interface Mix {
+  rounds: number;
+  /** In `SOURCES` order, zeros kept, so the four always line up. */
+  source: Count[];
+  events: Count[];
+  regions: Count[];
+  difficulty: Count[];
+  /** A game's own Easy / Medium / Hard, and the level Fortnitedle played a round at. */
+  level: Count[];
+  /** A game's own mode: Order / Random, Exact / Direction… */
+  mode: Count[];
+  /** Higher or Lower's category. */
+  category: Count[];
+}
+
 export interface GameOverview {
   game: GameId;
   rounds: number;
   outcomes: Record<Outcome, number>;
-  /** Per setup field — "pick: random 40, custom 12" and so on. */
-  setups: { field: keyof Setup; values: Count[] }[];
+  mix: Mix;
+}
+
+// ----------------------------------------------------------------- filters --
+
+/**
+ * What the dashboard can be narrowed to. Every field is optional and they
+ * combine: "Fortnitedle, Chosen, Europe, lost" is one filter.
+ */
+export interface Filter {
+  game?: GameId;
+  source?: Source;
+  event?: string;
+  /** A Chosen round's region, or `all` for Choose with every region. */
+  region?: string;
+  /** A Chosen round's difficulty. */
+  difficulty?: string;
+  level?: string;
+  outcome?: Outcome;
+}
+
+export const FILTER_KEYS = ['game', 'source', 'event', 'region', 'difficulty', 'level', 'outcome'] as const;
+
+/** A filter from a query string, dropping anything that is not a value the field can take. */
+export function parseFilter(params: URLSearchParams): Filter {
+  const filter: Filter = {};
+  const text = (key: string) => {
+    const value = params.get(key);
+    return value && value.length <= 80 ? value : undefined;
+  };
+  const game = text('game');
+  if (game && (GAME_IDS as readonly string[]).includes(game)) filter.game = game as GameId;
+  const source = text('source');
+  if (source && (SOURCES as string[]).includes(source)) filter.source = source as Source;
+  const outcome = text('outcome');
+  if (outcome && (OUTCOMES as string[]).includes(outcome)) filter.outcome = outcome as Outcome;
+  for (const key of ['event', 'region', 'difficulty', 'level'] as const) {
+    const value = text(key);
+    if (value) filter[key] = value;
+  }
+  return filter;
+}
+
+export function matches(body: RoundRecord, filter: Filter): boolean {
+  const setup = body.setup;
+  if (filter.game && body.game !== filter.game) return false;
+  if (filter.source && sourceOf(setup) !== filter.source) return false;
+  if (filter.event && setup?.event !== filter.event) return false;
+  if (filter.region && regionOf(setup) !== filter.region) return false;
+  if (filter.difficulty && difficultyOf(setup) !== filter.difficulty) return false;
+  if (filter.level && setup?.level !== filter.level) return false;
+  if (filter.outcome && body.outcome !== filter.outcome) return false;
+  return true;
 }
 
 /** Fortnitedle and Guess the Player: how each secret player went. */
@@ -124,9 +229,21 @@ export interface RunRow {
 
 export interface Dashboard {
   generated: string;
+  /** The range the numbers cover, in days; 0 for all time. */
+  range: number;
+  filter: Filter;
+  /** Rounds in range that pass the filter. */
   rounds: number;
-  /** Rounds per day, oldest first, for the last 30 days. */
-  days: { day: string; rounds: number }[];
+  outcomes: Record<Outcome, number>;
+  /**
+   * Rounds per day, oldest first: the last 30 days, or every day since the
+   * first round for all time (at most 180). The filter applies; the range
+   * does not, so a "Today" view still shows the month it sits in.
+   */
+  series: { day: string; rounds: number }[];
+  mix: Mix;
+  /** Values the filter can take, read off the stored rounds rather than listed. */
+  options: { events: string[]; regions: string[]; difficulty: string[]; level: string[] };
   games: GameOverview[];
   wordle: SecretRow[];
   guessThePlayer: SecretRow[];
@@ -142,8 +259,7 @@ export interface Dashboard {
 
 // ----------------------------------------------------------------- helpers --
 
-const OUTCOMES: Outcome[] = ['won', 'lost', 'gave-up', 'cleared'];
-const SETUP_FIELDS: (keyof Setup)[] = ['event', 'pick', 'region', 'difficulty', 'status', 'level', 'mode', 'category'];
+export const OUTCOMES: Outcome[] = ['won', 'lost', 'gave-up', 'cleared'];
 
 function tally(counts: Map<string, number>, key: string, by = 1): void {
   counts.set(key, (counts.get(key) ?? 0) + by);
@@ -154,6 +270,46 @@ function top(counts: Map<string, number>, limit = 10): Count[] {
     .map(([label, count]) => ({ label, count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, limit);
+}
+
+function outcomesOf(rounds: Stored<RoundRecord>[]): Record<Outcome, number> {
+  const out = Object.fromEntries(OUTCOMES.map((o) => [o, 0])) as Record<Outcome, number>;
+  for (const { body } of rounds) if (OUTCOMES.includes(body.outcome)) out[body.outcome]++;
+  return out;
+}
+
+export function mix(rounds: Stored<RoundRecord>[]): Mix {
+  const source = new Map<string, number>(SOURCES.map((s) => [s, 0]));
+  const tallies = {
+    events: new Map<string, number>(),
+    regions: new Map<string, number>(),
+    difficulty: new Map<string, number>(),
+    level: new Map<string, number>(),
+    mode: new Map<string, number>(),
+    category: new Map<string, number>(),
+  };
+  for (const { body } of rounds) {
+    const setup = body.setup;
+    tally(source, sourceOf(setup));
+    if (setup?.event) tally(tallies.events, setup.event);
+    const region = regionOf(setup);
+    if (region) tally(tallies.regions, region);
+    const difficulty = difficultyOf(setup);
+    if (difficulty) tally(tallies.difficulty, difficulty);
+    if (setup?.level) tally(tallies.level, setup.level);
+    if (setup?.mode) tally(tallies.mode, setup.mode);
+    if (setup?.category) tally(tallies.category, setup.category);
+  }
+  return {
+    rounds: rounds.length,
+    source: SOURCES.map((s) => ({ label: s, count: source.get(s) ?? 0 })),
+    events: top(tallies.events, 50),
+    regions: top(tallies.regions, 50),
+    difficulty: top(tallies.difficulty, 10),
+    level: top(tallies.level, 10),
+    mode: top(tallies.mode, 20),
+    category: top(tallies.category, 20),
+  };
 }
 
 function mean(total: number, n: number): number | null {
@@ -179,24 +335,8 @@ function each<T>(rounds: T[], fn: (round: T) => void): void {
 
 function overview(rounds: Stored<RoundRecord>[]): GameOverview[] {
   return GAME_IDS.map((game) => {
-    const mine = of(rounds, game);
-    const outcomes = Object.fromEntries(OUTCOMES.map((o) => [o, 0])) as Record<Outcome, number>;
-    const fields = new Map<keyof Setup, Map<string, number>>();
-    for (const { body } of mine) {
-      if (OUTCOMES.includes(body.outcome)) outcomes[body.outcome]++;
-      for (const field of SETUP_FIELDS) {
-        const value = body.setup?.[field];
-        if (value === undefined) continue;
-        if (!fields.has(field)) fields.set(field, new Map());
-        tally(fields.get(field)!, value === null ? 'none' : String(value));
-      }
-    }
-    return {
-      game,
-      rounds: mine.length,
-      outcomes,
-      setups: [...fields].map(([field, counts]) => ({ field, values: top(counts, 20) })),
-    };
+    const mine = of(rounds, game) as Stored<RoundRecord>[];
+    return { game, rounds: mine.length, outcomes: outcomesOf(mine), mix: mix(mine) };
   });
 }
 
@@ -496,21 +636,73 @@ function higherLower(rounds: Stored<RoundRecord<'higher-lower'>>[]): Dashboard['
 
 // ------------------------------------------------------------------- entry --
 
-export function aggregate(rounds: Stored<RoundRecord>[], now: Date = new Date()): Dashboard {
-  const valid = rounds.filter((round) => round.body && GAME_IDS.includes(round.body.game));
+const DAY = 86_400_000;
 
+/** Rounds with a body the dashboard can read at all. */
+function readable(rounds: Stored<RoundRecord>[]): Stored<RoundRecord>[] {
+  return rounds.filter((round) => round.body && GAME_IDS.includes(round.body.game));
+}
+
+/**
+ * How far back the server has to read for a range: the range itself, and never
+ * less than the 30 days the daily chart shows. 0 means everything.
+ */
+export function readSince(days: number, now: Date = new Date()): Date | undefined {
+  return days > 0 ? new Date(now.getTime() - Math.max(days, 30) * DAY) : undefined;
+}
+
+function series(rounds: Stored<RoundRecord>[], now: Date, allTime: boolean): Dashboard['series'] {
   const byDay = new Map<string, number>();
-  for (const round of valid) tally(byDay, String(round.at).slice(0, 10));
-  const days: Dashboard['days'] = [];
-  for (let i = 29; i >= 0; i--) {
-    const day = new Date(now.getTime() - i * 86_400_000).toISOString().slice(0, 10);
-    days.push({ day, rounds: byDay.get(day) ?? 0 });
+  for (const round of rounds) tally(byDay, String(round.at).slice(0, 10));
+  const first = rounds.length ? Date.parse(rounds[0].at) : now.getTime();
+  const span = allTime ? Math.min(180, Math.max(30, Math.ceil((now.getTime() - first) / DAY) + 1)) : 30;
+  const out: Dashboard['series'] = [];
+  for (let i = span - 1; i >= 0; i--) {
+    const day = new Date(now.getTime() - i * DAY).toISOString().slice(0, 10);
+    out.push({ day, rounds: byDay.get(day) ?? 0 });
   }
+  return out;
+}
+
+/** Every value a filter field takes in these rounds, most used first. */
+function options(rounds: Stored<RoundRecord>[]): Dashboard['options'] {
+  const all = mix(rounds);
+  const labels = (counts: Count[]) => counts.map((c) => c.label);
+  return {
+    events: labels(all.events),
+    regions: labels(all.regions),
+    difficulty: labels(all.difficulty),
+    level: labels(all.level),
+  };
+}
+
+/**
+ * The whole dashboard for `rounds`.
+ *
+ * `rounds` may reach further back than `days` — see `readSince` — because the
+ * daily chart always shows a month; everything else is cut to the range. The
+ * filter applies to all of it, the dropdowns' `options` aside, which are read
+ * off everything in range so a filter can always be widened again.
+ */
+export function aggregate(
+  rounds: Stored<RoundRecord>[],
+  { now = new Date(), days = 0, filter = {} }: { now?: Date; days?: number; filter?: Filter } = {},
+): Dashboard {
+  const since = days > 0 ? now.getTime() - days * DAY : -Infinity;
+  const readableRounds = readable(rounds);
+  const inRange = readableRounds.filter((round) => Date.parse(round.at) >= since || !round.at);
+  const passes = (round: Stored<RoundRecord>) => matches(round.body, filter);
+  const valid = inRange.filter(passes);
 
   return {
     generated: now.toISOString(),
+    range: days,
+    filter,
     rounds: valid.length,
-    days,
+    outcomes: outcomesOf(valid),
+    series: series(readableRounds.filter(passes), now, days <= 0),
+    mix: mix(valid),
+    options: options(inRange),
     games: overview(valid),
     wordle: secrets(of(valid, 'wordle')),
     guessThePlayer: secrets(of(valid, 'guess-the-player')),
@@ -522,5 +714,238 @@ export function aggregate(rounds: Stored<RoundRecord>[], now: Date = new Date())
     ticTacToe: ticTacToe(of(valid, 'tic-tac-toe')),
     connections: connections(of(valid, 'connections')),
     higherLower: higherLower(of(valid, 'higher-lower')),
+  };
+}
+
+// ----------------------------------------------------------------- players --
+
+/**
+ * What a player was in one round.
+ *
+ *   secret     the answer — Fortnitedle, Guess the Player, Career Path, Who Are Ya
+ *   guessed    typed as a guess in Guess the Player
+ *   mistaken   a wrong guess in Career Path or Who Are Ya
+ *   clue       one of Who Are Ya's teammate clues, shown before the round ended
+ *   answer     an answer on a Tenaball board or a List
+ *   fits       a Griefer card that fitted the rule
+ *   griefer    a Griefer card that did not
+ *   placed     a Tic Tac Toe answer someone used
+ *   tile       a Connections tile
+ *   misgrouped put in a wrong four in Connections
+ *   hidden     the player to call Higher or Lower on
+ */
+export type Role =
+  | 'secret'
+  | 'guessed'
+  | 'mistaken'
+  | 'clue'
+  | 'answer'
+  | 'fits'
+  | 'griefer'
+  | 'placed'
+  | 'tile'
+  | 'misgrouped'
+  | 'hidden';
+
+/** One appearance. `good` is whether whoever was playing got this player right, where that means anything. */
+interface Mention {
+  role: Role;
+  id?: string;
+  name: string;
+  good?: boolean;
+}
+
+function mentions(body: RoundRecord): Mention[] {
+  const out: Mention[] = [];
+  const won = body.outcome === 'won' || body.outcome === 'cleared';
+  const push = (role: Role, who: { id?: string; name: string }, good?: boolean) =>
+    out.push({ role, id: who.id, name: who.name, good });
+
+  switch (body.game) {
+    case 'wordle': {
+      push('secret', (body.r as GamePayloads['wordle']).secret, won);
+      break;
+    }
+    case 'guess-the-player': {
+      const r = body.r as GamePayloads['guess-the-player'];
+      push('secret', r.secret, won);
+      for (const guess of r.guesses) if (guess.id !== r.secret.id) push('guessed', guess);
+      break;
+    }
+    case 'career-path':
+    case 'who-are-ya': {
+      const r = body.r as GamePayloads['career-path'];
+      push('secret', r.secret, won);
+      for (const step of r.steps) if (step.guess && !step.correct) push('mistaken', step.guess);
+      if (body.game === 'who-are-ya') {
+        const shown = Math.max(0, ...r.steps.map((step) => step.clue)) + 1;
+        for (const clue of r.clues.slice(0, shown)) push('clue', clue);
+      }
+      break;
+    }
+    case 'tenaball': {
+      for (const answer of (body.r as GamePayloads['tenaball']).answers) push('answer', answer, answer.found);
+      break;
+    }
+    case 'list': {
+      const r = body.r as GamePayloads['list'];
+      for (const entry of r.found) push('answer', entry, true);
+      for (const name of r.missed ?? []) push('answer', { name }, false);
+      break;
+    }
+    case 'impostor': {
+      // A round given up says nothing about what the player believed.
+      if (body.outcome === 'gave-up') break;
+      for (const card of (body.r as GamePayloads['impostor']).cards) {
+        push(card.fits ? 'fits' : 'griefer', card.player, card.fits === card.picked);
+      }
+      break;
+    }
+    case 'tic-tac-toe': {
+      for (const entry of (body.r as GamePayloads['tic-tac-toe']).placed) push('placed', entry.player);
+      break;
+    }
+    case 'connections': {
+      const r = body.r as GamePayloads['connections'];
+      const names = new Map<string, string>();
+      for (const group of r.groups) {
+        const ids = new Set(group.players.map((p) => p.id));
+        const solved = r.attempts.some((a) => a.correct && a.players.every((id) => ids.has(id)));
+        for (const player of group.players) {
+          names.set(player.id, player.name);
+          push('tile', player, solved);
+        }
+      }
+      for (const attempt of r.attempts) {
+        if (attempt.correct) continue;
+        for (const id of attempt.players) push('misgrouped', { id, name: names.get(id) ?? id });
+      }
+      break;
+    }
+    case 'higher-lower': {
+      for (const pair of (body.r as GamePayloads['higher-lower']).pairs) push('hidden', pair.hidden, pair.correct);
+      break;
+    }
+  }
+  return out;
+}
+
+/**
+ * Who the mentions are, by player id.
+ *
+ * Tenaball and List answers are the catch: an answer may be a country or an
+ * organisation, and a Tenaball answer carries only a name. So they count
+ * towards a player only when they can be tied to one seen in a role that is
+ * always a player — by id, or by a name no two of those players share — and
+ * are dropped otherwise, which keeps France out of the player search.
+ */
+function identities(rounds: Stored<RoundRecord>[]) {
+  const names = new Map<string, string>();
+  const byName = new Map<string, string | null>();
+  const parsed: { round: Stored<RoundRecord>; list: Mention[] }[] = [];
+  for (const round of rounds) {
+    try {
+      const list = mentions(round.body);
+      parsed.push({ round, list });
+      for (const m of list) {
+        if (m.role !== 'answer' && m.id) names.set(m.id, m.name);
+      }
+    } catch {
+      /* malformed record — skipped, see the header comment */
+    }
+  }
+  for (const [id, name] of names) {
+    const key = name.toLowerCase();
+    byName.set(key, byName.has(key) && byName.get(key) !== id ? null : id);
+  }
+  const idOf = (m: Mention): string | null => {
+    if (m.role !== 'answer') return m.id ?? null;
+    if (m.id && names.has(m.id)) return m.id;
+    return byName.get(m.name.toLowerCase()) ?? null;
+  };
+  return { names, parsed, idOf };
+}
+
+export interface PlayerEntry {
+  id: string;
+  name: string;
+  /** Rounds the player appeared in, any role. */
+  rounds: number;
+}
+
+export interface LensRow {
+  game: GameId;
+  role: Role;
+  /** Appearances this way. */
+  rounds: number;
+  /** Of the appearances with a right answer, how many were got right. */
+  good: number;
+  judged: number;
+}
+
+export interface PlayerLens {
+  id: string;
+  name: string;
+  rounds: number;
+  rows: LensRow[];
+  /** The latest appearances, newest first. */
+  recent: { at: string; game: GameId; role: Role; outcome: Outcome; good?: boolean }[];
+}
+
+type Scope = { now?: Date; days?: number; filter?: Filter };
+
+function scoped(rounds: Stored<RoundRecord>[], { now = new Date(), days = 0, filter = {} }: Scope) {
+  const since = days > 0 ? now.getTime() - days * DAY : -Infinity;
+  return readable(rounds).filter(
+    (round) => (Date.parse(round.at) >= since || !round.at) && matches(round.body, filter),
+  );
+}
+
+/** Everyone the stored rounds mention, most seen first — what the player search offers. */
+export function playerIndex(rounds: Stored<RoundRecord>[], scope: Scope = {}): PlayerEntry[] {
+  const { names, parsed, idOf } = identities(scoped(rounds, scope));
+  const seen = new Map<string, Set<number>>();
+  for (const { round, list } of parsed) {
+    for (const m of list) {
+      const id = idOf(m);
+      if (!id) continue;
+      if (!seen.has(id)) seen.set(id, new Set());
+      seen.get(id)!.add(round.id);
+    }
+  }
+  return [...seen]
+    .map(([id, set]) => ({ id, name: names.get(id) ?? id, rounds: set.size }))
+    .sort((a, b) => b.rounds - a.rounds || a.name.localeCompare(b.name));
+}
+
+/** One player across every game: what they were, how often, and how people did with them. */
+export function playerLens(rounds: Stored<RoundRecord>[], id: string, scope: Scope = {}): PlayerLens {
+  const { names, parsed, idOf } = identities(scoped(rounds, scope));
+  const rows = new Map<string, LensRow>();
+  const hit = new Set<number>();
+  const recent: PlayerLens['recent'] = [];
+  for (const { round, list } of parsed) {
+    for (const m of list) {
+      if (idOf(m) !== id) continue;
+      hit.add(round.id);
+      const key = `${round.body.game}|${m.role}`;
+      const row = rows.get(key) ?? { game: round.body.game, role: m.role, rounds: 0, good: 0, judged: 0 };
+      row.rounds++;
+      if (m.good !== undefined) {
+        row.judged++;
+        if (m.good) row.good++;
+      }
+      rows.set(key, row);
+      recent.push({ at: round.at, game: round.body.game, role: m.role, outcome: round.body.outcome, good: m.good });
+    }
+  }
+  return {
+    id,
+    name: names.get(id) ?? id,
+    rounds: hit.size,
+    rows: [...rows.values()].sort(
+      (a, b) => GAME_IDS.indexOf(a.game) - GAME_IDS.indexOf(b.game) || b.rounds - a.rounds,
+    ),
+    recent: recent.reverse().slice(0, 30),
   };
 }

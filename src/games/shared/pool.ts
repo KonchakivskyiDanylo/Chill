@@ -36,6 +36,17 @@ import { deal, dealInTurn, dealWeighted, type Deal } from './rotation';
 export type StatusChoice = 'all' | 'active' | 'retired';
 
 /**
+ * Whether the setup offers the status choice at all.
+ *
+ * Hidden for now, so Choose is two questions — region and difficulty — rather
+ * than three. Everything behind it is kept: flip this back to `true` and the
+ * "Still competing?" cards, the rules bullet explaining them and the filter all
+ * return. While it is off the filter reads `all` whatever is stored, so
+ * somebody who once picked Retired is not stuck on a filter they cannot see.
+ */
+export const SHOW_STATUS = false;
+
+/**
  * A difficulty, or `any` for no difficulty at all.
  *
  * `any` is not a fourth tier — it is the absence of the choice, drawing from
@@ -89,7 +100,8 @@ const RANDOM: Omit<PoolChoice, 'mode'> = {
  * hit Random for one round and came back still has it.
  */
 export function effective(choice: PoolChoice): Omit<PoolChoice, 'mode'> {
-  return choice.mode === 'random' ? RANDOM : choice;
+  if (choice.mode === 'random') return RANDOM;
+  return SHOW_STATUS ? choice : { ...choice, status: 'all' };
 }
 
 /**
@@ -235,42 +247,18 @@ export function poolScope(event: string | null, choice: PoolChoice): (string | n
   return ['roster', region, difficulty, status];
 }
 
-/** The career-earnings range a difficulty actually covers. */
-export interface TierBand {
-  min: number;
-  max: number;
-}
-
 /**
- * What each difficulty means in money, read off the roster rather than written
- * down.
+ * The difficulty a dealt secret player is played at.
  *
- * The cards used to say "113 players to play", which answers a question nobody
- * asked — the pool size tells you nothing about whether you will recognise
- * anyone. The band does: Easy is everyone above roughly a quarter of a million
- * in career earnings, and that is a sentence you can act on.
- *
- * Derived, never hardcoded, because the tiers are cut by percentile in the
- * notebook and the boundaries move every time the export grows. With a region
- * chosen it reads `regionTier`, so the numbers describe the band you are
- * actually about to play — Asia's Easy is not Europe's Easy.
+ * The one you chose, when you chose one. Otherwise — Random, Choose → Any, an
+ * event field — the player's own band, read the same way the pool read it: the
+ * regional band when a region is chosen, since Asia's Easy is not Europe's.
+ * Fortnitedle hangs its digit help off this, so a Random round of a household
+ * name plays like Easy and a deep cut like Hard.
  */
-export function tierBands(
-  roster: Roster,
-  choice: PoolChoice,
-): Partial<Record<Difficulty, TierBand>> {
-  const { region, status } = effective(choice);
-  const out: Partial<Record<Difficulty, TierBand>> = {};
-  for (const level of DIFFICULTIES) {
-    const players = roster.exactly(level, { region, eligible: withStatus(status) });
-    if (players.length === 0) continue;
-    let min = Infinity;
-    let max = 0;
-    for (const player of players) {
-      if (player.earnings < min) min = player.earnings;
-      if (player.earnings > max) max = player.earnings;
-    }
-    out[level] = { min, max };
-  }
-  return out;
+export function levelOf(player: RosterPlayer, event: string | null, choice: PoolChoice): Difficulty {
+  if (event) return player.tier;
+  const { region, difficulty } = effective(choice);
+  if (difficulty !== 'any') return difficulty;
+  return region ? player.regionTier : player.tier;
 }

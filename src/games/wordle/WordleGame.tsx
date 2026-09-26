@@ -10,7 +10,7 @@ import { PoolSetup } from '@/components/PoolSetup';
 import { Banner } from '@/components/ui';
 import { rotationKey } from '@/games/shared/rotation';
 import { useEventMode } from '@/games/shared/mode';
-import { dealSecret, poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
+import { dealSecret, levelOf, poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
 import type { Pools } from '@/data/liquipedia/pools';
 import { type Roster } from '@/data/liquipedia/roster';
 import { usePools } from '@/data/liquipedia/usePools';
@@ -19,6 +19,7 @@ import { playerMoney, plural } from '@/lib/format';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { getGame } from '@/games/registry';
 import {
+  digitHelp,
   eligible,
   gameFor,
   giveUp,
@@ -116,7 +117,8 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   useRoundRecorder('wordle', game !== null && game.status !== 'playing', () => ({
     title: `Fortnitedle — ${game!.secret.name}`,
     data: EXPORT_DATE,
-    setup: poolSetup(event, choice),
+    // The level the round was played at, so Random rounds can be split by it too.
+    setup: { ...poolSetup(event, choice), level: game!.level },
     ...roundRecord(game!),
   }));
   const [draft, setDraft] = useState('');
@@ -142,7 +144,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
     const key = rotationKey(meta.id, ...poolScope(event, choice));
     const drawn = dealSecret(players, readLocal<string[]>(key, []), pools, event, choice);
     if (drawn) writeLocal(key, drawn.seen);
-    setGame(drawn ? gameFor(drawn.pick) : null);
+    setGame(drawn ? gameFor(drawn.pick, levelOf(drawn.pick, event, choice)) : null);
     setWrapped(drawn?.wrapped ?? false);
     setDraft('');
     setMessage(null);
@@ -273,7 +275,12 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
           nothing.
         */}
         {hasDigits(game.answer) && !finished && digits.size > 0 ? (
-          <DigitHint answer={game.answer} shown={digits} guesses={game.guesses.length} />
+          <DigitHint
+            answer={game.answer}
+            shown={digits}
+            guesses={game.guesses.length}
+            exact={digitHelp(game) === 'digit'}
+          />
         ) : null}
 
         {message ? <p className="center small" style={{ color: 'var(--warning)' }}>{message}</p> : null}
@@ -347,16 +354,19 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
  * the same fact, already positioned.
  *
  * Only rendered once the first digit has landed — before that there is nothing
- * to say that is not a spoiler. See the call site.
+ * to say that is not a spoiler. See the call site. On Medium (`exact` false)
+ * the cells hold a # rather than the digit, and the keyboard stays as it was.
  */
 function DigitHint({
   answer,
   shown,
   guesses,
+  exact,
 }: {
   answer: string;
   shown: Map<number, string>;
   guesses: number;
+  exact: boolean;
 }) {
   const schedule = revealSchedule(answer);
   const pending = [...schedule.values()].filter((after) => guesses < after);
@@ -391,8 +401,9 @@ function DigitHint({
       </div>
       {justRevealed.size > 0 ? (
         <p className="wordle-hint__pop" role="status">
-          {justRevealed.size === 1 ? 'Digit revealed' : `${justRevealed.size} digits revealed`} — it
-          is on the keyboard too
+          {exact
+            ? `${justRevealed.size === 1 ? 'Digit revealed' : `${justRevealed.size} digits revealed`} — on the keyboard too`
+            : `${justRevealed.size === 1 ? 'A digit goes here' : `${justRevealed.size} digits go here`} — which one is for you to find`}
         </p>
       ) : (
         <p className="tiny faint center">

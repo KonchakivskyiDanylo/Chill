@@ -11,7 +11,8 @@ import type { RosterPlayer } from './roster';
  * What counts as a major is the notebook's call, not this file's. On the
  * current export it is Liquipedia tier 1 with no tier type, organised by Epic
  * Games, from the 2019 World Cup onwards, minus the console / mobile / Twitch
- * brackets — 188 tournaments. Change the filter, re-run the cell, and the game
+ * brackets and challenge events (MrBeast's) — 187 tournaments. Change the
+ * filter, re-run the cell (cell 7 in `notebook_cells.md`), and the game
  * asks about a different set of events without a line changing here.
  *
  * Deliberately no `tier` column: difficulty is joined from `players.json` by
@@ -75,7 +76,7 @@ function shortName(name: string): string {
 export class Majors {
   /** When the notebook generated the file. Shown as the game's data date. */
   readonly generated: string;
-  /** Majors a player must have reached to be a possible answer. */
+  /** Majors a player must have reached to be a possible answer — outside an event field. */
   readonly minAppearances: number;
   readonly tournaments: MajorTournament[];
 
@@ -138,14 +139,30 @@ export class Majors {
    * Passed to `roster.playersFor` as its `eligible` filter, so the difficulty
    * counts are counts of answerable players rather than of the roster.
    *
-   * Everyone with a record, including the thirteen whose every major was
-   * played beside the same partner — Darm and Demus have the same eight
-   * results, placement for placement. They were left out for a while, because
-   * no clue list can tell them apart. They are back: a wrong guess only costs
-   * a clue, so naming the partner first and then the player is a fine round,
-   * and dropping them made them the one pair nobody would ever be asked about.
+   * Everyone with `minAppearances` majors, including the thirteen whose every
+   * major was played beside the same partner — Darm and Demus have the same
+   * eight results, placement for placement. They were left out for a while,
+   * because no clue list can tell them apart. They are back: a wrong guess only
+   * costs a clue, so naming the partner first and then the player is a fine
+   * round, and dropping them made them the one pair nobody would ever be asked
+   * about.
+   *
+   * Counted here rather than trusted to the file: the notebook used to write
+   * only players over the bar and now writes everyone with a major, so the
+   * event field can reach its short careers (`inField`).
    */
   readonly eligible = (players: readonly RosterPlayer[]): RosterPlayer[] =>
+    players.filter((player) => (this.byPlayer.get(player.id)?.length ?? 0) >= this.minAppearances);
+
+  /**
+   * Who an event field may ask about: anyone in it with a major at all.
+   *
+   * A field is a hundred players who all earned their place, and the ones with
+   * two or three majors are often the story of the event. Leaving them out for
+   * falling short of five would have dropped a fifth of the Globals. The round
+   * makes up for the short list with guesses — see `MIN_GUESSES`.
+   */
+  readonly inField = (players: readonly RosterPlayer[]): RosterPlayer[] =>
     players.filter((player) => this.byPlayer.has(player.id));
 }
 

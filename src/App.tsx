@@ -50,7 +50,7 @@ export function App() {
         <Route path="/" element={<Home />} />
         <Route path="/credits" element={<Credits />} />
         <Route
-          path="/analytics"
+          path="/analytics/*"
           element={
             <Suspense fallback={<div className="page center muted">Loading…</div>}>
               <Analytics />

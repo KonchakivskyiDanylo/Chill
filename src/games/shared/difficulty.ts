@@ -20,12 +20,10 @@ export interface DifficultyMeta {
   label: string;
   icon: string;
   /**
-   * Who you get asked about, in as few words as it takes.
-   *
-   * One short clause, because the card carrying it also prints the earnings
-   * band the level covers — which is the same sentence, said precisely. Two
-   * lines of prose above that number was one choice explained three times,
-   * four cards across.
+   * Who you get asked about, in as few words as it takes — the whole hint on
+   * the setup card. The cards used to print the earnings band under it too
+   * ("$100K+ earned"), which was a number to decode rather than a promise
+   * about who you would recognise, and it went.
    */
   blurb: string;
 }

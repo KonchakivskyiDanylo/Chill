@@ -100,6 +100,28 @@ try {
   check(dash.status === 200 && data.rounds === 1, `the dashboard counts ${data?.rounds} rounds, expected 1`);
   check(data.wordle?.[0]?.name === 'Bugha' && data.wordle[0].solved === 1, 'the dashboard lost the Fortnitedle round');
 
+  // Filters ride on the same query string, and one that matches nothing is an
+  // empty dashboard, not an error. Nonsense values are ignored.
+  const random = (await request('/api/admin/dashboard?days=7&source=random&game=wordle', {}, cookie)).body as { rounds: number };
+  check(random?.rounds === 1, `the Random filter counts ${random?.rounds} rounds, expected 1`);
+  const event = (await request('/api/admin/dashboard?days=7&source=event', {}, cookie)).body as { rounds: number };
+  check(event?.rounds === 0, `the event filter counts ${event?.rounds} rounds, expected 0`);
+  const junk = await request('/api/admin/dashboard?days=abc&source=nope&game=chess', {}, cookie);
+  check(junk.status === 200 && (junk.body as { rounds: number }).rounds === 1, 'a junk filter was not ignored');
+
+  // The player index and one player's page.
+  const players = (await request('/api/admin/players?days=7', {}, cookie)).body as { id: string; rounds: number }[];
+  check(players?.[0]?.id === 'Bugha' && players[0].rounds === 1, `the player index reads ${JSON.stringify(players)}`);
+  const lens = (await request('/api/admin/players/Bugha?days=7', {}, cookie)).body as {
+    rounds: number;
+    rows: { game: string; role: string; good: number }[];
+  };
+  check(
+    lens?.rounds === 1 && lens.rows[0]?.role === 'secret' && lens.rows[0].good === 1,
+    `Bugha's player page reads ${JSON.stringify(lens)}`,
+  );
+  check((await request('/api/admin/players?days=7')).status === 401, 'the player index answered without a login');
+
   const inbox = await request('/api/admin/support', {}, cookie);
   const tickets = inbox.body as { id: number; status: string; body: { message: string } }[];
   check(tickets.length === 1, `the inbox holds ${tickets.length} requests — the honeypot one should be gone`);

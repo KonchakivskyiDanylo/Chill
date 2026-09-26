@@ -1,5 +1,6 @@
 import { ref, type GamePayloads, type Outcome } from '@/analytics/types';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
+import type { Difficulty } from '@/games/shared/difficulty';
 import { makeRng } from '@/lib/rng';
 import { normalizeName } from '@/lib/text';
 
@@ -8,10 +9,30 @@ import { normalizeName } from '@/lib/text';
 export type TileState = 'correct' | 'present' | 'absent';
 export const MAX_GUESSES = 6;
 
+/**
+ * What a digit gives away when its turn comes (see `revealSchedule`).
+ *
+ *   digit      the digit itself, in place, and its key goes green — Easy
+ *   position   a # where a digit sits, and not which one — Medium
+ *   none       nothing; find it yourself — Hard
+ */
+export type DigitHelp = 'digit' | 'position' | 'none';
+
+export const DIGIT_HELP: Readonly<Record<Difficulty, DigitHelp>> = {
+  easy: 'digit',
+  medium: 'position',
+  hard: 'none',
+};
+
+/** What a position-only reveal shows in place of the digit. */
+export const HIDDEN_DIGIT = '#';
+
 export interface GameState {
   secret: RosterPlayer;
   /** The secret reduced to A-Z0-9 — what the player actually types. */
   answer: string;
+  /** The round's difficulty — see `levelOf` in `games/shared/pool.ts`. Sets the digit help. */
+  level: Difficulty;
   guesses: string[];
   status: 'playing' | 'won' | 'lost';
 }
@@ -44,8 +65,8 @@ export function eligible(players: readonly RosterPlayer[]): RosterPlayer[] {
  * from a no-repeat rotation (`games/shared/rotation.ts`) and hands the result
  * here, so the choice of player and the rules of the round stay apart.
  */
-export function gameFor(secret: RosterPlayer): GameState {
-  return { secret, answer: normalizeName(secret.name), guesses: [], status: 'playing' };
+export function gameFor(secret: RosterPlayer, level: Difficulty = 'easy'): GameState {
+  return { secret, answer: normalizeName(secret.name), level, guesses: [], status: 'playing' };
 }
 
 export function createGame(
@@ -55,7 +76,13 @@ export function createGame(
   const pool = eligible(players);
   if (pool.length === 0) return null;
   const rng = makeRng(seed);
-  return gameFor(pool[Math.floor(rng() * pool.length)]);
+  const secret = pool[Math.floor(rng() * pool.length)];
+  return gameFor(secret, secret.tier);
+}
+
+/** How much this round's digits give away. */
+export function digitHelp(state: GameState): DigitHelp {
+  return DIGIT_HELP[state.level] ?? 'digit';
 }
 
 // ------------------------------------------------------- digit reveals --
@@ -104,15 +131,20 @@ export function revealSchedule(answer: string): Map<number, number> {
 }
 
 /**
- * The digits the player can see right now, as position -> character.
+ * The digits the player can see right now, as position -> what the strip shows
+ * there: the digit on Easy, `HIDDEN_DIGIT` on Medium. Always empty on Hard.
  *
  * Empty for the great majority of rounds, whose answers are all letters.
  */
 export function revealedDigits(state: GameState): Map<number, string> {
   const shown = new Map<number, string>();
+  const help = digitHelp(state);
+  if (help === 'none') return shown;
   const done = state.status !== 'playing';
   for (const [position, after] of revealSchedule(state.answer)) {
-    if (done || state.guesses.length >= after) shown.set(position, state.answer[position]);
+    if (done || state.guesses.length >= after) {
+      shown.set(position, help === 'digit' ? state.answer[position] : HIDDEN_DIGIT);
+    }
   }
   return shown;
 }
@@ -212,9 +244,12 @@ export function keyboardState(state: GameState): Map<string, TileState> {
   // A revealed digit is a character the player has been *told* is in the answer,
   // at a position they can see. Leaving its key uncoloured made the hint strip
   // and the keyboard disagree about a fact the game had already given away —
-  // and the key is where you look before you type.
-  for (const char of revealedDigits(state).values()) {
-    if (rank[best.get(char) ?? 'absent'] < rank.correct) best.set(char, 'correct');
+  // and the key is where you look before you type. Only on Easy: a Medium
+  // reveal says where a digit is and not which, and a green key would say which.
+  if (digitHelp(state) === 'digit') {
+    for (const char of revealedDigits(state).values()) {
+      if (rank[best.get(char) ?? 'absent'] < rank.correct) best.set(char, 'correct');
+    }
   }
   return best;
 }

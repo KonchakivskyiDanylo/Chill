@@ -32,7 +32,7 @@ import {
   type PlayerCriterion,
 } from '@/games/shared/criteria';
 import { makeRng, shuffle } from '@/lib/rng';
-import { aggregate } from '@/analytics/aggregate';
+import { aggregate, playerIndex, playerLens } from '@/analytics/aggregate';
 import {
   MAX_RECORD_BYTES,
   RECORD_VERSION,
@@ -286,6 +286,30 @@ for (const category of hlCategories) {
   const game = wordle.gameFor(pool[0]);
   const solved = wordle.submitGuess(game, pool[0].name);
   check(solved.ok && solved.state.status === 'won', 'fortnitedle: the exact answer did not win');
+
+  // The digit help per difficulty, three guesses into a round on a digit
+  // answer: Easy hands over the digit and greens its key, Medium a # and no
+  // key, Hard nothing at all.
+  const digital = pool.find((p) => wordle.revealSchedule(wordle.gameFor(p).answer).size > 0);
+  if (digital) {
+    const help = (level: 'easy' | 'medium' | 'hard') => {
+      let state = wordle.gameFor(digital, level);
+      const filler = ['Q', 'X', 'Z'].map((c) => c.repeat(state.answer.length));
+      for (const guess of filler) {
+        const next = wordle.submitGuess(state, guess);
+        if (next.ok) state = next.state;
+      }
+      const shown = [...wordle.revealedDigits(state).values()];
+      const keyed = [...wordle.keyboardState(state)].filter(([key, s]) => /\d/.test(key) && s === 'correct');
+      return { shown, keyed: keyed.length };
+    };
+    const easy = help('easy');
+    const medium = help('medium');
+    const hard = help('hard');
+    check(easy.shown.length === 1 && /\d/.test(easy.shown[0]) && easy.keyed === 1, `fortnitedle easy: ${digital.name} digit not handed over`);
+    check(medium.shown.join() === wordle.HIDDEN_DIGIT && medium.keyed === 0, `fortnitedle medium: ${digital.name} showed ${medium.shown.join()} with ${medium.keyed} keys`);
+    check(hard.shown.length === 0 && hard.keyed === 0, `fortnitedle hard: ${digital.name} gave a digit away`);
+  }
 }
 
 // ------------------------------------------------------------ 4. Career Path
@@ -400,6 +424,39 @@ if (majors) {
       !opening?.tournament.name.startsWith('Fortnite World Cup'),
       "career-path: Bugha's path still opens on the World Cup",
     );
+  }
+
+  // Every round gets MIN_GUESSES guesses, however short the career: an event
+  // field's two-major qualifier plays two clues, then three spare guesses that
+  // reveal nothing. A ten-clue round is unchanged — its tenth wrong guess ends it.
+  const [secret, ...others] = answerable;
+  const wrongs = (game: career.GameState, n: number) =>
+    others.slice(0, n).reduce((state, other) => career.submitGuess(state, other), game);
+  const two = career.createGame(secret, majors.resultsFor(secret.id).slice(0, 2), 'order', majors, 'short')!;
+  const fourIn = wrongs(two, career.MIN_GUESSES - 1);
+  check(
+    fourIn.status === 'playing' && career.guessesLeft(fourIn) === 1,
+    `career-path: a two-clue round ended or miscounted after ${career.MIN_GUESSES - 1} wrong guesses`,
+  );
+  const fiveIn = wrongs(two, career.MIN_GUESSES);
+  check(fiveIn.status === 'lost' && career.record(fiveIn).outcome === 'lost', 'career-path: a two-clue round outlived its guesses');
+  check(
+    career.record(career.giveUp(wrongs(two, 3))).outcome === 'gave-up',
+    'career-path: giving up on the spare guesses was recorded as running out',
+  );
+  const full = career.createGame(secret, majors.resultsFor(secret.id), 'order', majors, 'full')!;
+  if (full.clues.length === career.MAX_CLUES) {
+    check(wrongs(full, career.MAX_CLUES - 1).status === 'playing', 'career-path: a ten-clue round ended early');
+    check(wrongs(full, career.MAX_CLUES).status === 'lost', 'career-path: a ten-clue round outlived its clues');
+  }
+
+  // An event field reaches its short careers; the roster does not.
+  for (const pool of pools.pools) {
+    const inPool = roster.players.filter((p) => pool.players.includes(p.id));
+    const reached = majors.inField(inPool).length;
+    const long = majors.eligible(inPool).length;
+    check(reached >= long, `career-path: ${pool.label} lost players to the field rule`);
+    notes.push(`career-path ${pool.label}: ${reached} of ${inPool.length} answerable (${long} with ${majors.minAppearances}+ majors)`);
   }
 }
 
@@ -1123,9 +1180,27 @@ if (facts) {
     const row = dash.careerPath[0];
     const solvedAt = row?.clues.find((c) => c.solved === 1);
     check(Boolean(solvedAt) && row.solved === 1 && row.avgClues === 3, 'analytics: career-path clue breakdown is wrong');
-    const setup = dash.games.find((g) => g.game === 'career-path')!.setups.find((s) => s.field === 'region');
-    check(setup?.values[0]?.label === 'Europe', 'analytics: setup counts lost the region');
+    const mix = dash.games.find((g) => g.game === 'career-path')!.mix;
+    check(mix.regions[0]?.label === 'Europe', 'analytics: setup counts lost the region');
+    const chosen = mix.source.find((s) => s.label === 'chosen')?.count;
+    check(chosen === 1, `analytics: ${chosen} career-path rounds counted as Chosen, expected 1`);
+
+    // Filters narrow everything at once, and a filter nothing matches is an
+    // empty dashboard rather than an error.
+    const europe = aggregate(stored, { filter: { region: 'Europe' } });
+    check(europe.rounds === 1 && europe.careerPath.length === 1, `analytics: the Europe filter kept ${europe.rounds} rounds`);
+    const nothing = aggregate(stored, { filter: { source: 'event' } });
+    check(nothing.rounds === 0 && nothing.wordle.length === 0, 'analytics: an empty filter still counted rounds');
+
+    // The player view: the Career Path secret, seen as the secret twice.
+    const who = dash.careerPath[0];
+    const lens = playerLens(stored, who.id);
+    const asSecret = lens.rows.find((row) => row.game === 'career-path' && row.role === 'secret');
+    check(asSecret?.rounds === 2 && asSecret.good === 1, `analytics: ${who.name}'s player view reads ${JSON.stringify(asSecret)}`);
   }
+  const index = playerIndex(stored);
+  check(index.length > 0 && index.every((entry) => entry.rounds > 0), 'analytics: the player index is empty');
+  check(!index.some((entry) => entry.id === 'check'), 'analytics: a list id leaked into the player index');
   if (rankings) check(dash.tenaball[0]?.gaveUp === 1, 'analytics: tenaball give-up not counted');
   check(dash.list[0]?.answers.length === 3, 'analytics: list answers not counted from found + missed');
   if (facts && orgs) {

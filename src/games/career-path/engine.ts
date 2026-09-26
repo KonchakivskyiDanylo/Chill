@@ -11,6 +11,17 @@ export type Mode = 'order' | 'random';
 /** Clues in a round. Ten is enough for an arc and short enough to read. */
 export const MAX_CLUES = 10;
 
+/**
+ * Guesses a round always gets, however short the career.
+ *
+ * A round has one guess per clue, which was all it needed while every answer
+ * had five majors or more. An event field asks about anyone in it with a major
+ * at all, and a two-major career would have been two guesses. So a career
+ * shorter than this makes the difference up after its last clue: guesses that
+ * reveal nothing new, until five have been made.
+ */
+export const MIN_GUESSES = 5;
+
 export interface Clue {
   result: MajorResult;
 }
@@ -38,6 +49,12 @@ export interface GameState {
    */
   steps: { clue: number; guess: RosterPlayer | null }[];
   status: 'playing' | 'won' | 'lost';
+  /**
+   * Ended by Give up rather than by running out. The steps used to tell the two
+   * apart (see `clueOutcome`), but with spare guesses after the last clue a
+   * wrong guess on it no longer ends the round, so it is said outright.
+   */
+  gaveUp: boolean;
 }
 
 /**
@@ -278,7 +295,29 @@ export function createGame(
     guesses: [],
     steps: [],
     status: 'playing',
+    gaveUp: false,
   };
+}
+
+/** Guesses a short career gets after its last clue — see `MIN_GUESSES`. */
+function spareGuesses(state: GameState): number {
+  return Math.max(0, MIN_GUESSES - state.clues.length);
+}
+
+/** Wrong guesses made with every clue already showing. */
+function wrongAtEnd(state: GameState): number {
+  const last = state.clues.length - 1;
+  return state.steps.filter(
+    (step) => step.clue === last && step.guess !== null && step.guess.id !== state.secret.id,
+  ).length;
+}
+
+/**
+ * Guesses still to come, the one that would end the round included: a clue's
+ * worth for every clue still hidden, one on the last clue, and the spares.
+ */
+export function guessesLeft(state: GameState): number {
+  return cluesLeft(state) + 1 + spareGuesses(state) - wrongAtEnd(state);
 }
 
 export function submitGuess(state: GameState, guess: RosterPlayer): GameState {
@@ -294,8 +333,12 @@ export function submitGuess(state: GameState, guess: RosterPlayer): GameState {
     return { ...state, guesses, steps, revealed: state.clues.length, status: 'won' };
   }
 
-  // A wrong guess burns a clue; running out of clues ends the round.
-  if (state.revealed >= state.clues.length) return { ...state, guesses, steps, status: 'lost' };
+  // A wrong guess burns a clue. With none left it spends one of a short
+  // career's spare guesses, and with none of those either the round is over.
+  if (state.revealed >= state.clues.length) {
+    const out = wrongAtEnd(state) >= spareGuesses(state);
+    return { ...state, guesses, steps, status: out ? 'lost' : 'playing' };
+  }
   const revealed = state.revealed + 1;
   return { ...state, guesses, steps, revealed, earned: revealed };
 }
@@ -312,7 +355,7 @@ export function revealNext(state: GameState): GameState {
 /** Ends the round unsolved, with every remaining clue turned face up. */
 export function giveUp(state: GameState): GameState {
   if (state.status !== 'playing') return state;
-  return { ...state, revealed: state.clues.length, status: 'lost' };
+  return { ...state, revealed: state.clues.length, status: 'lost', gaveUp: true };
 }
 
 export function cluesLeft(state: GameState): number {
@@ -328,7 +371,7 @@ export function cluesLeft(state: GameState): number {
  */
 export function record(state: GameState): { outcome: Outcome; r: GamePayloads['career-path'] } {
   return {
-    outcome: clueOutcome(state),
+    outcome: state.status === 'won' ? 'won' : state.gaveUp ? 'gave-up' : 'lost',
     r: {
       secret: ref(state.secret),
       clues: state.clues.map(({ result }) => ({
@@ -345,7 +388,9 @@ export function record(state: GameState): { outcome: Outcome; r: GamePayloads['c
 }
 
 /**
- * Won, lost on the last clue, or given up.
+ * Won, lost on the last clue, or given up — for a game whose last clue is its
+ * last guess, which Who Are Ya's always is. Career Path says it outright
+ * instead (`gaveUp`), since a short career's spare guesses come after it.
  *
  * `giveUp` and running out both end on `lost`, so the steps tell them apart:
  * running out is a wrong guess while the final clue was showing.

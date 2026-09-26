@@ -15,7 +15,7 @@ import { useMajors } from '@/data/liquipedia/useMajors';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import { rotationKey } from '@/games/shared/rotation';
-import { useEventMode } from '@/games/shared/mode';
+import { activePool, useEventMode } from '@/games/shared/mode';
 import { dealSecret, poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { moneyShort, ordinal, playerMoney, plural } from '@/lib/format';
 import { readLocal, writeLocal } from '@/lib/storage';
@@ -24,6 +24,8 @@ import {
   cluesLeft,
   createGame,
   giveUp,
+  guessesLeft,
+  MIN_GUESSES,
   revealNext,
   submitGuess,
   type GameState,
@@ -73,25 +75,34 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
   }));
   const [error, setError] = useState<string | null>(null);
 
+  // An event field asks about anyone in it with a major; the whole roster only
+  // about careers long enough to read (see `Majors.inField`).
+  const field = activePool(pools, event);
+  const eligible = field ? majors.inField : majors.eligible;
+
   /** Everyone the game could ever ask about — what the search box covers. */
-  const answerable = useMemo(() => majors.eligible(roster.players), [roster, majors]);
+  const answerable = useMemo(() => eligible(roster.players), [roster, eligible]);
 
   const players = useMemo(
-    () => resolvePool(roster, pools, event, choice, majors.eligible, 10),
-    [roster, pools, event, choice, majors],
+    () => resolvePool(roster, pools, event, choice, eligible, 10),
+    [roster, pools, event, choice, eligible],
   );
 
   const start = useCallback(() => {
     const key = rotationKey(meta.id, ...poolScope(event, choice));
     const drawn = dealSecret(players, readLocal<string[]>(key, []), pools, event, choice);
     if (!drawn) {
-      setError(`No player in this pool has ${majors.minAppearances} majors on record.`);
+      setError(
+        field
+          ? 'Nobody in this field has a major on record.'
+          : `No player in this pool has ${majors.minAppearances} majors on record.`,
+      );
       return;
     }
     writeLocal(key, drawn.seen);
     setError(null);
     setGame(createGame(drawn.pick, majors.resultsFor(drawn.pick.id), mode, majors));
-  }, [players, pools, event, choice, majors, mode]);
+  }, [players, pools, event, choice, majors, mode, field]);
 
   const note = <RosterNote what="Results" generated={majors.generated} />;
 
@@ -105,7 +116,7 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
             event={event}
             value={choice}
             onChange={setChoice}
-            eligible={majors.eligible}
+            eligible={eligible}
             onStart={start}
             startLabel="Start"
             extra={
@@ -132,7 +143,9 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
           ) : null}
           <p className="tiny faint center">
             {plural(majors.tournaments.length, 'major')} on record ·{' '}
-            {plural(answerable.length, 'player')} with at least {majors.minAppearances} of them
+            {field
+              ? `${players.length} of the field's ${plural(field.players.length, 'player')} with at least one`
+              : `${plural(answerable.length, 'player')} with at least ${majors.minAppearances} of them`}
           </p>
         </div>
       </GameShell>
@@ -142,6 +155,9 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
   const finished = game.status !== 'playing';
   const visible = game.clues.slice(0, game.revealed);
   const guessedIds = new Set(game.guesses.map((p) => p.id));
+  /** A career shorter than the guesses every round gets — see `MIN_GUESSES`. */
+  const short = game.clues.length < MIN_GUESSES;
+  const left = guessesLeft(game);
 
   return (
     <GameShell
@@ -161,7 +177,7 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
       <div className="stack">
         <div className="stats">
           <Stat label="Clues used" value={`${finished ? game.earned : game.revealed}/${game.clues.length}`} />
-          <Stat label="Guesses" value={game.guesses.length} />
+          <Stat label="Guesses" value={short ? `${game.guesses.length}/${MIN_GUESSES}` : game.guesses.length} />
           <Stat label="Mode" value={game.mode === 'order' ? 'Order' : 'Random'} />
         </div>
 
@@ -192,13 +208,27 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
               {game.clues.length - game.earned === 1 ? 'was' : 'were'} still to come.
             </p>
           ) : null}
+          {short && !finished ? (
+            <p className="tiny faint" style={{ margin: 0 }}>
+              A short career: {plural(game.clues.length, 'major')} on record, so this is all there is.
+              You still get {MIN_GUESSES} guesses — the ones after the last clue reveal nothing new.
+            </p>
+          ) : null}
         </section>
 
         {finished ? (
           <div className="stack">
             <Banner
               tone={game.status === 'won' ? 'success' : 'danger'}
-              title={game.status === 'won' ? `Got it in ${game.guesses.length}!` : 'Out of clues'}
+              title={
+                game.status === 'won'
+                  ? `Got it in ${game.guesses.length}!`
+                  : game.gaveUp
+                    ? 'Round over'
+                    : short
+                      ? 'Out of guesses'
+                      : 'Out of clues'
+              }
             >
               The player was <strong>{game.secret.name}</strong>.
             </Banner>
@@ -229,9 +259,11 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
                 onClick={() => setGame(revealNext(game))}
                 disabled={cluesLeft(game) === 0}
               >
-                {cluesLeft(game) === 0
-                  ? 'All clues revealed — last guess!'
-                  : `Reveal next clue (${cluesLeft(game)} left)`}
+                {cluesLeft(game) > 0
+                  ? `Reveal next clue (${cluesLeft(game)} left)`
+                  : left > 1
+                    ? `All clues revealed — ${left} guesses left`
+                    : 'All clues revealed — last guess!'}
               </button>
               <GiveUpButton onGiveUp={() => setGame(giveUp(game))} variant="danger" />
             </div>

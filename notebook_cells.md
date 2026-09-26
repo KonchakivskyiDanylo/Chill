@@ -1,6 +1,21 @@
 # Notebook cells to run
 
-Five cells, **in this order, top to bottom**. One kernel, started from the repo
+> **To run now (26 Sep 2026) — three cells: 1, then the `facts.json`
+> appendix, then 7.** Majors no longer include MrBeast's Extreme Survival
+> Challenge, and Career Path's file now carries every player with a major so an
+> event field can ask about its short careers. Proved against the dump with
+> every write sent to a scratch folder:
+>
+> - `facts.json` — 188 headline events become 187. Anas loses his one "major
+>   win" (that was it); De_Tibbe, Hiimtylerh and Keroro, who played nothing
+>   else, drop out; Favs, LazarP and Trippernn lose one appearance.
+> - `career_path.json` — the same 187 tournaments and the same results for all
+>   1,175 players it has now, plus 2,173 with one to four majors. 22 of the
+>   101 at the 2026 Globals become answerable in event mode; none has zero.
+> - `rankings.json` — cells 2–4 re-run give a byte-for-byte identical set of
+>   boards, so they do not need running for this.
+
+Cells **in this order, top to bottom**. One kernel, started from the repo
 root — `BASE` is a relative path. Cell 1 loads `placements.json` (154 MB,
 ~4 s) and the rest reuse it.
 
@@ -11,11 +26,13 @@ root — `BASE` is a relative path. Cell 1 loads `placements.json` (154 MB,
 | 3 | `rankings.json` again, with four more boards |
 | 4 | `rankings.json` a third time, with sixty-six more |
 | 5 | `pools.json` |
+| 6 | `teammates.json` |
+| 7 | `career_path.json` |
 
-There is a sixth cell in an appendix at the bottom that rebuilds
-`facts.json`. **You do not need it** — nothing in the app has changed that
-depends on it, and it is the one cell where the `is_lan` question below
-actually changes the data.
+There is one more cell in an appendix at the bottom that rebuilds
+`facts.json`. It is the one cell where the `is_lan` question below actually
+changes the data, so run it on purpose — as now, to take MrBeast's event out
+of the majors.
 
 > **Cells 3 and 4 append to `boards`.** Running either twice in one kernel
 > duplicates its boards. If you need to redo one, run cell 2 again first and
@@ -133,13 +150,15 @@ def is_lan(t):
     return True
 
 def is_major(t):
-    """Your career_path filter, verbatim."""
+    """Your career_path filter, verbatim — challenge events included in the
+    exclusion now, as they always were in career_path's own copy. That drops
+    one event, MrBeast's Extreme Survival Challenge: 188 majors become 187."""
     return (
         t['liquipediatier'] == 1
         and t['liquipediatiertype'] is None
         and is_epic(t)
         and (t['startdate'] or '') >= '2019-07-26'
-        and not re.search(r'console|mobile|twitch', t['name'], re.I)
+        and not re.search(r'console|mobile|twitch|challenge', t['name'], re.I)
     )
 
 def is_fncs_final(t):
@@ -1219,6 +1238,81 @@ print('Peterbot:', players_out[[p['id'] for p in players_out].index('Peterbot')]
 
 ---
 
+## Cell 7 — `career_path.json`
+
+**New here, like cell 6.** It lived commented-out in `players_optimize.ipynb`
+(cell 17); this is the same output with two changes:
+
+- **Everyone with a major is written, not only the players with five.** The
+  app still asks the whole roster only about careers of five majors or more
+  (`minAppearances` stays 5), but an event field now asks about anyone in it
+  with a major at all — 22 of the 101 at the 2026 Globals have one to four.
+  A short career still gets five guesses in the game.
+- **Cell 1's rules instead of its own copies.** `MAJORS` in place of the
+  pandas filter (they now agree: both drop challenge events, so MrBeast's
+  Extreme Survival Challenge is in neither), and `PLACED` in place of its own
+  pass over `placements`, which also drops players the roster marks unused —
+  nobody can be dealt or typed who is not on the roster anyway.
+
+The file grows from 0.15 MB to about 0.2 MB.
+
+```python
+OUT = f'{BASE}/career_path.json'
+MIN_APPEARANCES = 5    # to be an answer on the whole roster; an event field takes one
+
+cp_events = sorted((tour_of[n] for n in MAJORS), key=lambda t: (str(t['startdate'])[:10], t['name']))
+cp_index = {t['name']: i for i, t in enumerate(cp_events)}
+cp_tournaments = [
+    {
+        'name': t['name'],
+        'date': str(t['startdate'])[:10],
+        'mode': t.get('mode'),
+        'region': t.get('region'),
+        'prizePool': None if t.get('prizepool') is None or pd.isna(t.get('prizepool'))
+                     else round(float(t['prizepool'])),
+    }
+    for t in cp_events
+]
+
+# `r` is None for '', 'DNP' and 'DQ' — not a finish anyone can be identified by
+# — and a range like '35-36' already reads as its best end (cell 1).
+cp_results = defaultdict(dict)
+for t, r, _money, pages in PLACED:
+    i = cp_index.get(t['name'])
+    if i is None or r is None:
+        continue
+    for page, _team in pages:
+        cp_results[page][i] = r
+
+cp_players = [
+    {'id': page, 'results': sorted([i, r] for i, r in hits.items())}
+    for page, hits in sorted(cp_results.items())
+]
+
+payload = {
+    'generated': TODAY,
+    'minAppearances': MIN_APPEARANCES,
+    'tournaments': cp_tournaments,
+    'players': cp_players,
+}
+with open(OUT, 'w', encoding='utf-8') as fh:
+    json.dump(payload, fh, ensure_ascii=False, separators=(',', ':'))
+
+full = [p for p in cp_players if len(p['results']) >= MIN_APPEARANCES]
+print(f'{len(cp_tournaments)} majors; {len(cp_players):,} players with one or more, '
+      f'{len(full):,} with {MIN_APPEARANCES}+; {os.path.getsize(OUT)/1e6:.2f} MB')
+print('  by tier, 5+:', dict(Counter(tier.get(p['id']) for p in full)))
+print('  longest path:', max(len(p['results']) for p in cp_players))
+for pool in json.load(open(f'{BASE}/pools.json', encoding='utf-8'))['pools']:
+    have = {p['id']: len(p['results']) for p in cp_players}
+    short = sorted(page for page in pool['players'] if 0 < have.get(page, 0) < MIN_APPEARANCES)
+    none = sorted(page for page in pool['players'] if page not in have)
+    print(f"  {pool['label']}: {len(short)} short careers now answerable, "
+          f"{len(none)} with no major at all{' — ' + ', '.join(none) if none else ''}")
+```
+
+---
+
 ## Check — FNCS winners vs major winners
 
 **Read-only: writes nothing.** Run it any time after cell 1. It compares the
@@ -1279,6 +1373,8 @@ def why_not_major(t):
         reasons.append('before the 2019 World Cup')
     if re.search(r'console|mobile|twitch', t['name'], re.I):
         reasons.append('console/mobile/twitch bracket')
+    if re.search(r'challenge', t['name'], re.I):
+        reasons.append('challenge event')
     return ', '.join(reasons) or 'counts as a major'
 
 
@@ -1364,9 +1460,10 @@ Per-player career facts: where a player won, how many LANs they turned up to,
 which headline events they played. Read by Griefer, Tic Tac Toe, Connections,
 List and Who Are Ya.
 
-**Not part of the run above.** It is here so the document is complete. Running
-it rebuilds `facts.json` from whatever `is_lan` currently says, which is the
-one thing in this file that will quietly change how the games play.
+**Not part of the usual run.** Running it rebuilds `facts.json` from whatever
+`is_lan` and `is_major` currently say, which is the one thing in this file that
+will quietly change how the games play — run it on purpose, as on 26 Sep 2026
+to drop MrBeast's Extreme Survival Challenge from the majors (see the top).
 
 It depends only on cell 1, so it can be run any time after it.
 

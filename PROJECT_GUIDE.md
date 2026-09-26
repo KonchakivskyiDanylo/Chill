@@ -1,6 +1,6 @@
 # OffSpawn — the whole project
 
-As of 25 September 2026: every game and how it chooses its players, the data, the server, the tests, the limited-mode plan and what to decide next. See also [README.md](README.md), [DATA.md](DATA.md) and [LIMITED_MODE.md](LIMITED_MODE.md).
+As of 26 September 2026: every game and how it chooses its players, the data, the server, the tests, the limited-mode plan and what to decide next. See also [README.md](README.md), [DATA.md](DATA.md) and [LIMITED_MODE.md](LIMITED_MODE.md).
 
 ## What OffSpawn is
 
@@ -37,7 +37,7 @@ Every game reads one Liquipedia export in `liquipedia_data/clean_data/fortnite/`
 | --- | --- | --- | --- |
 | `players.json` | 5,678 playable rows: handle, aliases, nationalities, region, birthday, career and per-year earnings, status, FNCS wins, fame tier | the upstream notebook | every game |
 | `tournaments.json`, `placements.json` | 14,645 tournaments and 442,736 placements (154 MB) | the export | the notebook only |
-| `career_path.json` | 188 majors and 1,175 players' finishes in them | notebook | Career Path |
+| `career_path.json` | 187 majors and every player's finishes in them: 1,175 with five or more, 3,348 in all once cell 7 has run | cell 7 | Career Path |
 | `teammates.json` | each player's 50 most frequent teammates | cell 6 | Who Are Ya, List |
 | `orgs.json` | 979 organisations, with current and past players | the export | Griefer, Tic Tac Toe, Connections, Tenaball, List |
 | `facts.json` | per player: tournaments played, LAN and FNCS appearances, wins by kind, which headline events they played | notebook appendix | the criteria games, List, Tenaball's field boards, FNCS Finals, the glossary |
@@ -56,7 +56,7 @@ Fame is decided upstream. `tier` (easy, medium, hard or unused) and `region_tier
 
 | Term | Meaning here |
 | --- | --- |
-| Major | An Epic-run main event that Liquipedia rates tier 1, from the 2019 World Cup on. Console, mobile and Twitch events are excluded. 188 events, 178 of them regional FNCS grand finals. Oddity: MrBeast's Extreme Survival Challenge counts |
+| Major | An Epic-run main event that Liquipedia rates tier 1, from the 2019 World Cup on. Console, mobile, Twitch and challenge events are excluded, so MrBeast's Extreme Survival Challenge is not a major. 187 events, 178 of them regional FNCS grand finals |
 | LAN | A major played offline: 9 events (the two World Cup finals, the 2022 Invitational, the Globals 2023–26, the 2026 Summit, the Reload Elite Series Championship). The "LAN wins" board alone widens it to any offline tier 1–2 event, so DreamHack, Gamers8 and the Esports World Cup count there |
 | Global Championship | The 2019 World Cup finals and the FNCS Globals 2023–26 |
 | FNCS win | A regional FNCS grand final won, by Wikipedia's count. The Globals, the Invitational and the Summit are not FNCS wins |
@@ -80,7 +80,7 @@ Six pieces are shared across the games:
 
 | Setup | Games | What it offers |
 | --- | --- | --- |
-| Pool setup | Fortnitedle, Career Path, Who Are Ya, Griefer, Connections, Guess the Player | **Random** (the default), or **Choose** by region, fame tier and active or retired. The choice is remembered across games |
+| Pool setup | Fortnitedle, Career Path, Who Are Ya, Griefer, Connections, Guess the Player | **Random** (the default), or **Choose** by region and fame tier. The choice is remembered across games. The active-or-retired choice is hidden for now; `SHOW_STATUS` in `pool.ts` brings it back |
 | Level setup | Higher or Lower, Tic Tac Toe | One Easy / Medium / Hard that sets both who is asked about and how hard the game presses |
 | Category picker | Tenaball, List | The category is the whole subject, so you pick a board or a list |
 
@@ -212,14 +212,15 @@ Wordle on a player's handle: six guesses, and every tile turns green (right plac
 
 **Digits are handed out, because nobody can reason their way to one.** A letter tile tells you something every round; a digit tells you nothing until you happen to try it. 328 answers contain a digit.
 
-| After guess | Digits given away |
-| --- | --- |
-| 1–2 | none, and nothing is shown at all |
-| 3 | one |
-| 4 | a second |
-| 5 | the rest |
+They come out from guess 3, one per guess, all of them by guess 5. How much each one gives away depends on the round's difficulty:
 
-A given digit appears in position under the grid and turns green on the keyboard. Before the first one lands the strip is not shown at all, because a row of blanks would give away that the name has a digit.
+| Difficulty | A digit's turn shows |
+| --- | --- |
+| Easy | the digit, in place under the grid, and its key turns green |
+| Medium | a # where it sits, not which digit; the keyboard stays as it was |
+| Hard | nothing |
+
+The difficulty is the one chosen on Choose. On Random, Choose → Any and in event mode it is the secret player's own tier (the regional tier when a region is chosen). The round records it as `setup.level`. Before the first digit lands the strip is not shown at all, because a row of blanks would give away that the name has a digit.
 
 **The secret is dealt** from the no-repeat bag with the Random mix, or region by region in event mode.
 
@@ -228,7 +229,8 @@ A given digit appears in position under the grid and turns green on the keyboard
 You name a secret player from their results at majors, revealed one at a time: up to ten clues, each a tournament and where they finished.
 
 - **Clues and guesses.** A wrong guess reveals the next clue, and running out of clues loses. The score is how many clues you needed.
-- **Who can be the answer:** 1,175 players with at least five majors on record.
+- **Who can be the answer:** 1,175 players with at least five majors on record. In event mode it is anyone in the field with a major at all: all 101 at the 2026 Globals once cell 7 has run, against 79 before.
+- **Five guesses at least.** A career shorter than five majors still gets five guesses (`MIN_GUESSES`). The ones after its last clue reveal nothing new.
 - **Modes.** Order reads the ten oldest first, as a career arc. Random shows the same kind of ten in no order.
 
 ### How the ten are chosen
@@ -512,11 +514,26 @@ The site has its own small server (`server/index.ts`): plain Node HTTP with one 
 
 ### The dashboard
 
-`#/analytics` is linked from nowhere and computed live from the stored rounds on every load (`aggregate.ts`):
+`#/analytics` is linked from nowhere and computed live from the stored rounds on every load (`aggregate.ts`). It has a page per question (`src/pages/analytics/`):
 
-- **Overview:** rounds per day and per game, and how each game was set up.
-- **Games:** the numbers that matter for tuning each game. That means which clue solved a Career Path, which Tenaball answers nobody finds, and which Griefer cards get misread. It also means which Tic Tac Toe cells stay empty and which Higher or Lower pairs trip people up.
-- **Support** and **Errors:** the inbox and the error table.
+| Page | Shows |
+| --- | --- |
+| `#/analytics` | every game: rounds, won / lost / gave up, rounds per day, how rounds were set up, and a by-game table |
+| `#/analytics/game/<id>` | one game: the same numbers narrowed to it, then its own tables with a search box. Examples: which clue solved a Career Path, which Tenaball answers nobody finds, which Griefer cards get misread, which Tic Tac Toe cells stay empty, which Higher or Lower pairs trip people up |
+| `#/analytics/players` | a search over every player the rounds mention |
+| `#/analytics/players/<id>` | one player across every game: what they were (the secret, a card, an answer, a tile…), how often, how often people got them right, and their latest appearances |
+| `#/analytics/support`, `/errors` | the inbox, with status tabs and a search, and the error table |
+
+**How rounds were set up** splits the rounds four ways by where the players came from. Each breakdown under it counts only the rounds it applies to:
+
+| Source | Meaning | Broken down by |
+| --- | --- | --- |
+| Random | the shared picker on Random | — |
+| Chosen | the picker on Choose | region, difficulty |
+| Event mode | an event field was in force | which field |
+| Own setup | Higher or Lower, Tic Tac Toe, Tenaball and List | level, mode, category |
+
+**Filters.** A bar above every page narrows everything at once. Its choices are the range (24 hours, 7, 30 or 90 days, all time), where the players came from, the event, the region, the difficulty, the level and the outcome. The filters live in the address, so they hold across pages and a view can be bookmarked. The dropdowns only offer values some stored round has. Tables sort by any column.
 
 ### Access
 
@@ -559,7 +576,9 @@ It plays every game with a perfect player, generating the random games many time
   - Every six deals of the secret-player games cover all six regions.
   - Higher or Lower's region lean shows more regions than without it.
 - **Definitions:** the matcher explains the right terms for tricky titles, and the LAN list names every LAN.
-- **Analytics:** one real round per game, recorded and aggregated the way the dashboard reads it.
+- **Fortnitedle:** three guesses into a digit answer, Easy has handed the digit over, Medium a # with no key coloured, Hard nothing.
+- **Career Path:** a two-clue round lasts exactly five wrong guesses, a ten-clue round ten, and giving up is never recorded as running out.
+- **Analytics:** one real round per game, recorded and aggregated the way the dashboard reads it; the filters narrow every table, and the player view finds its player.
 
 A generated data file that is missing makes its games report SKIPPED and the suite still passes, so a fresh clone is testable before the notebook runs.
 
@@ -603,7 +622,6 @@ My recommendation: commit this week's work and get the site live before the Glob
 
 ### Decisions only you can make
 
-- **MrBeast's Extreme Survival Challenge** counts as a major, because the major rule doesn't exclude "challenge" events the way the LAN rule does. Drop it? That is a notebook change.
 - **The free Higher on Easy and Medium FNCS Wins.** A shown 0 is still a free Higher there, about 13–20% of rounds. Giving FNCS Wins an Equal button on every level would fix it.
 - **The Middle East in Higher or Lower pools.** Four players cannot fill five pools. Either one pool per category goes without, or one of them appears twice in a category.
 - **Griefer's griefers** are random players who don't fit. Near-misses would make boards sharper: a country's neighbours, an organisation's rivals, a winner's runner-up.

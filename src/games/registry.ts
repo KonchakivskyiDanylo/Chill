@@ -1,5 +1,6 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 import type { TermId } from './shared/glossary';
+import { SHOW_STATUS } from './shared/pool';
 
 /** A named block of rules, e.g. "Game modes". */
 export interface RuleSection {
@@ -51,10 +52,12 @@ const POOL_SECTION: RuleSection = {
   title: 'Who you get asked about',
   items: [
     'Random 🎲 — anyone can come up, but it leans towards names you know: half the rounds are Easy-band players, a third Medium, the rest Hard. This is the default, and Start works without touching anything.',
-    'Choose 🎛️ — narrow it by region, difficulty and whether the player is still competing. Whatever you pick is remembered, here and in every other game.',
+    SHOW_STATUS
+      ? 'Choose 🎛️ — narrow it by region, difficulty and whether the player is still competing. Whatever you pick is remembered, here and in every other game.'
+      : 'Choose 🎛️ — narrow it by region and difficulty. Whatever you pick is remembered, here and in every other game.',
     'Region — play one region’s scene only. Difficulty is then ranked inside that region, so Easy means “well known in Asia”, not “well known worldwide”.',
-    'Difficulty — Easy 🟢, Medium 🟡 and Hard 🔴 are bands of career earnings, and each card tells you the band it covers.',
-    'Active, retired or everyone — the export says which players are still competing.',
+    'Difficulty — Easy 🟢 is the names everyone knows, Medium 🟡 the regulars of the scene, Hard 🔴 the deep cuts.',
+    ...(SHOW_STATUS ? ['Active, retired or everyone — the export says which players are still competing.'] : []),
   ],
 };
 
@@ -68,9 +71,9 @@ const POOL_SECTION: RuleSection = {
 const MODE_SECTION: RuleSection = {
   title: 'Event mode',
   items: [
-    'On the home page you can swap the whole scene for one tournament’s field — the FNCS Globals, the Esports World Cup.',
+    'On the home page you can swap the whole scene for one tournament’s field, such as the FNCS Globals.',
     'Every game then draws from that field and nothing else, and says so in the header until you leave it.',
-    'A field is a fixed list of players, so the region, fame and status choices do not apply to it: eighty players is already the narrowest these games can run on. A game’s own Easy / Medium / Hard still does.',
+    'A field is a fixed list of players, so the region and difficulty choices do not apply to it: a hundred players is already the narrowest these games can run on. A game’s own Easy / Medium / Hard still does.',
   ],
 };
 
@@ -160,13 +163,11 @@ export const GAMES: GameMeta[] = [
         title: 'Names with numbers in them',
         items: [
           'A digit is the one thing in this game you cannot reason your way to: a letter tile tells you something every round, a digit tells you nothing until you happen to try it.',
-          'So they are given away, but never before your third guess. One digit arrives after guess 3; two after 3 and 4; three after 3, 4 and 5. Anything more comes out by guess 5.',
-          'Until the first one lands, nothing is shown at all — a strip of blanks would give away both the length of the name and the fact that it has a digit in it.',
-          'When a digit does arrive it appears in position under the grid, and its key turns green on the keyboard.',
+          'So they are given away, never before your third guess and all of them by guess 5 — how much depends on the difficulty.',
+          'Easy 🟢 shows the digit itself, Medium 🟡 only a # where it sits, Hard 🔴 nothing at all. On Random it goes by how well known the player is.',
         ],
       },
       POOL_SECTION,
-      MODE_SECTION_SECRET,
     ],
     terms: ['region'],
     Component: lazy(() => import('./wordle/WordleGame')),
@@ -184,7 +185,8 @@ export const GAMES: GameMeta[] = [
     rules: [
       'Clues are majors only: the Epic-run grand finals since the 2019 World Cup — FNCS regionals, the Globals, the World Cup itself.',
       'Each clue is one tournament and where the player finished.',
-      'Only players with at least five majors on record can be the answer.',
+      'Only players with at least five majors on record can be the answer — except in event mode, where anyone in the field with a major can.',
+      'A career shorter than five majors still gets five guesses: the ones after its last clue reveal nothing new.',
       'Get it right and the rest of the ten clues turn face up, dimmed, so you can see what you would have been shown next.',
     ],
     sections: [
