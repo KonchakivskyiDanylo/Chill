@@ -9,7 +9,7 @@
  * rare-but-impossible rather than one that happens to work.
  *
  * Everything now reads the Liquipedia export. Three of its files are written by
- * the notebook (`notebook_cells.md`) and may legitimately not exist yet — the
+ * `scripts/build_data.py` and may legitimately not exist yet — the
  * sections that need them are skipped with a note rather than failing, so this
  * is still useful on a fresh clone.
  */
@@ -140,7 +140,11 @@ const contenders: hl.Contender[] = facts
   ? roster.players.map((p) => ({ ...p, fncsFinals: facts.of(p.id).fncsApps }))
   : roster.players;
 const hlCategories: hl.Category[] = facts ? ['age', 'earnings', 'fncsWins', 'fncsFinals'] : ['age', 'earnings', 'fncsWins'];
-for (const category of hlCategories) {
+/**
+ * The run checks for one category over one set of players. `tag` names it in
+ * the output — the category, or Placement and the event it is about.
+ */
+function checkHigherLower(contenders: readonly hl.Contender[], category: hl.Category, tag: string = category) {
   const ranked = [...hl.eligible(contenders, category)].sort((a, b) => b.earnings - a.earnings);
   const rank = new Map(ranked.map((player, index) => [player.id, index + 1]));
   for (const difficulty of ['easy', 'medium', 'hard'] as const) {
@@ -155,19 +159,19 @@ for (const category of hlCategories) {
     let fromNought = 0;
     let noughtUp = 0;
     for (let run = 0; run < 5; run++) {
-      let state = hl.createGame(contenders, category, difficulty, `hl-${category}-${difficulty}-${run}`);
-      check(state !== null, `higher-lower: could not start ${category}/${difficulty}`);
+      let state = hl.createGame(contenders, category, difficulty, `hl-${tag}-${difficulty}-${run}`);
+      check(state !== null, `higher-lower: could not start ${tag}/${difficulty}`);
       if (!state) continue;
       check(
         (rank.get(state.current.id) ?? Infinity) <= 20 && (rank.get(state.challenger.id) ?? Infinity) <= 20,
-        `higher-lower ${category}/${difficulty}: round one was not top 20 against top 20`,
+        `higher-lower ${tag}/${difficulty}: round one was not top 20 against top 20`,
       );
 
       let previous: hl.Answer | null = null;
       while (state.status === 'playing' && hl.roundOf(state) <= 40) {
         const round = hl.roundOf(state);
         const scheduled = hl.closenessFor(difficulty, round);
-        const where = `${category}/${difficulty} run ${run} round ${round}`;
+        const where = `${tag}/${difficulty} run ${run} round ${round}`;
         rounds++;
         if (hl.fitsBand(state.current, state.challenger, category, scheduled)) onSchedule++;
         deepest = Math.max(deepest, rank.get(state.challenger.id) ?? Infinity);
@@ -207,7 +211,7 @@ for (const category of hlCategories) {
     const share = onSchedule / Math.max(rounds, 1);
     const flipped = flips / Math.max(turns, 1);
     notes.push(
-      `higher-lower ${category}/${difficulty}: ${rounds} rounds, ${Math.round(share * 100)}% in the ` +
+      `higher-lower ${tag}/${difficulty}: ${rounds} rounds, ${Math.round(share * 100)}% in the ` +
         `scheduled band, deepest challenger #${deepest}, ${ties} ties, ` +
         `${Math.round(flipped * 100)}% of answers flipped direction`,
     );
@@ -216,7 +220,7 @@ for (const category of hlCategories) {
     // game. A fair coin flips half the time; three in four is the alarm.
     check(
       flipped < 0.75,
-      `higher-lower ${category}/${difficulty}: ${Math.round(flipped * 100)}% of answers flipped direction`,
+      `higher-lower ${tag}/${difficulty}: ${Math.round(flipped * 100)}% of answers flipped direction`,
     );
     // On Hard a shown nought can be equal, and must sometimes be — it used to
     // go up every time, because nought against nought was never dealt.
@@ -231,11 +235,28 @@ for (const category of hlCategories) {
     // bands are often unreachable and the nearest miss stands in — measured,
     // not held to a number.
     if (category !== 'fncsWins') {
-      check(share >= 0.7, `higher-lower ${category}/${difficulty}: only ${Math.round(share * 100)}% on schedule`);
+      check(share >= 0.7, `higher-lower ${tag}/${difficulty}: only ${Math.round(share * 100)}% on schedule`);
     }
     // Legitimate ties must still not be the whole game.
-    check(ties < rounds * 0.5, `higher-lower ${category}/${difficulty}: ${ties} of ${rounds} rounds were ties`);
+    check(ties < rounds * 0.5, `higher-lower ${tag}/${difficulty}: ${ties} of ${rounds} rounds were ties`);
   }
+}
+for (const category of hlCategories) checkHigherLower(contenders, category);
+
+// Placement counts down: 1st is higher than 10th, and nine places of fifty is
+// a close pair. Runs over a real field are in section 12, once cell 5 has
+// written an event's results.
+{
+  const [a, b] = roster.players;
+  const first: hl.Contender = { ...a, placement: { place: 1, of: 50 } };
+  const tenth: hl.Contender = { ...b, placement: { place: 10, of: 50 } };
+  check(hl.valueOf(first, 'placement') > hl.valueOf(tenth, 'placement'), 'higher-lower placement: 1st is not higher than 10th');
+  check(hl.fitsBand(first, tenth, 'placement', 'close'), 'higher-lower placement: 1st against 10th of 50 is not close');
+  const placed = hl.withPlacements([a, b], { [a.id]: 3 });
+  check(
+    hl.eligible(placed, 'placement').length === 1 && placed[0].placement?.of === 3,
+    'higher-lower placement: withPlacements attached the wrong finishes',
+  );
 }
 
 // FNCS Wins must now include players on nought.
@@ -637,6 +658,17 @@ if (facts) {
       );
     }
   }
+  // Countries, not players: one FNCS winner puts a country on it.
+  const winning = criteria.find((criterion) => criterion.id === 'countries-fncs');
+  check(Boolean(winning), 'list: no "Countries with an FNCS winner"');
+  if (winning) {
+    const expected = new Set(roster.players.filter((p) => p.fncsWins > 0).flatMap((p) => p.countryName ?? []));
+    check(
+      winning.answers.length === expected.size && winning.answers.every((answer) => expected.has(answer.id)),
+      'list: "Countries with an FNCS winner" is not the set of the winners’ countries',
+    );
+    notes.push(`list: ${winning.answers.length} countries with an FNCS winner`);
+  }
   notes.push(`list: ${criteria.length} categories`);
   for (const [kind, count] of [...byGroup].sort((a, b) => b[1] - a[1])) {
     notes.push(`  ${kind}: ${count}`);
@@ -705,10 +737,17 @@ if (facts && orgs) {
     // it must never decide who you are allowed to answer with.
     let outsiders = 0;
     let nearNested = 0;
+    // Boards carrying one of the rules added 27 Sep 2026, by kind.
+    const added = new Map<string, number>();
     for (let seed = 0; seed < 25; seed++) {
       const board = ttt.generateBoard({ facts, orgs }, pools, difficulty, `t-${difficulty}-${seed}`);
       if (!board) continue;
       boards++;
+      for (const kind of new Set([...board.rows, ...board.cols].map((axis) => axis.kind))) {
+        if (['fncs-count', 'fncs-back-to-back', 'fncs-with', 'lan-podium'].includes(kind)) {
+          added.set(kind, (added.get(kind) ?? 0) + 1);
+        }
+      }
       // No two axes nearly the same rule — "Won NA FNCS" beside "North America".
       const axes = [...board.rows, ...board.cols];
       for (let i = 0; i < axes.length; i++) {
@@ -783,7 +822,8 @@ if (facts && orgs) {
     notes.push(
       `tic-tac-toe ${difficulty}: ${boards}/25 boards over a ${answers.length}-player band, ` +
         `${autoPlaced} placed by typing alone, ${offers} asked which cell, ` +
-        `${outsiders} placed from outside the band`,
+        `${outsiders} placed from outside the band; new rules on ` +
+        ([...added].map(([kind, n]) => `${n} (${kind})`).join(', ') || 'none'),
     );
   }
 
@@ -800,6 +840,37 @@ if (facts && orgs) {
     }
     if (y2023 && cooper) {
       check(!y2023.test(cooper), 'criteria: Cooper counts as a 2023 FNCS winner for the Globals');
+    }
+
+    // The rules added for Tic Tac Toe on 27 Sep 2026.
+    const exact = [0, 1, 2, 3].map((n) => all.find((criterion) => criterion.id === `fncs-count:${n}`));
+    const four = all.find((criterion) => criterion.id === 'fncs-count:4+');
+    check(exact.every(Boolean) && Boolean(four), 'criteria: an exact FNCS count rule is missing');
+    const counted = exact.reduce((sum, criterion) => sum + (criterion?.matches.length ?? 0), 0) + (four?.matches.length ?? 0);
+    check(counted === roster.players.length, `criteria: the FNCS count rules cover ${counted} of ${roster.players.length}`);
+
+    const peterbot = all.find((criterion) => criterion.id === 'fncs-with:Peterbot');
+    const partners = peterbot?.matches.map((p) => p.id).sort().join(', ');
+    check(partners === 'Bylah, Cold, Pollo, Ritual', `criteria: Peterbot's FNCS partners read ${partners ?? 'nothing'}`);
+    const anchors = all.filter((criterion) => criterion.kind === 'fncs-with');
+    notes.push(`criteria: "won an FNCS with" anchors — ${anchors.map((c) => c.short.replace('Won FNCS with ', '')).join(', ')}`);
+
+    const backToBack = all.find((criterion) => criterion.id === 'fncs-back-to-back');
+    check(Boolean(backToBack), 'criteria: no back-to-back FNCS rule');
+    notes.push(`criteria: ${backToBack?.matches.length ?? 0} back-to-back FNCS winners`);
+
+    // Podium needs the appendix cell's `podium`; a file from before it has none.
+    const podiums = roster.players.some((p) => facts.of(p.id).podium.length > 0);
+    const podium = all.find((criterion) => criterion.id === 'lan-podium');
+    if (podiums) {
+      check(Boolean(podium), 'criteria: facts.json has podiums but no "LAN podium" rule');
+      const winners = all.find((criterion) => criterion.id === 'lan-winner');
+      if (podium && winners) {
+        check(winners.matches.every((p) => podium.test(p)), 'criteria: a LAN winner is not on a LAN podium');
+      }
+      notes.push(`criteria: ${podium?.matches.length ?? 0} players with a LAN podium`);
+    } else {
+      skipped.push('LAN podium (facts.json has no podium yet — run the appendix cell)');
     }
   }
 
@@ -1278,6 +1349,17 @@ if (pools.pools.length > 0) {
         check(ids.includes(id), `event ${pool.label}: no "${id}" list`);
       }
       check(ids.some((id) => id.startsWith('also:')), `event ${pool.label}: no "also played the last LAN" list`);
+      const firstLan = lists.find((c) => c.id === `pool:${pool.id}:first-lan`);
+      const lansBefore = facts.events.filter((event) => event.lan && event.date < pool.date);
+      if (firstLan) {
+        check(
+          firstLan.answers.every((a) => lansBefore.every((event) => !facts.playedAt(event.index).has(a.id))),
+          `event ${pool.label}: a "first LAN" answer played an earlier LAN`,
+        );
+        notes.push(`event ${pool.label}: ${firstLan.answers.length} qualifiers at their first LAN (${lansBefore.length} LANs before it)`);
+      } else {
+        check(lansBefore.length === 0, `event ${pool.label}: no "first LAN" list`);
+      }
       for (const list of lists.filter((c) => c.pool)) {
         const searchable = new Set(list.pool!.map((entry) => entry.id));
         check(list.answers.every((a) => searchable.has(a.id)), `event ${pool.label}: "${list.title}" has an answer you cannot type`);
@@ -1320,6 +1402,13 @@ if (pools.pools.length > 0) {
     const [flat, leaned] = [spread(false), spread(true)];
     check(leaned >= flat, `event ${pool.label}: Higher or Lower's region lean shows fewer regions (${leaned} vs ${flat})`);
     notes.push(`event ${pool.label}: Higher or Lower shows ${leaned.toFixed(1)} regions in 12 rounds with the lean, ${flat.toFixed(1)} without`);
+
+    // Higher or Lower's Placement, once the event's results are in.
+    if (Object.keys(pool.placements ?? {}).length > 0) {
+      checkHigherLower(hl.withPlacements(field, pool.placements), 'placement', `placement at ${pool.label}`);
+    } else {
+      notes.push(`event ${pool.label}: no results yet — Higher or Lower's Placement is greyed out`);
+    }
 
     // Every game deals the whole field where the data allows: a qualifier is
     // never left out for falling short of a minimum the roster uses. Career
@@ -1389,7 +1478,7 @@ console.log('\n=== notes ===');
 for (const note of notes) console.log('  ' + note);
 
 if (skipped.length > 0) {
-  console.log('\n=== skipped (run the cells in notebook_cells.md) ===');
+  console.log('\n=== skipped (run scripts/build_data.py) ===');
   for (const item of skipped) console.log('  ' + item);
 }
 

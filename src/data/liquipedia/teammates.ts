@@ -4,7 +4,7 @@ import type { RosterPlayer } from './roster';
 /**
  * Who has played alongside whom, across every tournament in the export.
  *
- * `teammates.json` is written by the notebook from `placements.json` and read
+ * `teammates.json` is written by `scripts/build_data.py` from `placements.json` and read
  * here in place through the `@data` alias — the same contract as
  * `players.json`: no build step, no derived copy.
  *

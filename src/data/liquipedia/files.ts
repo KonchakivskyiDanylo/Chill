@@ -1,8 +1,8 @@
 /**
  * One place that knows how to read the export's JSON files.
  *
- * Three of them (`facts`, `rankings`, `pools`) are written by the notebook in
- * `notebook_cells.md` and legitimately do not exist on a fresh clone. A plain
+ * Three of them (`facts`, `rankings`, `pools`) are written by
+ * `scripts/build_data.py` and legitimately do not exist on a fresh clone. A plain
  * `import('@data/pools.json')` cannot express that: Vite resolves it while
  * transforming the module, so a missing file is a *build* error and the
  * `.catch()` around it never gets the chance to run.
@@ -78,11 +78,11 @@ export async function loadJson(name: DataFile): Promise<unknown> {
   // Under Vite an absent key means an absent file, and that is the whole point
   // of the glob. Under Node the map is empty either way, so go and look.
   if (Object.keys(FILES).length > 0) {
-    throw new Error(`${name}.json has not been generated yet — run the cells in notebook_cells.md.`);
+    throw new Error(`${name}.json has not been generated yet — run scripts/build_data.py.`);
   }
   try {
     return await readFromDisk(name);
   } catch {
-    throw new Error(`${name}.json has not been generated yet — run the cells in notebook_cells.md.`);
+    throw new Error(`${name}.json has not been generated yet — run scripts/build_data.py.`);
   }
 }

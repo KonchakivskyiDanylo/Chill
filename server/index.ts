@@ -15,7 +15,7 @@ import {
   type RoundRecord,
   type SupportRequest,
 } from '@/analytics/types';
-import { openStore } from './store';
+import { openStore, type PageChange } from './store';
 
 /**
  * The site's server: the built app from `dist/`, and a handful of endpoints.
@@ -23,9 +23,12 @@ import { openStore } from './store';
  *   POST /api/rounds    a finished round (anyone)
  *   POST /api/support   a support request (anyone)
  *   POST /api/errors    a browser error (anyone)
+ *   POST /api/liquipedia/<secret>
+ *                       LiquipediaDB's webhook: a wiki page changed (Liquipedia)
  *   /api/admin/*        the dashboard behind `#/analytics` (you): the dashboard,
  *                       the player index and one player's view, all filtered
- *                       by the same query string; the inbox; the errors
+ *                       by the same query string; the inbox; the errors; and
+ *                       the webhook's pings, for the data updater
  *
  * No framework: seven routes and a static folder do not need one, and one
  * dependency (`pg`) is easier to keep current than twelve.
@@ -37,6 +40,9 @@ import { openStore } from './store';
  *   SESSION_SECRET    optional; signs the admin cookie (defaults to the password)
  *   ADMIN_OPEN=1      local only: the dashboard with no password at all. Ignored
  *                     when NODE_ENV is production, which Heroku always sets.
+ *   LIQUIPEDIA_WEBHOOK_SECRET
+ *                     the last part of the webhook URL you give Liquipedia; the
+ *                     webhook route does not exist without it
  */
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -46,6 +52,10 @@ const SECRET = process.env.SESSION_SECRET || ADMIN_PASSWORD;
 const SECURE = process.env.NODE_ENV === 'production';
 const OPEN = process.env.ADMIN_OPEN === '1' && !SECURE;
 const COOKIE = 'os_admin';
+const WEBHOOK_SECRET = process.env.LIQUIPEDIA_WEBHOOK_SECRET ?? '';
+/** The one wiki the data comes from; pings about any other are dropped. */
+const WIKI = 'fortnite';
+const PAGE_EVENTS = ['edit', 'purge', 'delete', 'move'];
 const SESSION_DAYS = 30;
 
 const store = await openStore();
@@ -197,6 +207,42 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL): Promise
     return send(res, 204);
   }
 
+  // ---- LiquipediaDB webhook
+  // The secret in the path is the only lock: Liquipedia does not sign its
+  // pings. Only the main namespace of this wiki is kept — a move out of it
+  // counts, because the old page's rows have to go.
+  const hook = /^POST \/api\/liquipedia\/([^/]+)$/.exec(route);
+  if (hook) {
+    if (!WEBHOOK_SECRET || !sameText(decodeURIComponent(hook[1]), WEBHOOK_SECRET)) {
+      throw new HttpError(404, 'No such route');
+    }
+    const body = await readJson(req, 4_096);
+    if (
+      !isObject(body) ||
+      !PAGE_EVENTS.includes(body.event as string) ||
+      typeof body.wiki !== 'string' ||
+      typeof body.page !== 'string' ||
+      typeof body.namespace !== 'number'
+    ) {
+      throw new HttpError(400, 'Not a page change');
+    }
+    const main = body.namespace === 0 || (body.event === 'move' && body.from_namespace === 0);
+    if (body.wiki === WIKI && main) {
+      const change: PageChange = {
+        event: body.event as PageChange['event'],
+        wiki: body.wiki,
+        page: body.page,
+        namespace: body.namespace,
+      };
+      if (body.event === 'move') {
+        change.from_page = String(body.from_page ?? '');
+        change.from_namespace = Number(body.from_namespace ?? 0);
+      }
+      await store.addPageChange(change);
+    }
+    return send(res, 204);
+  }
+
   // ---- admin
   if (!url.pathname.startsWith('/api/admin/')) throw new HttpError(404, 'No such route');
   if (!ADMIN_PASSWORD && !OPEN) throw new HttpError(503, 'Set ADMIN_PASSWORD on the server to use the dashboard');
@@ -236,6 +282,11 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL): Promise
   }
   if (route === 'GET /api/admin/support') return send(res, 200, await store.support());
   if (route === 'GET /api/admin/errors') return send(res, 200, await store.errors(200));
+  // The webhook's pings after `after`, oldest first, for the data updater.
+  if (route === 'GET /api/admin/liquipedia') {
+    const after = Math.max(0, Math.floor(Number(url.searchParams.get('after')) || 0));
+    return send(res, 200, await store.pageChanges(after, 5_000));
+  }
 
   const status = /^POST \/api\/admin\/support\/(\d+)$/.exec(route);
   if (status) {

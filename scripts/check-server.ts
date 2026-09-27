@@ -23,10 +23,11 @@ const check = (ok: boolean, message: string) => {
 const PORT = 3100 + Math.floor(Math.random() * 800);
 const BASE = `http://localhost:${PORT}`;
 const PASSWORD = 'check-server-password';
+const HOOK = 'check-hook-secret';
 const dir = await mkdtemp(path.join(tmpdir(), 'offspawn-check-'));
 
 const server = spawn(process.execPath, ['--import', 'tsx', 'server/index.ts'], {
-  env: { ...process.env, PORT: String(PORT), DATA_DIR: dir, ADMIN_PASSWORD: PASSWORD, DATABASE_URL: '' },
+  env: { ...process.env, PORT: String(PORT), DATA_DIR: dir, ADMIN_PASSWORD: PASSWORD, LIQUIPEDIA_WEBHOOK_SECRET: HOOK, DATABASE_URL: '' },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let output = '';
@@ -84,6 +85,17 @@ try {
   check((await post('/api/support', { ...ticket, message: '   ' })).status === 400, 'an empty support message was accepted');
   check((await post('/api/errors', { message: 'boom', page: '#/', app: 'check' })).status === 204, 'an error report was not accepted');
 
+  // ---- LiquipediaDB's webhook: the secret is the path, and only the Fortnite
+  // wiki's main namespace is kept (a move out of it counts).
+  const ping = { page: 'Peterbot', namespace: 0, wiki: 'fortnite', event: 'edit' };
+  check((await post('/api/liquipedia/wrong', ping)).status === 404, 'the webhook answered a wrong secret');
+  check((await post(`/api/liquipedia/${HOOK}`, ping)).status === 204, 'the webhook refused a page edit');
+  check((await post(`/api/liquipedia/${HOOK}`, { ...ping, wiki: 'dota2' })).status === 204, 'another wiki was not quietly dropped');
+  check((await post(`/api/liquipedia/${HOOK}`, { ...ping, namespace: 2 })).status === 204, 'a user page was not quietly dropped');
+  const moved = { from_page: 'Old Name', page: 'User:Someone/Old Name', from_namespace: 0, namespace: 2, wiki: 'fortnite', event: 'move' };
+  check((await post(`/api/liquipedia/${HOOK}`, moved)).status === 204, 'a move out of the main namespace was refused');
+  check((await post(`/api/liquipedia/${HOOK}`, { ...ping, event: 'explode' })).status === 400, 'a nonsense event was accepted');
+
   // ---- the admin side
   check((await request('/api/admin/me')).status === 401, 'the dashboard answered without a login');
   check((await request('/api/admin/dashboard')).status === 401, 'the dashboard data answered without a login');
@@ -131,6 +143,16 @@ try {
 
   const errors = (await request('/api/admin/errors', {}, cookie)).body as unknown[];
   check(errors.length === 1, `the error list holds ${errors.length}, expected 1`);
+
+  // The updater reads the pings after its own cursor.
+  check((await request('/api/admin/liquipedia')).status === 401, 'the webhook pings answered without a login');
+  const pings = (await request('/api/admin/liquipedia?after=0', {}, cookie)).body as { id: number; body: { event: string } }[];
+  check(
+    pings?.length === 2 && pings[0].body.event === 'edit' && pings[1].body.event === 'move',
+    `the webhook kept ${JSON.stringify(pings)}, expected the edit and the move`,
+  );
+  const later = (await request(`/api/admin/liquipedia?after=${pings?.[0]?.id}`, {}, cookie)).body as unknown[];
+  check(later?.length === 1, `the cursor did not skip what was already read (${later?.length})`);
 
   // ---- limits: the support form is capped at five per ten minutes per client
   let limited = false;

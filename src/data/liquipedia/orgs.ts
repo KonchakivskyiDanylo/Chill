@@ -3,7 +3,7 @@ import { loadJson } from './files';
 /**
  * Organisations, and who has ever played for them.
  *
- * `orgs.json` is written by the notebook from `transfers.json`, `teams.json`
+ * `orgs.json` is written by `scripts/build_data.py` from `transfers.json`, `teams.json`
  * and `players.json`, and read here in place through the `@data` alias.
  *
  * It was generated before anything read it. This is what now reads it: every

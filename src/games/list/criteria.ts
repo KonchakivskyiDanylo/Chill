@@ -239,20 +239,11 @@ export function buildCriteria(
 
   // Won two rounds of the FNCS in a row. Rare enough to be a list and famous
   // enough to be a memory.
-  const rounds = fncsRounds(facts);
+  const backToBack = facts.backToBackWinners();
   add(
     'fncs-back-to-back',
     'Players who have won the FNCS back to back',
-    roster.players.filter((player) => {
-      const won = new Set(facts.of(player.id).won);
-      let previous = false;
-      for (const round of rounds) {
-        const here = round.some((event) => won.has(event.index));
-        if (here && previous) return true;
-        previous = here;
-      }
-      return false;
-    }),
+    roster.players.filter((player) => backToBack.has(player.id)),
     'Two consecutive rounds of FNCS grand finals',
   );
 
@@ -308,6 +299,19 @@ export function buildCriteria(
 
   // Countries, not players: the one list here you answer with a flag's name.
   const countryPool = [...byCountry.keys()].sort().map((name) => ({ id: name, name }));
+  const withWinner = [...byCountry]
+    .filter(([, players]) => players.some((player) => player.fncsWins > 0))
+    .map(([name]) => ({ id: name, name }));
+  if (withWinner.length >= MIN_ANSWERS) {
+    out.push({
+      id: 'countries-fncs',
+      title: 'Countries with an FNCS winner',
+      subtitle: 'One player is enough — by their first nationality',
+      answers: withWinner,
+      pool: countryPool,
+      noun: 'countries',
+    });
+  }
   for (const threshold of [100_000, 500_000, 1_000_000]) {
     const countries = [...byCountry]
       .filter(([, players]) => players.some((player) => player.earnings >= threshold))
@@ -365,35 +369,6 @@ export function buildCriteria(
   }
 
   return out;
-}
-
-/**
- * Rounds of the FNCS: every region's grand final inside a week of each other.
- *
- * Clustered on the date rather than parsed out of the name, because the name
- * has been "FNCS: Season X", "C2S1: FNCS", "FNCS 2023 - Major 1" and "FNCS
- * 2025 - Major 3" and the dates have been the dates throughout. A cluster of
- * fewer than four regions is a one-off nobody could qualify for — a Global
- * Championship, an invitational — and is not a round.
- */
-function fncsRounds(facts: Facts): HeadlineEvent[][] {
-  const finals = facts.events
-    .filter((event) => event.kind === 'fncs')
-    .sort((a, b) => (a.date < b.date ? -1 : 1));
-  const rounds: HeadlineEvent[][] = [];
-  let current: HeadlineEvent[] = [];
-  for (const event of finals) {
-    const gap = current.length
-      ? (Date.parse(event.date) - Date.parse(current[current.length - 1].date)) / 86_400_000
-      : 0;
-    if (current.length && gap > 7) {
-      rounds.push(current);
-      current = [];
-    }
-    current.push(event);
-  }
-  if (current.length) rounds.push(current);
-  return rounds.filter((round) => round.length >= 4);
 }
 
 /**
@@ -556,6 +531,19 @@ export function buildPoolCriteria(
       `${pool.label} qualifiers who also played ${event.short}`,
       players.filter((player) => there.has(player.id)),
       `${field} — on the ${event.short} field too`,
+    );
+  }
+
+  // Their first LAN: at none of the LANs before this one. For the 2026 Globals
+  // that is the World Cup, the 2022 Invitational, the Globals of 2023 to 2025,
+  // the Summit and the EWC.
+  const lansBefore = facts.events.filter((event) => event.lan && event.date < pool.date);
+  if (lansBefore.length > 0) {
+    add(
+      `${prefix}:first-lan`,
+      `${pool.label} qualifiers playing their first LAN`,
+      players.filter((player) => lansBefore.every((event) => !facts.playedAt(event.index).has(player.id))),
+      `${field} — at none of the ${lansBefore.length} LANs before it`,
     );
   }
 

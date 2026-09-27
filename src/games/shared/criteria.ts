@@ -30,6 +30,10 @@ export type CriterionKind =
   | 'tournament-winner'
   | 'earnings'
   | 'fncs-wins'
+  | 'fncs-count'
+  | 'fncs-back-to-back'
+  | 'fncs-with'
+  | 'lan-podium'
   | 'won-fncs-region'
   | 'won-fncs-year'
   | 'played-event'
@@ -73,6 +77,20 @@ export interface CriteriaOptions {
 }
 
 /**
+ * Players who may anchor a "has won an FNCS with X" rule, biggest earners
+ * first. Capped for the reason `maxOrgs` is: forty of them would crowd every
+ * other kind off the board.
+ */
+const MAX_ANCHORS = 8;
+
+/**
+ * The fewest partners that make an anchor. Lower than the usual minimum,
+ * because four is a long FNCS career: Peterbot's five titles were won with
+ * four people.
+ */
+const MIN_PARTNERS = 4;
+
+/**
  * How the scene writes each FNCS region. South America is Liquipedia's label
  * for what the FNCS itself has always called Brazil.
  */
@@ -98,9 +116,10 @@ export function buildCriteria(
     label: string,
     short: string,
     test: (player: RosterPlayer) => boolean,
+    least = minMatches,
   ) => {
     const matches = players.filter(test);
-    if (matches.length < minMatches) return;
+    if (matches.length < least) return;
     if (matches.length > players.length * maxShare) return;
     out.push({ id, kind, label, short, test, matches });
   };
@@ -168,6 +187,54 @@ export function buildCriteria(
       (p) => p.fncsWins >= threshold,
     );
   }
+
+  /*
+   * The count itself, not just a floor: none at all, exactly one to three, or
+   * four and more. A kind of their own, so Connections and Griefer, which
+   * whitelist the kinds they use, keep asking what they asked before.
+   */
+  add('fncs-count:0', 'fncs-count', 'has never won an FNCS', 'No FNCS wins', (p) => p.fncsWins === 0);
+  for (const count of [1, 2, 3]) {
+    const titles = count === 1 ? '1 FNCS title' : `${count} FNCS titles`;
+    add(`fncs-count:${count}`, 'fncs-count', `has exactly ${titles}`, `Exactly ${titles}`, (p) => p.fncsWins === count);
+  }
+  add('fncs-count:4+', 'fncs-count', 'has 4+ FNCS titles', '4+ FNCS titles', (p) => p.fncsWins >= 4);
+
+  const backToBack = facts.backToBackWinners();
+  add(
+    'fncs-back-to-back',
+    'fncs-back-to-back',
+    'has won the FNCS back to back',
+    'Back-to-back FNCS',
+    (p) => backToBack.has(p.id),
+  );
+
+  // "Won FNCS with Peterbot": anyone who was on one of his winning teams.
+  let anchors = 0;
+  for (const anchor of [...players].sort((a, b) => b.earnings - a.earnings)) {
+    if (anchors >= MAX_ANCHORS) break;
+    const partners = facts.fncsPartners(anchor.id);
+    if (partners.size < MIN_PARTNERS) continue;
+    const before = out.length;
+    add(
+      `fncs-with:${anchor.id}`,
+      'fncs-with',
+      `has won an FNCS with ${anchor.name}`,
+      `Won FNCS with ${anchor.name}`,
+      (p) => partners.has(p.id),
+      MIN_PARTNERS,
+    );
+    if (out.length > before) anchors++;
+  }
+
+  // Top 3 at one of Epic's LANs. Empty until `facts.json` carries `podium`.
+  add(
+    'lan-podium',
+    'lan-podium',
+    'has finished top 3 at a LAN',
+    'LAN podium',
+    (p) => facts.of(p.id).podium.some((index) => facts.events[index]?.lan),
+  );
 
   for (const threshold of [100_000, 250_000, 500_000, 1_000_000]) {
     add(

@@ -4,7 +4,7 @@ import type { RosterPlayer } from './roster';
 /**
  * The majors behind Career Path.
  *
- * `career_path.json` is written by the notebook, from `tournaments.json` and
+ * `career_path.json` is written by `scripts/build_data.py`, from `tournaments.json` and
  * `placements.json`, and read here in place through the `@data` alias — the
  * same contract as `players.json`: no build step, no derived copy.
  *
@@ -12,7 +12,7 @@ import type { RosterPlayer } from './roster';
  * current export it is Liquipedia tier 1 with no tier type, organised by Epic
  * Games, from the 2019 World Cup onwards, minus the console / mobile / Twitch
  * brackets and challenge events (MrBeast's) — 187 tournaments. Change the
- * filter, re-run the cell (cell 7 in `notebook_cells.md`), and the game
+ * filter (cell 7 in `scripts/pipeline/derived.py`), rebuild, and the game
  * asks about a different set of events without a line changing here.
  *
  * Deliberately no `tier` column: difficulty is joined from `players.json` by

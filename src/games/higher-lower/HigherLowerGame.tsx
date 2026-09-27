@@ -11,23 +11,21 @@ import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import type { Pools } from '@/data/liquipedia/pools';
 import { EXPORT_DATE, SOURCE, type Roster, type RosterPlayer } from '@/data/liquipedia/roster';
-import { useEventMode } from '@/games/shared/mode';
+import { activePool, useEventMode } from '@/games/shared/mode';
 import { poolPlayers } from '@/games/shared/pool';
-import { playerMoney, plural } from '@/lib/format';
+import { ordinal, playerMoney, plural } from '@/lib/format';
 import { CountryBadge } from '@/components/CountryBadge';
 import { useBestScore, useLocalState } from '@/lib/storage';
 import { getGame } from '@/games/registry';
 import {
   CATEGORIES,
-  CLOSENESS_ICON,
   correctAnswer,
   createGame,
   giveUp,
   hasEqualButton,
   nextRound,
-  SCHEDULE,
   submitAnswer,
-  WINDOW,
+  withPlacements,
   type Answer,
   type Category,
   type Contender,
@@ -39,58 +37,22 @@ import './higher-lower.css';
 
 const meta = getGame('higher-lower')!;
 
-/** A level's schedule as the six coloured steps it walks through. */
-const steps = (difficulty: Difficulty) => SCHEDULE[difficulty].map((step) => CLOSENESS_ICON[step]).join('');
-
 /**
- * The levels, each described by what it does to a run.
- *
- * There is no separate fame setting any more — see the pairing notes in
- * `engine.ts`. The row of dots is the schedule itself, four rounds a dot.
+ * The levels, each described by what it does to a run — in the same words as
+ * How to play, not the schedule behind them (see the pairing notes in
+ * `engine.ts`).
  */
 const LEVELS: LevelOption<Difficulty>[] = [
-  {
-    id: 'easy',
-    label: '🟢 Easy',
-    hint: (
-      <>
-        Big gaps between famous names, closing slowly. Top {WINDOW.easy.cap} earners only.
-        <span className="tiny faint" style={{ display: 'block' }}>
-          {steps('easy')}
-        </span>
-      </>
-    ),
-  },
-  {
-    id: 'medium',
-    label: '🟡 Medium',
-    hint: (
-      <>
-        Starts the same, tightens much sooner. Reaches the top {WINDOW.medium.cap.toLocaleString('en-US')}.
-        <span className="tiny faint" style={{ display: 'block' }}>
-          {steps('medium')}
-        </span>
-      </>
-    ),
-  },
-  {
-    id: 'hard',
-    label: '🔴 Hard',
-    hint: (
-      <>
-        Near-level pairs within a few rounds, anyone on record, and an Equal button.
-        <span className="tiny faint" style={{ display: 'block' }}>
-          {steps('hard')}
-        </span>
-      </>
-    ),
-  },
+  { id: 'easy', label: '🟢 Easy', hint: 'Famous names far apart. Gets harder slowly.' },
+  { id: 'medium', label: '🟡 Medium', hint: 'Starts the same, gets harder sooner.' },
+  { id: 'hard', label: '🔴 Hard', hint: 'Gets harder much quicker, and adds an Equal button.' },
 ];
 
 function displayValue(player: Contender, category: Category): string {
   if (category === 'age') return `${player.age} years old`;
   if (category === 'fncsWins') return plural(player.fncsWins, 'FNCS win');
   if (category === 'fncsFinals') return plural(player.fncsFinals ?? 0, 'FNCS final');
+  if (category === 'placement') return `${ordinal(player.placement?.place ?? 0)} place`;
   return playerMoney(player);
 }
 
@@ -100,7 +62,7 @@ function displayValue(player: Contender, category: Category): string {
  * FNCS Finals round, where a player's titles are a floor under their finals.
  */
 function secondaryFact(player: Contender, category: Category): string {
-  return category === 'fncsWins' || category === 'fncsFinals'
+  return category === 'fncsWins' || category === 'fncsFinals' || category === 'placement'
     ? playerMoney(player)
     : plural(player.fncsWins, 'FNCS win');
 }
@@ -125,7 +87,13 @@ export default function HigherLowerGame() {
 
 function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   const [event] = useEventMode();
-  const [category, setCategory] = useState<Category>('earnings');
+  const pool = activePool(pools, event);
+  const [picked, setCategory] = useState<Category>('earnings');
+  // Placement is a question about the event's results. With no mode, or a mode
+  // whose results are not in yet, it falls back to the default rather than
+  // leaving the setup on a card that is not there.
+  const hasResults = Object.keys(pool?.placements ?? {}).length > 0;
+  const category: Category = picked === 'placement' && !hasResults ? 'earnings' : picked;
   const [difficulty, setDifficulty] = useLocalState<Difficulty>('higher-lower:level', 'easy');
   const [game, setGame] = useState<GameState | null>(null);
 
@@ -167,14 +135,16 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   }, [category, facts]);
 
   /**
-   * The whole roster, or the event's field. The level narrows it round by
-   * round from the top earners down, so nothing is cut from it up front.
+   * The whole roster, or the event's field with its finishes attached. The
+   * level narrows it round by round from the top earners down, so nothing is
+   * cut from it up front.
    */
   const players = useMemo((): Contender[] => {
     const field = poolPlayers(roster, pools, event);
     const base = field.length > 0 ? field : roster.players;
-    return facts ? base.map((p) => ({ ...p, fncsFinals: facts.of(p.id).fncsApps })) : base;
-  }, [roster, pools, event, facts]);
+    const counted = facts ? base.map((p) => ({ ...p, fncsFinals: facts.of(p.id).fncsApps })) : base;
+    return withPlacements(counted, pool?.placements);
+  }, [roster, pools, event, facts, pool]);
 
   const start = useCallback(() => {
     if (category === 'fncsFinals' && !facts) {
@@ -235,15 +205,19 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
               <section className="card stack">
                 <div className="card__title">Category</div>
                 <OptionGrid>
-                  {CATEGORIES.map((item) => (
-                    <OptionCard
-                      key={item.id}
-                      label={item.label}
-                      hint={item.hint}
-                      selected={category === item.id}
-                      onClick={() => setCategory(item.id)}
-                    />
-                  ))}
+                  {CATEGORIES.filter((item) => !item.eventOnly || pool).map((item) => {
+                    const waiting = item.id === 'placement' && !hasResults;
+                    return (
+                      <OptionCard
+                        key={item.id}
+                        label={item.label}
+                        hint={waiting ? 'Where each player finished. Opens once the results are in.' : item.hint}
+                        selected={category === item.id}
+                        disabled={waiting}
+                        onClick={() => setCategory(item.id)}
+                      />
+                    );
+                  })}
                 </OptionGrid>
               </section>
             }
@@ -256,7 +230,14 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
           <p className="tiny faint center">Endless mode · one mistake ends the run</p>
         </div>
       ) : (
-        <Board game={game} best={best} onAnswer={answer} onRestart={start} onGiveUp={() => setGame(giveUp(game))} />
+        <Board
+          game={game}
+          best={best}
+          eventLabel={pool?.label ?? null}
+          onAnswer={answer}
+          onRestart={start}
+          onGiveUp={() => setGame(giveUp(game))}
+        />
       )}
     </GameShell>
   );
@@ -288,12 +269,15 @@ function RosterNote() {
 function Board({
   game,
   best,
+  eventLabel,
   onAnswer,
   onRestart,
   onGiveUp,
 }: {
   game: GameState;
   best: number;
+  /** The event in force, named in the Placement prompt. */
+  eventLabel: string | null;
   onAnswer: (answer: Answer) => void;
   onRestart: () => void;
   onGiveUp: () => void;
@@ -389,8 +373,9 @@ function Board({
       )}
 
       <p className="tiny faint center">
-        Is {game.challenger.name}’s {categoryMeta.title.toLowerCase()} higher or lower than{' '}
-        {game.current.name}’s?
+        {game.category === 'placement'
+          ? `Did ${game.challenger.name} place higher or lower than ${game.current.name}${eventLabel ? ` at ${eventLabel}` : ''}?`
+          : `Is ${game.challenger.name}’s ${categoryMeta.title.toLowerCase()} higher or lower than ${game.current.name}’s?`}
         {/* Only Hard is ever dealt a tie, so only Hard needs telling. */}
         {hasEqualButton(game.difficulty) ? ' Or exactly equal — Hard deals ties.' : ''}
       </p>
@@ -420,7 +405,6 @@ function PlayerPanel({
           </>
         ) : null}
         {player.countryName ?? 'Unknown'}
-        {player.team ? ` · ${player.team}` : ''}
       </div>
       <div className={`hl-panel__value${value ? '' : ' hl-panel__value--hidden'}`}>{value ?? '???'}</div>
       {/* Only shown once the value is out — the two numbers correlate. */}

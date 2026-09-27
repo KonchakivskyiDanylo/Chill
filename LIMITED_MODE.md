@@ -41,7 +41,8 @@ per day**. It comes back once there is a source.
 - **Nationality is the first one listed.** A player who lists Scotland first
   is Scottish, not British. The same goes for England and Wales.
 - **Higher or Lower has four categories:** Age, FNCS Wins, FNCS Finals (added
-  for this) and Career Earnings.
+  for this) and Career Earnings. A fifth, **Placement** (who finished better
+  at the event), is built and opens once the results are in.
 
 ## The fortnight, day by day
 
@@ -123,6 +124,7 @@ an FNCS, and retired.
 | 10 | All Asia and Oceania qualifiers | live |
 | 11 | Every player in a team split across nations (a German and a Pole in one duo: name both) | data: needs the duos before 25 Sep. The export pairs them only in the results |
 | 12 | Everyone who also played the last LAN (for the 2026 Globals, the Summit) | live: the last three LANs |
+| 12b | Everyone playing their first LAN: none of the LANs before this one (for the 2026 Globals, 22 of 101) | live, added 27 Sep; not on the day plan |
 | 13 | Everyone who qualified from … (this year, the Summit) | data: the qualification path is not in the export |
 | 14 | The same for another route, or, for a three-day event, day one or day two | data |
 | 15 | Everyone who scored X points at this event | results |
@@ -212,6 +214,10 @@ FNCS Finals and Earnings.
   fame order, so each gets its share of names and deep cuts. Within a run the
   most familiar come first, so the 20th is the hardest.
 
+**Placement** is built: in event mode it is a fifth card, greyed out until
+cell 5 has written the event's results, then "did X place higher or lower
+than Y?". It could join the rotation from day 13.
+
 Today, in event mode, the endless run leans towards the region it has shown
 least: 4.8 regions in the first 12 rounds against 3.2 without. Difficulty
 already rises through the fame window. What is missing is the fixed daily run
@@ -233,8 +239,10 @@ To be revisited.
    - points
    - the duos, which List 11 needs before the event
    
-   Cell 5 of `notebook_cells.md` would carry them into `pools.json`. Today the
-   Globals rows are one player each, unpaired, with no placement.
+   The pools step (cell 5 in `scripts/pipeline/derived.py`) carries each player's final placement into
+   `pools.json` already (Higher or Lower's Placement reads it); points,
+   placements by day and the duos would follow the same way. Today the Globals
+   rows are one player each, unpaired, with no placement.
 4. **Sources the export does not have:**
    - creator subscribers
    - eliminations and damage

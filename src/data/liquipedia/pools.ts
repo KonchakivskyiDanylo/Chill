@@ -3,7 +3,7 @@ import { loadJson } from './files';
 /**
  * Event-scoped player pools.
  *
- * `pools.json` is written by the notebook from `placements.json` and read here
+ * `pools.json` is written by `scripts/build_data.py` from `placements.json` and read here
  * in place through the `@data` alias.
  *
  * A pool is a fixed list of players and nothing else. Pick one in any game and
@@ -30,6 +30,12 @@ export interface Pool {
   date: string;
   /** Page names, sorted. Entrants with no Liquipedia player page are absent. */
   players: string[];
+  /**
+   * Where each player finished, by page name: 1 is the winner, and a duo or
+   * trio shares its place. Empty until the event has been played and the
+   * export refreshed, and absent from a file written before cell 5 carried it.
+   */
+  placements?: Record<string, number>;
 }
 
 interface RawPayload {

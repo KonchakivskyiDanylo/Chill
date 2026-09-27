@@ -4,7 +4,7 @@ import { loadJson } from './files';
 /**
  * Every Tenaball board, precomputed.
  *
- * `rankings.json` is written by the notebook from `placements.json`,
+ * `rankings.json` is written by `scripts/build_data.py` from `placements.json`,
  * `tournaments.json`, `players.json` and `orgs.json`, and read here in place
  * through the `@data` alias.
  *

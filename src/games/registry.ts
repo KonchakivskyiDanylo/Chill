@@ -90,21 +90,10 @@ export const GAMES: GameMeta[] = [
         ],
       },
       {
-        title: 'How the pairs are picked',
-        items: [
-          'Who: every player is ranked by career earnings. Round one is two of the top 20, and each round lets the challenger come from a little further down — so a run opens on names you know and reaches the deep cuts only if it lasts.',
-          'How close: the gap between the two values follows a schedule, four rounds per step — 🟢 obvious, 🟡 moderate, 🟠 close, 🔴 very close.',
-          'For earnings a step is a share of the bigger figure: obvious is one player on half the other’s money or less, very close is within 10%. For age it is years (6+ apart down to 0–1), for FNCS wins titles (3+ down to 0–1), and for FNCS finals whole finals (8+ down to 0–1).',
-          'Which is why you will not get a 1-versus-5 on round thirty.',
-          'Which way: the answer is drawn before the player, Higher and Lower about equally often whatever the last one was. Guessing the opposite of last time will not carry a run — knowing the players will.',
-        ],
-      },
-      {
         title: 'Difficulty',
         items: [
-          'Easy 🟢🟢🟡🟡🟠🔴 — the slowest schedule, and it never leaves the top 250 earners.',
-          'Medium 🟢🟡🟡🟠🔴🔴 — close pairs from round 13, reaching the top 1,000.',
-          'Hard 🟢🟡🟠🔴🔴🔴 — very close from round 13, anyone on record, and an Equal button.',
+          'A run starts with famous players far apart. The longer it lasts, the less known the players and the closer their numbers.',
+          'Easy gets harder slowly and Medium sooner. Hard gets there much quicker, and adds an Equal button.',
         ],
       },
       {

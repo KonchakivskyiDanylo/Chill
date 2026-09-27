@@ -5,17 +5,24 @@ import { makeRng, pick, sample, type Rng } from '@/lib/rng';
 
 /** Pure game logic for Higher or Lower — no React, no DOM. */
 
-export type Category = 'age' | 'earnings' | 'fncsWins' | 'fncsFinals';
+export type Category = 'age' | 'earnings' | 'fncsWins' | 'fncsFinals' | 'placement';
 export type Answer = 'higher' | 'lower' | 'equal';
 
 /**
- * A roster player, plus the one value the roster row does not carry.
+ * A roster player, plus the values the roster row does not carry.
  *
  * FNCS grand finals played live in `facts.json`, which this game otherwise
  * never loads. The page fetches it the first time the category is picked and
  * attaches the count; a player without one has no FNCS Finals value.
+ *
+ * A placement is the player's finish at the event in force, from its pool
+ * (see `withPlacements`). `of` is the last place anyone in the field has, so a
+ * gap can be read as a share of the field.
  */
-export type Contender = RosterPlayer & { fncsFinals?: number };
+export type Contender = RosterPlayer & {
+  fncsFinals?: number;
+  placement?: { place: number; of: number };
+};
 
 export type { Difficulty };
 
@@ -36,6 +43,8 @@ export interface CategoryMeta {
   hint: string;
   /** Sentence used in the prompt, e.g. "Career Earnings". */
   title: string;
+  /** Only offered in event mode: it is a question about that event's results. */
+  eventOnly?: boolean;
 }
 
 export const CATEGORIES: CategoryMeta[] = [
@@ -58,13 +67,41 @@ export const CATEGORIES: CategoryMeta[] = [
     hint: 'FNCS grand finals reached — the regional finals, plus the Globals and the other FNCS LANs.',
     title: 'FNCS Finals',
   },
+  {
+    id: 'placement',
+    label: 'Placement',
+    hint: 'Where each player finished at this event. 1st is the highest.',
+    title: 'Placement',
+    eventOnly: true,
+  },
 ];
 
 export function valueOf(player: Contender, category: Category): number {
   if (category === 'age') return player.age ?? 0;
   if (category === 'fncsWins') return player.fncsWins;
   if (category === 'fncsFinals') return player.fncsFinals ?? 0;
+  // Places count down, so the place is negated: 1st is the highest value and
+  // Higher means the better finish.
+  if (category === 'placement') return -(player.placement?.place ?? 0);
   return player.earnings;
+}
+
+/**
+ * The field with each player's finish attached, from an event pool's
+ * `placements`. Players the results do not name are left as they are, and
+ * `eligible` keeps them out of a Placement run.
+ */
+export function withPlacements(
+  players: readonly Contender[],
+  placements: Readonly<Record<string, number>> | undefined,
+): Contender[] {
+  const places = Object.values(placements ?? {});
+  if (places.length === 0) return [...players];
+  const of = Math.max(...places);
+  return players.map((player) => {
+    const place = placements?.[player.id];
+    return place === undefined ? player : { ...player, placement: { place, of } };
+  });
 }
 
 /**
@@ -85,6 +122,7 @@ export function eligible<T extends Contender>(players: readonly T[], category: C
     if (category === 'age') return player.age !== null;
     if (category === 'fncsWins') return true;
     if (category === 'fncsFinals') return (player.fncsFinals ?? 0) > 0;
+    if (category === 'placement') return player.placement !== undefined;
     return player.earningsKnown && player.earnings > 0;
   });
 }
@@ -182,15 +220,26 @@ const BANDS: Record<Category, Record<Closeness, [number, number]>> = {
     close: [2, 4],
     'very-close': [0, 2],
   },
+  // A share of the field, like earnings: ten places apart is a wide gap among
+  // 33 trios and a narrow one among 100 solo players. In a field of 50 duos
+  // obvious is 20+ places apart and very close is under 5.
+  placement: {
+    obvious: [0.4, Infinity],
+    moderate: [0.2, 0.4],
+    close: [0.1, 0.2],
+    'very-close': [0, 0.1],
+  },
 };
 
 /**
  * How far apart two players are, in the category's own unit — a share of the
- * bigger figure for earnings, years for age, titles or finals for the FNCS.
+ * bigger figure for earnings, years for age, titles or finals for the FNCS, a
+ * share of the field for placement.
  */
-export function gapBetween(a: RosterPlayer, b: RosterPlayer, category: Category): number {
+export function gapBetween(a: Contender, b: Contender, category: Category): number {
   const x = valueOf(a, category);
   const y = valueOf(b, category);
+  if (category === 'placement') return Math.abs(x - y) / (a.placement?.of ?? 1);
   if (category !== 'earnings') return Math.abs(x - y);
   const hi = Math.max(x, y);
   return hi <= 0 ? 0 : Math.abs(x - y) / hi;
@@ -252,7 +301,8 @@ function answerBetween(hidden: RosterPlayer, shown: RosterPlayer, category: Cate
  * Ties only where there is an Equal button: without one a tie accepts either
  * answer and is a free point rather than a question. And never on earnings,
  * where a tie is two careers level to the dollar — a coincidence of the
- * records that nobody could know.
+ * records that nobody could know. A tie on placement is two players who shared
+ * a place, which in a duos event means one team: that one is worth knowing.
  */
 function answersDealt(category: Category, difficulty: Difficulty): Answer[] {
   return hasEqualButton(difficulty) && category !== 'earnings'

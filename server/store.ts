@@ -11,6 +11,19 @@ import type {
 } from '@/analytics/types';
 
 /**
+ * One LiquipediaDB webhook ping, as Liquipedia sent it: a page on the wiki was
+ * edited (or created), purged, deleted or moved. `from_*` only on a move.
+ */
+export interface PageChange {
+  event: 'edit' | 'purge' | 'delete' | 'move';
+  wiki: string;
+  page: string;
+  namespace: number;
+  from_page?: string;
+  from_namespace?: number;
+}
+
+/**
  * Where the server keeps what the site sends.
  *
  * Postgres when `DATABASE_URL` is set — Heroku sets it when a Postgres add-on
@@ -29,6 +42,9 @@ export interface Store {
   addError(body: ClientError): Promise<void>;
   /** Newest first. */
   errors(limit: number): Promise<Stored<ClientError>[]>;
+  addPageChange(body: PageChange): Promise<void>;
+  /** Oldest first, the ones after id `after` — the updater keeps its own cursor. */
+  pageChanges(after: number, limit: number): Promise<Stored<PageChange>[]>;
 }
 
 export async function openStore(): Promise<Store> {
@@ -63,6 +79,11 @@ class PostgresStore implements Store {
         body jsonb not null
       );
       create table if not exists client_errors (
+        id bigserial primary key,
+        at timestamptz not null default now(),
+        body jsonb not null
+      );
+      create table if not exists liquipedia_changes (
         id bigserial primary key,
         at timestamptz not null default now(),
         body jsonb not null
@@ -110,6 +131,18 @@ class PostgresStore implements Store {
     const { rows } = await this.pool.query('select id, at, body from client_errors order by id desc limit $1', [limit]);
     return rows.map((row) => ({ id: Number(row.id), at: new Date(row.at).toISOString(), body: row.body }));
   }
+
+  async addPageChange(body: PageChange): Promise<void> {
+    await this.pool.query('insert into liquipedia_changes (body) values ($1)', [body]);
+  }
+
+  async pageChanges(after: number, limit: number): Promise<Stored<PageChange>[]> {
+    const { rows } = await this.pool.query(
+      'select id, at, body from liquipedia_changes where id > $1 order by id limit $2',
+      [after, limit],
+    );
+    return rows.map((row) => ({ id: Number(row.id), at: new Date(row.at).toISOString(), body: row.body }));
+  }
 }
 
 // -------------------------------------------------------------------- files --
@@ -124,6 +157,7 @@ class FileStore implements Store {
   private rows: Stored<RoundRecord>[] = [];
   private tickets: StoredSupport[] = [];
   private faults: Stored<ClientError>[] = [];
+  private changes: Stored<PageChange>[] = [];
 
   private constructor(private readonly dir: string) {}
 
@@ -133,6 +167,7 @@ class FileStore implements Store {
     store.rows = await store.read('rounds');
     store.tickets = await store.read('support');
     store.faults = await store.read('errors');
+    store.changes = await store.read('liquipedia');
     return store;
   }
 
@@ -193,5 +228,15 @@ class FileStore implements Store {
 
   async errors(limit: number): Promise<Stored<ClientError>[]> {
     return [...this.faults].reverse().slice(0, limit);
+  }
+
+  async addPageChange(body: PageChange): Promise<void> {
+    const row = { id: this.next(this.changes), at: new Date().toISOString(), body };
+    this.changes.push(row);
+    await this.append('liquipedia', row);
+  }
+
+  async pageChanges(after: number, limit: number): Promise<Stored<PageChange>[]> {
+    return this.changes.filter((row) => row.id > after).slice(0, limit);
   }
 }

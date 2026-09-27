@@ -33,7 +33,7 @@ How it runs:
 
 ## The data
 
-Every game reads one Liquipedia export in `liquipedia_data/clean_data/fortnite/`, in place, with no build step. The files derived from it are written by the notebook cells in `notebook_cells.md`, which you run; the code never writes that folder.
+Every game reads one Liquipedia export in `liquipedia_data/clean_data/fortnite/`, in place, with no build step. Two commands keep it current, and you run both: `scripts/liquipedia_api.py` pulls what changed from Liquipedia into the raw dump, and `scripts/build_data.py` turns the raw dump into every file here (the cleaning, the FNCS titles and tiers, then the derived files). The site never writes that folder.
 
 | File | Holds | Written by | Read by |
 | --- | --- | --- | --- |
@@ -122,6 +122,7 @@ On the home page you can swap the whole scene for one tournament's field; today 
 - **Where from:** country and region
 - **Who for:** has played for one of the ten richest organisations
 - **What won:** FNCS winner, 2+ or 3+ FNCS wins, Global, LAN or major winner, won a region's FNCS, won an FNCS in a given year
+- **Tic Tac Toe only** (their own kinds, so Connections' and Griefer's whitelists leave them out): the exact FNCS count (none, exactly 1, 2 or 3, 4+), won the FNCS back to back, won an FNCS with one of eight big names (Peterbot: Cold, Ritual, Pollo, Bylah), and top 3 at a LAN — the last once the `facts.json` appendix has written `podium`
 - **What earned:** $100K, $250K, $500K or $1M+ career earnings
 - **Where played:** at a named Globals or LAN
 - **The rest:** age (under 18, 20+) and active or retired
@@ -145,6 +146,9 @@ Two dials run every round of this endless game. **Who** can appear widens round 
 | Career Earnings | earnings on record above $0 | share of the bigger figure |
 | FNCS Wins | everyone, noughts included | titles |
 | FNCS Finals | at least one final (3,316 players) | whole finals |
+| Placement | event mode only: a finish at the event (`pools.json` → `placements`) | share of the field's last place |
+
+**Placement** asks who finished better at the event in force; 1st is the highest, and duo partners share a place, so Hard can deal them as a tie. The card shows in event mode only, greyed out until cell 5 has written the event's results.
 
 ### Who can appear: the fame window
 
@@ -166,12 +170,12 @@ Four rounds per step; the last step repeats forever.
 | Medium | obvious, moderate, moderate, close, very close, very close |
 | Hard | obvious, moderate, close, very close, very close, very close |
 
-| Closeness | Earnings | Age | FNCS Wins | FNCS Finals |
-| --- | --- | --- | --- | --- |
-| Obvious | 50%+ apart | 6+ years | 3+ titles | 8+ finals |
-| Moderate | 25–50% | 3–5 | 2 | 4–7 |
-| Close | 10–25% | 2 | 1 | 2–3 |
-| Very close | under 10% | 0–1 | 0–1 | 0–1 |
+| Closeness | Earnings | Age | FNCS Wins | FNCS Finals | Placement |
+| --- | --- | --- | --- | --- | --- |
+| Obvious | 50%+ apart | 6+ years | 3+ titles | 8+ finals | 40%+ of the field |
+| Moderate | 25–50% | 3–5 | 2 | 4–7 | 20–40% |
+| Close | 10–25% | 2 | 1 | 2–3 | 10–20% |
+| Very close | under 10% | 0–1 | 0–1 | 0–1 | under 10% |
 
 ### How the next player is picked
 
@@ -359,7 +363,7 @@ You get one list and 90 seconds to name as many of it as you can. Every correct 
 - **Missed names.** When time runs out you see everyone you missed.
 - **The suggestion box** helps you spell a name you already thought of, and never says whether it is on the list.
 
-**The lists are hand-picked, not generated.** A recall game only works when you can picture the answer set, so there are 183 all-time lists with at least 8 answers each:
+**The lists are hand-picked, not generated.** A recall game only works when you can picture the answer set, so there are 184 all-time lists with at least 8 answers each:
 
 | Family | Lists | Example |
 | --- | --- | --- |
@@ -367,7 +371,7 @@ You get one list and 90 seconds to name as many of it as you can. Every correct 
 | Two events at once | 45 | at both the 2023 and 2024 Globals; played every Globals; two FNCS finals in a row |
 | Earnings | 19 | $1M+ career; $200K+ in 2021; $500K+ in a single year |
 | Teammates | 19 | 10+ tournaments with one of the 30 top earners |
-| By country | 25 | French FNCS winners; countries with a player over $1M |
+| By country | 26 | French FNCS winners; countries with a player over $1M; countries with an FNCS winner |
 | FNCS | 13 | FNCS winners by region; 20+ grand finals; won back to back |
 | Year by year | 8 | won a major in 2023 |
 | Titles and fields | 2 | LAN winners; qualified for a field |
@@ -376,14 +380,14 @@ Lists answered with countries or organisations search every name, not just the a
 
 ### Event-mode lists
 
-A field gets 20 lists, in the order planned for the limited mode. Field lists may be as short as 4 answers, because "name the four from the Middle East" is a fine round:
+A field gets 21 lists, in the order planned for the limited mode. Field lists may be as short as 4 answers, because "name the four from the Middle East" is a fine round:
 
 1. qualifiers from Europe, North America, South America, the Middle East, and Asia or Oceania
 2. who won an FNCS this year
 3. organisations with a player there
 4. countries with a player there
 5. who has won an FNCS
-6. who also played each of the last three LANs
+6. who also played each of the last three LANs, and who is playing their first LAN (none of the LANs before it)
 7. who earned $50K+ or $100K+ this year
 8. who has $500K+ or $1M+ career earnings
 9. then everyone who qualified, the well-represented countries, LAN winners, never won an FNCS, and retired
@@ -553,6 +557,7 @@ The site has its own small server (`server/index.ts`): plain Node HTTP with one 
 | `ADMIN_PASSWORD` | the dashboard password; without it the dashboard is switched off |
 | `SESSION_SECRET` | optional; signs the login cookie (defaults to the password) |
 | `ADMIN_OPEN=1` | local only: the dashboard with no password. Ignored when `NODE_ENV=production` |
+| `LIQUIPEDIA_WEBHOOK_SECRET` | the last part of the webhook URL given to Liquipedia; the route is off without it. See DATA.md, "Keeping the dump current" |
 
 Locally, `npm run dev:all` sets `ADMIN_OPEN=1` for the API and `VITE_RECORD=1` for the site. The dashboard opens without a password, and rounds you play land in this machine's `server/.data`.
 
@@ -627,9 +632,9 @@ My recommendation: commit this week's work and get the site live before the Glob
 
 | # | Next step | Why | Size |
 | --- | --- | --- | --- |
-| 1 | Commit the uncommitted work: the Higher or Lower draw, Connections, definitions, field categories, FNCS Finals, `dev:all` | nothing from these sessions is in git yet | small |
+| 1 | Commit and push the work of 27 Sep: Higher or Lower Placement, the new List and Tic Tac Toe categories, the data pipeline and the webhook | none of it is in git yet | small |
 | 2 | Deploy to Heroku: check a clean clone builds, then create the app, Postgres and `ADMIN_PASSWORD` | the dashboard only learns from real players | small |
-| 3 | An event-results cell: placements by day, points and duos into `pools.json`, re-run each evening of an event | unlocks Tenaball 13–19 and List 11 and 15 | medium |
+| 3 | Event results by day: placements by day, points and duos into `pools.json` (final placements are already there, cell 5 of `scripts/pipeline/derived.py`), updated each evening of an event | unlocks Tenaball 13–19 and List 11 and 15 | medium |
 | 4 | The daily mode: one puzzle per game per day, seeded by date, switched on and off by date | the core of limited mode | large |
 | 5 | Limited-mode dealing: no player twice across the four secret games; five balanced pools per Higher or Lower category | what the plan promises per day | medium |
 

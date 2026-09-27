@@ -4,7 +4,7 @@ import type { RosterPlayer } from './roster';
 /**
  * Career facts `players.json` cannot answer.
  *
- * `facts.json` is written by the notebook from `tournaments.json` and
+ * `facts.json` is written by `scripts/build_data.py` from `tournaments.json` and
  * `placements.json`, and read here in place through the `@data` alias — the
  * same contract as `players.json`: no build step, no derived copy.
  *
@@ -46,6 +46,8 @@ interface RawPlayer {
   wins: { global: number; fncs: number; lan: number; major: number };
   winRegions: string[];
   winYears: number[];
+  /** Absent from a file written before the appendix cell carried it. */
+  podium?: number[];
 }
 
 interface RawPayload {
@@ -83,6 +85,8 @@ export interface PlayerFacts {
   fncsWinRegions: readonly string[];
   /** Years this player won a regional FNCS final — the same finals as above. */
   fncsWinYears: readonly number[];
+  /** Headline events this player finished in the top 3 of, as indices like `played`. */
+  podium: readonly number[];
 }
 
 /** What a player with no recorded results looks like, so callers never branch. */
@@ -98,6 +102,7 @@ const NONE: PlayerFacts = {
   winYears: [],
   fncsWinRegions: [],
   fncsWinYears: [],
+  podium: [],
 };
 
 /**
@@ -120,6 +125,9 @@ export class Facts {
   private readonly byPlayer = new Map<string, PlayerFacts>();
   /** event index -> player ids who were there. Built lazily, once. */
   private participants: Map<number, Set<string>> | null = null;
+  /** event index -> player ids who won it. Built lazily, once. */
+  private winners: Map<number, Set<string>> | null = null;
+  private backToBack: Set<string> | null = null;
 
   constructor(payload: RawPayload) {
     this.generated = payload.generated;
@@ -138,6 +146,7 @@ export class Facts {
           ...new Set(regional.flatMap((event) => (event.region ? [event.region] : []))),
         ].sort(),
         fncsWinYears: [...new Set(regional.map((event) => Number(event.date.slice(0, 4))))].sort(),
+        podium: player.podium ?? [],
       });
     }
   }
@@ -165,6 +174,80 @@ export class Facts {
       this.participants = map;
     }
     return this.participants.get(eventIndex) ?? new Set();
+  }
+
+  /** Everyone who won one headline event — one team, so two or three names. */
+  wonAt(eventIndex: number): ReadonlySet<string> {
+    if (!this.winners) {
+      const map = new Map<number, Set<string>>();
+      for (const [id, facts] of this.byPlayer) {
+        for (const index of facts.won) {
+          let set = map.get(index);
+          if (!set) map.set(index, (set = new Set()));
+          set.add(id);
+        }
+      }
+      this.winners = map;
+    }
+    return this.winners.get(eventIndex) ?? new Set();
+  }
+
+  /**
+   * Everyone this player won a regional FNCS final with: the rest of the
+   * winning duo or trio, over every title. Peterbot's five are Cold, Ritual,
+   * Pollo and Bylah.
+   */
+  fncsPartners(playerId: string): Set<string> {
+    const partners = new Set<string>();
+    for (const index of this.of(playerId).won) {
+      if (!isRegionalFinal(this.events[index])) continue;
+      for (const id of this.wonAt(index)) if (id !== playerId) partners.add(id);
+    }
+    return partners;
+  }
+
+  /**
+   * Rounds of the FNCS: every region's grand final inside a week of each other.
+   *
+   * Clustered on the date rather than parsed out of the name, because the name
+   * has been "FNCS: Season X", "C2S1: FNCS", "FNCS 2023 - Major 1" and "FNCS
+   * 2025 - Major 3" and the dates have been the dates throughout. A cluster of
+   * fewer than four regions is a one-off nobody could qualify for — a Global
+   * Championship, an invitational — and is not a round.
+   */
+  get fncsRounds(): HeadlineEvent[][] {
+    const finals = this.events
+      .filter((event) => event.kind === 'fncs')
+      .sort((a, b) => (a.date < b.date ? -1 : 1));
+    const rounds: HeadlineEvent[][] = [];
+    let current: HeadlineEvent[] = [];
+    for (const event of finals) {
+      const gap = current.length
+        ? (Date.parse(event.date) - Date.parse(current[current.length - 1].date)) / 86_400_000
+        : 0;
+      if (current.length && gap > 7) {
+        rounds.push(current);
+        current = [];
+      }
+      current.push(event);
+    }
+    if (current.length) rounds.push(current);
+    return rounds.filter((round) => round.length >= 4);
+  }
+
+  /** Players who won two rounds of the FNCS in a row, in any regions. */
+  backToBackWinners(): ReadonlySet<string> {
+    if (!this.backToBack) {
+      const out = new Set<string>();
+      let previous = new Set<string>();
+      for (const round of this.fncsRounds) {
+        const here = new Set(round.flatMap((event) => [...this.wonAt(event.index)]));
+        for (const id of here) if (previous.has(id)) out.add(id);
+        previous = here;
+      }
+      this.backToBack = out;
+    }
+    return this.backToBack;
   }
 
   /**
