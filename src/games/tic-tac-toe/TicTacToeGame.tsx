@@ -5,7 +5,7 @@ import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PlayerSearch } from '@/components/PlayerSearch';
 import { LevelSetup, type LevelOption } from '@/components/PoolSetup';
-import { Banner, Stat } from '@/components/ui';
+import { Banner, Hearts, Stat } from '@/components/ui';
 import type { Facts } from '@/data/liquipedia/facts';
 import type { Orgs } from '@/data/liquipedia/orgs';
 import type { Pools } from '@/data/liquipedia/pools';
@@ -22,10 +22,8 @@ import {
   createGame,
   generateBoard,
   giveUp,
-  guessesLeft,
-  HARD_GUESSES,
   LEVELS,
-  MAX_MISTAKES,
+  livesLeft,
   place,
   SIZE,
   solutionFor,
@@ -49,17 +47,17 @@ const DIFFICULTIES: LevelOption<Difficulty>[] = [
   {
     id: 'easy',
     label: '🟢 Easy',
-    hint: `Built on the names everyone knows — ${LEVELS.easy.answers}+ of them fit every cell. ${MAX_MISTAKES} wrong answers end the board.`,
+    hint: `Every cell has at least ${LEVELS.easy.answers} names everyone knows. ${LEVELS.easy.lives} lives.`,
   },
   {
     id: 'medium',
     label: '🟡 Medium',
-    hint: `The scene’s regulars join in — ${LEVELS.medium.answers}+ per cell. ${MAX_MISTAKES} wrong answers end the board.`,
+    hint: `Every cell has at least ${LEVELS.medium.answers} of the scene’s regulars. ${LEVELS.medium.lives} lives.`,
   },
   {
     id: 'hard',
     label: '🔴 Hard',
-    hint: `A cell may have one answer, from anywhere on record. ${HARD_GUESSES} guesses — one per cell.`,
+    hint: 'A cell may have only one answer, and it can be anyone. One wrong answer ends the board.',
   },
 ];
 
@@ -209,8 +207,6 @@ function Game({
     }
   };
 
-  const left = guessesLeft(game);
-
   return (
     <GameShell
       game={meta}
@@ -224,11 +220,10 @@ function Game({
       <div className="stack">
         <div className="stats">
           <Stat label="Filled" value={`${game.filled.size}/9`} />
-          {game.difficulty !== 'hard' ? (
-            <Stat label="Mistakes" value={`${game.mistakes}/${MAX_MISTAKES}`} />
-          ) : (
-            <Stat label="Guesses left" value={Number.isFinite(left) ? left : '∞'} />
-          )}
+          <Stat
+            label={LEVELS[game.difficulty].lives === 1 ? 'Life' : 'Lives'}
+            value={<Hearts left={livesLeft(game)} total={LEVELS[game.difficulty].lives} />}
+          />
         </div>
 
         <div className="scroll-x">

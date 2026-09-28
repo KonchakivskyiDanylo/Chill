@@ -1339,6 +1339,44 @@ if (pools.pools.length > 0) {
     check(at.length >= 10, `event ${pool.label}: only ${at.length} of the ${planned.length} planned boards built`);
     notes.push(`event ${pool.label}: ${boards.length} Tenaball boards, ${at.length} of ${planned.length} planned`);
 
+    // The results boards, once the event has been played: standings in place
+    // order, every team slot closable by naming its players, and the two
+    // seeded boards only from a file that carries earnings from before.
+    if (Object.keys(pool.placements ?? {}).length > 0) {
+      const playable = (board: (typeof boards)[number]) => {
+        let game = tenaball.createGame(board, 'hard');
+        for (const row of board.rows) {
+          for (const member of membersOf(row)) game = tenaball.applyGuess(game, member.key, member.label).state;
+        }
+        return game.status === 'won';
+      };
+      const results = boards.find((b) => b.id === `pool:${pool.id}:results`);
+      check(Boolean(results), `event ${pool.label}: the results are in but there is no top 10 board`);
+      if (results) {
+        check(
+          results.rows.every((row, i) => row.value === i + 1),
+          `event ${pool.label}: the top 10 reads ${results.rows.map((row) => row.value).join(', ')}`,
+        );
+        check(playable(results), `event ${pool.label}: the top 10 cannot be completed`);
+      }
+      const seeded = ['upsets', 'disappointments'].map((id) => boards.find((b) => b.id === `pool:${pool.id}:${id}`));
+      if (pool.earningsBefore) {
+        check(seeded.every(Boolean), `event ${pool.label}: earnings from before are in but a seeded board is missing`);
+        for (const board of seeded) {
+          if (!board) continue;
+          check(board.rows.every((row) => row.value > 0), `event ${pool.label}: ${board.title} has a row that moved no places`);
+          check(playable(board), `event ${pool.label}: ${board.title} cannot be completed`);
+        }
+        const [upset, flop] = seeded.map((board) => board?.rows[0]);
+        notes.push(
+          `event ${pool.label}: biggest upset ${upset?.label} ${upset?.display}, biggest disappointment ${flop?.label} ${flop?.display}`,
+        );
+      } else {
+        check(seeded.every((board) => !board), `event ${pool.label}: seeded boards without earnings from before`);
+        notes.push(`event ${pool.label}: no earnings from before the event yet — upsets and disappointments wait for cell 5`);
+      }
+    }
+
     // List: the planned lists, and the two answered with names that are not
     // players search a population wider than their answers.
     if (facts) {

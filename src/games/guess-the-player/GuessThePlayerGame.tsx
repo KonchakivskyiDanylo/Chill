@@ -8,7 +8,7 @@ import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { PlayerSearch } from '@/components/PlayerSearch';
 import { PoolSetup } from '@/components/PoolSetup';
-import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
+import { Banner, Hearts, OptionCard, OptionGrid, Stat } from '@/components/ui';
 import type { Facts } from '@/data/liquipedia/facts';
 import type { Pools } from '@/data/liquipedia/pools';
 import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
@@ -28,7 +28,7 @@ import {
   answerableInField,
   gameFor,
   giveUp,
-  guessesLeft,
+  livesLeft,
   MAX_GUESSES,
   submitGuess,
   TOGETHER_MIN,
@@ -221,8 +221,7 @@ function Game({
     >
       <div className="stack">
         <div className="stats">
-          <Stat label="Guesses left" value={guessesLeft(game)} />
-          <Stat label="Used" value={`${game.rows.length}/${MAX_GUESSES}`} />
+          <Stat label="Lives" value={<Hearts left={livesLeft(game)} total={MAX_GUESSES} />} />
           <Stat label="Mode" value={game.mode === 'exact' ? 'Exact' : 'Direction'} />
         </div>
 

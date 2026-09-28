@@ -4,7 +4,7 @@ import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PlayerSearch } from '@/components/PlayerSearch';
-import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
+import { Banner, Hearts, OptionCard, OptionGrid, Stat } from '@/components/ui';
 import { WhatCounts } from '@/components/Glossary';
 import type { Board } from '@/data/liquipedia/rankings';
 import { loadFacts, type Facts } from '@/data/liquipedia/facts';
@@ -339,7 +339,9 @@ function Game({
       <div className="stack tb-play">
         <div className="stats">
           <Stat label="Found" value={`${game.found.size}/${slots.length}`} />
-          {game.difficulty === 'hard' ? <Stat label="Lives" value={game.lives} /> : null}
+          {game.difficulty === 'hard' ? (
+            <Stat label="Lives" value={<Hearts left={Math.max(0, game.lives)} total={HARD_LIVES} />} />
+          ) : null}
           <Stat label="Best" value={best} />
         </div>
 

@@ -1,4 +1,4 @@
-import type { Board, BoardRow, EntityKind } from '@/data/liquipedia/rankings';
+import type { Board, BoardMember, BoardRow, EntityKind } from '@/data/liquipedia/rankings';
 
 /**
  * Assembling a Tenaball board out of ranked rows.
@@ -27,6 +27,8 @@ export interface Ranked {
    * is already money, and a tie there is a tie.
    */
   tiebreak?: number;
+  /** A team row's players — see `BoardRow.members`. */
+  members?: BoardMember[];
 }
 
 /** The tie rule for a player board counted in anything but money. */
@@ -69,7 +71,7 @@ export function board(
     entity,
     tieRule,
     rows,
-    next: { key: next.key, label: next.label, value: next.value },
+    next: { key: next.key, label: next.label, value: next.value, members: next.members },
     lowerIsBetter,
   };
 }
@@ -85,7 +87,7 @@ export function board(
  * still level after it is left level — `board` refuses a cut that falls there,
  * and anywhere else in the ten the order is only where a slot is drawn.
  */
-export function byValue(ranked: Ranked[], ascending = false): Ranked[] {
+export function byValue<T extends Ranked>(ranked: T[], ascending = false): T[] {
   return ranked.sort(
     (a, b) =>
       (ascending ? a.value - b.value : b.value - a.value) || (b.tiebreak ?? 0) - (a.tiebreak ?? 0),

@@ -860,6 +860,21 @@ textarea {
   font-variant-numeric: tabular-nums;
 }
 
+/* Lives as hearts rather than a "2/4" counter — readable at a glance. */
+.hearts {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 3px;
+  /* Close to the stat's own numbers, so "0/9" beside "♥♥♥" reads as a pair. */
+  font-size: 1.3rem;
+  line-height: 1.15;
+  color: var(--danger);
+}
+.heart--spent {
+  color: var(--text-faint);
+}
+
 /* ---------------------------------------------------------------- inputs -- */
 
 .input {

@@ -58,7 +58,7 @@ export const CATEGORIES: CategoryMeta[] = [
   {
     id: 'fncsWins',
     label: 'FNCS Wins',
-    hint: 'Grand finals won across every FNCS season and region — nought included.',
+    hint: 'FNCS grand finals won, across every season and region. Players with none are included.',
     title: 'FNCS Wins',
   },
   {

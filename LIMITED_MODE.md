@@ -93,12 +93,12 @@ played, and countries by career earnings.
 | 11 | Top 10 by subscribers on … | dropped until there is **data** |
 | 12 | LAN appearances for a LAN, FNCS grand finals for an FNCS event, **on the first day of the event** | live: both, for a Globals |
 | 13 | Top 10 of day one | results |
-| 14 | Two days: top 10 overall. Three days: top 10 of day two | results |
+| 14 | Two days: top 10 overall. Three days: top 10 of day two | live: the final top 10 |
 | 15 | Three days: top 10 overall. Two days: top 10 biggest improvements, places gained from day one to day two | results, by day |
 | 16 | Top 10 by eliminations (individual) | data |
-| 17 | Top 10 biggest upsets: low earnings before, placed high | results |
+| 17 | Top 10 biggest upsets: low earnings before, placed high | live: places gained from the earnings seed |
 | 18 | Top 10 by damage | data |
-| 19 | Top 10 biggest disappointments: big earnings, bad placement (the opposite of 17) | results |
+| 19 | Top 10 biggest disappointments: big earnings, bad placement (the opposite of 17) | live: places lost from the earnings seed |
 
 A regions board after the event ("which region placed best") would fit
 alongside 13–19.

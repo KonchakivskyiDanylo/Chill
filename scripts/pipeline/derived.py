@@ -1030,10 +1030,37 @@ def build(BASE):
                     named.add(page)
                     if rank is not None:
                         placed[page] = min(rank, placed.get(page, rank))
+
+        # Career prize money from before the event, for Tenaball's upsets and
+        # disappointments: a team is seeded by what its players had won going
+        # in, not by a career total that already holds this event's prize.
+        # Every tournament that started earlier counts, split per player the
+        # way the per-format boards in cell 2 split it.
+        start = str(t['startdate'])[:10]
+        before = Counter()
+        for row in placements:
+            other = tour_of.get(row.get('tournament')) or {}
+            day = str(other.get('startdate') or row.get('date') or '')[:10]
+            if not day[:4].isdigit() or day >= start:
+                continue
+            parts = row.get('participants') or []
+            if not parts:
+                continue
+            each = float(row.get('individualprizemoney') or 0)
+            if each <= 0:
+                each = float(row.get('prizemoney') or 0) / len(parts)
+            if each <= 0:
+                continue
+            for part in parts:
+                page = resolve(part.get('player') or '')
+                if page in named:
+                    before[page] += each
+
         pools.append({'id': pid, 'label': label, 'blurb': blurb,
-                      'event': event, 'date': str(t['startdate'])[:10],
+                      'event': event, 'date': start,
                       'players': sorted(named),
-                      'placements': dict(sorted(placed.items()))})
+                      'placements': dict(sorted(placed.items())),
+                      'earningsBefore': {page: round(before[page]) for page in sorted(named)}})
         print(f'{label:<20} {len(raw):>3} entrants, {len(named):>3} playable, {len(placed):>3} placed')
 
     payload = {'generated': TODAY, 'pools': pools}

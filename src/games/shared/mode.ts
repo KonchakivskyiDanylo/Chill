@@ -20,8 +20,21 @@ import { useLocalState } from '@/lib/storage';
 
 const KEY = 'event-mode';
 
+/**
+ * Whether the site offers event mode at all.
+ *
+ * Off for the launch (28 Sep 2026): the site is the whole scene and nothing
+ * else. With it off the home page has no picker, the header no chip, and a
+ * mode a browser remembers from before is ignored rather than trapping that
+ * visitor in a field they can no longer leave. Everything behind it — the
+ * field boards and lists, Placement, the whole-field dealing — is kept and
+ * still checked by `check:games`; set this to true to bring it back.
+ */
+export const SHOW_EVENT_MODE = false;
+
 export function useEventMode(): [string | null, (next: string | null) => void] {
-  return useLocalState<string | null>(KEY, null);
+  const [event, setEvent] = useLocalState<string | null>(KEY, null);
+  return [SHOW_EVENT_MODE ? event : null, setEvent];
 }
 
 /**

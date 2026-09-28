@@ -2,9 +2,9 @@ import type { Facts } from '@/data/liquipedia/facts';
 import type { Orgs } from '@/data/liquipedia/orgs';
 import type { Pool } from '@/data/liquipedia/pools';
 import { Rankings, type Board } from "@/data/liquipedia/rankings";
-import { board, byValue, SLOTS, TIE_EARNINGS, TIE_GROUP_EARNINGS, type Ranked } from './board-builder';
+import { board, byValue, NEEDED, SLOTS, TIE_EARNINGS, TIE_GROUP_EARNINGS, type Ranked } from './board-builder';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
-import { money, plural } from '@/lib/format';
+import { money, ordinal, plural } from '@/lib/format';
 
 /**
  * Tenaball boards for one tournament's field.
@@ -34,9 +34,10 @@ import { money, plural } from '@/lib/format';
  * One heading and a fixed order. These were filed under Players, Countries and
  * Organisations like the shipped boards, which scattered a field's dozen
  * boards across three headings in no particular order; a field is one subject.
- * The order is the one planned for an event's fortnight in LIMITED_MODE.md,
- * where the boards that need the event's own results — the top ten of day
- * one, eliminations, upsets — are listed too. Those wait for the data.
+ * The order is the one planned for an event's fortnight in LIMITED_MODE.md.
+ * Three of its results boards — the final top ten, the upsets and the
+ * disappointments — appear once the export has the event's placements; the
+ * top ten of day one and eliminations still wait for data it does not carry.
  */
 export function poolBoards(
   pool: Pool,
@@ -292,8 +293,15 @@ export function poolBoards(
         ),
       );
     }
+  }
 
-    // The rest, after the planned twelve.
+  // 14, 17, 19 ------------------------------------------------------------------
+  // The event's own results, once the export has them: the final standings,
+  // then who beat the seed their money gave them and who fell furthest below it.
+  for (const made of resultBoards(pool, players, prefix, group)) add(made);
+
+  if (facts) {
+    // The rest, after the planned boards.
     add(
       board(
         `${prefix}:apps`,
@@ -328,6 +336,152 @@ export function poolBoards(
     ),
   );
 
+  return out;
+}
+
+/** One finishing place at the event, and the players who took it. */
+interface Team {
+  place: number;
+  players: RosterPlayer[];
+  /** False when the roster cannot name everyone on it: a slot nobody could close. */
+  complete: boolean;
+}
+
+/** What one team is called in a board's rules, by how many players it has. */
+const TEAM_WORDS: Record<number, [string, string]> = {
+  1: ['player', 'players'],
+  2: ['duo', 'duos'],
+  3: ['trio', 'trios'],
+  4: ['squad', 'squads'],
+};
+
+/**
+ * The event's teams, best finish first.
+ *
+ * Whoever shares a place is one team, because the export gives a duo a single
+ * placement. The team size is the event's — the most players any place has —
+ * so a place with fewer holds someone the roster cannot name.
+ */
+function teamsAt(pool: Pool, players: RosterPlayer[]): Team[] {
+  const byId = new Map(players.map((p) => [p.id, p]));
+  const places = new Map<number, RosterPlayer[]>();
+  for (const [id, place] of Object.entries(pool.placements ?? {})) {
+    const player = byId.get(id);
+    if (player) places.set(place, [...(places.get(place) ?? []), player]);
+  }
+  const size = Math.max(0, ...[...places.values()].map((team) => team.length));
+  return [...places]
+    .sort(([a], [b]) => a - b)
+    .map(([place, members]) => ({
+      place,
+      players: members.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase())),
+      complete: members.length === size,
+    }));
+}
+
+/** "Pixie & SwizzY", "Japko, panzer & Setty" — the way the shipped boards write a team. */
+function teamName(team: Team): string {
+  const names = team.players.map((p) => p.name);
+  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} & ${names[names.length - 1]}`;
+}
+
+/**
+ * The results boards, or none before the event has been played.
+ *
+ * Upsets and disappointments seed every team by what its players had won
+ * before the event (`earningsBefore`), not by today's career figure, which
+ * already holds the prize from this event and would make every winner look
+ * like the favourite. A file written before cell 5 carried that column offers
+ * the standings alone.
+ */
+function resultBoards(pool: Pool, players: RosterPlayer[], prefix: string, group: string): Board[] {
+  const teams = teamsAt(pool, players);
+  if (teams.length === 0) return [];
+  const size = Math.max(...teams.map((team) => team.players.length));
+  const [unit, units] = TEAM_WORDS[size] ?? ['team', 'teams'];
+  const fill =
+    size > 1 ? ` Each slot is a ${unit} and fills once ${size === 2 ? 'both players are' : `all ${size} are`} named.` : '';
+
+  const out: Board[] = [];
+  /** A team board, unless a team the roster cannot fully name would be one of its eleven. */
+  const teamBoard = (
+    id: string,
+    title: string,
+    tieRule: string,
+    ranked: (Ranked & { complete: boolean })[],
+    lowerIsBetter?: boolean,
+  ) => {
+    if (ranked.slice(0, NEEDED).some((row) => !row.complete)) return;
+    const made = board(
+      id,
+      group,
+      title,
+      'player',
+      tieRule,
+      ranked.map(({ complete: _, ...row }) => row),
+      lowerIsBetter,
+    );
+    if (made) out.push(made);
+  };
+  const row = (team: Team, value: number, display: string, tiebreak?: number) => ({
+    key: team.players.map((p) => p.id).join('|'),
+    label: teamName(team),
+    value,
+    display,
+    tiebreak,
+    members: size > 1 ? team.players.map((p) => ({ key: p.id, label: p.name })) : undefined,
+    complete: team.complete,
+  });
+
+  // 14 --------------------------------------------------------------------------
+  teamBoard(
+    `${prefix}:results`,
+    `Top 10 at ${pool.label}`,
+    `Final standings.${fill}`,
+    teams.map((team) => row(team, team.place, String(team.place))),
+    true,
+  );
+
+  const before = pool.earningsBefore;
+  if (!before) return out;
+  const funds = new Map(teams.map((team) => [team, team.players.reduce((sum, p) => sum + (before[p.id] ?? 0), 0)]));
+  // 1st is the richest; two teams on the same money share a seed.
+  const seedOf = new Map(
+    teams.map((team) => [team, 1 + teams.filter((other) => funds.get(other)! > funds.get(team)!).length]),
+  );
+  const seeding = `A ${unit}’s seed is its rank by combined career earnings before the event, the richest 1st.`;
+
+  // 17 --------------------------------------------------------------------------
+  teamBoard(
+    `${prefix}:upsets`,
+    'Top 10 biggest upsets',
+    `${seeding} Ranked by places gained from seed to finish; level ${units} go to the better finish.${fill}`,
+    byValue(
+      teams
+        .map((team) => {
+          const seed = seedOf.get(team)!;
+          const gained = seed - team.place;
+          return row(team, gained, `+${gained} (${ordinal(seed)} → ${ordinal(team.place)})`, -team.place);
+        })
+        .filter((ranked) => ranked.value > 0),
+    ),
+  );
+
+  // 19 --------------------------------------------------------------------------
+  teamBoard(
+    `${prefix}:disappointments`,
+    'Top 10 biggest disappointments',
+    `${seeding} Ranked by places lost from seed to finish; level ${units} go to the higher seed.${fill}`,
+    byValue(
+      teams
+        .map((team) => {
+          const seed = seedOf.get(team)!;
+          const lost = team.place - seed;
+          return row(team, lost, `−${lost} (${ordinal(seed)} → ${ordinal(team.place)})`, -seed);
+        })
+        .filter((ranked) => ranked.value > 0),
+    ),
+  );
   return out;
 }
 

@@ -4,7 +4,7 @@ import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PoolSetup } from '@/components/PoolSetup';
-import { Banner, Stat } from '@/components/ui';
+import { Banner, Hearts, Stat } from '@/components/ui';
 import type { Facts } from '@/data/liquipedia/facts';
 import type { Orgs } from '@/data/liquipedia/orgs';
 import type { Pools } from '@/data/liquipedia/pools';
@@ -146,7 +146,7 @@ function Game({
       <div className="stack">
         <div className="stats">
           <Stat label="Groups" value={`${game.solved.length}/4`} />
-          <Stat label="Lives" value={<Hearts left={livesLeft(game)} />} />
+          <Stat label="Lives" value={<Hearts left={livesLeft(game)} total={MAX_MISTAKES} />} />
         </div>
 
         <div className="stack-sm">
@@ -235,19 +235,6 @@ function Game({
         )}
       </div>
     </GameShell>
-  );
-}
-
-/** Lives as hearts: four filled, emptying as they are spent. */
-function Hearts({ left }: { left: number }) {
-  return (
-    <span className="cx-hearts" aria-label={`${left} of ${MAX_MISTAKES} lives left`}>
-      {Array.from({ length: MAX_MISTAKES }, (_, index) => (
-        <span key={index} className={`cx-heart${index < left ? '' : ' cx-heart--spent'}`} aria-hidden="true">
-          {index < left ? '♥' : '♡'}
-        </span>
-      ))}
-    </span>
   );
 }
 

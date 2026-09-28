@@ -53,7 +53,7 @@ const MODES: { id: Mode; label: string; hint: string }[] = [
   {
     id: 'random',
     label: 'Random order',
-    hint: 'No ramp-up, counts hidden — but the top teammate is never one of the first four.',
+    hint: 'Shuffled, with the counts hidden. The top teammate is never one of the first four.',
   },
 ];
 

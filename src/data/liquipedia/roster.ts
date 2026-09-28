@@ -36,7 +36,7 @@ export type FameTier = 'easy' | 'medium' | 'hard';
  * Hand-maintained: the export carries no timestamp column, and a file mtime
  * does not survive a clone. Bump it when you re-export.
  */
-export const EXPORT_DATE = '2026-09-27';
+export const EXPORT_DATE = '2026-09-28';
 
 /** Where the roster comes from, for the attribution line every game shows. */
 export const SOURCE = {

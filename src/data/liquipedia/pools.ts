@@ -36,6 +36,14 @@ export interface Pool {
    * export refreshed, and absent from a file written before cell 5 carried it.
    */
   placements?: Record<string, number>;
+  /**
+   * Career prize money from every tournament that started before this one, by
+   * page name: what a player had won going in, which the published career
+   * figure no longer shows once the event's prize is added to it. Tenaball's
+   * upsets and disappointments seed on it. Absent from a file written before
+   * cell 5 carried it.
+   */
+  earningsBefore?: Record<string, number>;
 }
 
 interface RawPayload {

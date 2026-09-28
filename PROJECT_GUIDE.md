@@ -44,7 +44,7 @@ Every game reads one Liquipedia export in `liquipedia_data/clean_data/fortnite/`
 | `orgs.json` | 979 organisations, with current and past players | the export | Griefer, Tic Tac Toe, Connections, Tenaball, List |
 | `facts.json` | per player: tournaments played, LAN and FNCS appearances, wins by kind, which headline events they played | notebook appendix | the criteria games, List, Tenaball's field boards, FNCS Finals, the glossary |
 | `rankings.json` | 375 precomputed Tenaball boards (284 until cells 2–4 are re-run), plus the tournament names the paydays boards answer from | cells 2–4 | Tenaball |
-| `pools.json` | event fields; today one, the FNCS 2026 Globals with 101 players | cell 5 | event mode |
+| `pools.json` | event fields; today one, the FNCS 2026 Globals with 103 players, where each finished and what each had earned before it | cell 5 | event mode |
 
 Three rules keep this safe:
 
@@ -106,7 +106,9 @@ Fortnitedle, Career Path, Who Are Ya and Guess the Player deal their secret play
 
 ### Event mode
 
-On the home page you can swap the whole scene for one tournament's field; today that is the FNCS 2026 Globals, 101 players. Every game then draws from that field only, until you leave it from the header.
+**Switched off for the launch (28 Sep 2026).** `SHOW_EVENT_MODE` in `games/shared/mode.ts` is `false`: the home page has no picker, the header no chip, and a mode a browser remembered from before is ignored. Everything below is kept, and `check:games` still tests it; set the flag to `true` to bring it back.
+
+On the home page you can swap the whole scene for one tournament's field; today that is the FNCS 2026 Globals, 103 players. Every game then draws from that field only, until you leave it from the header.
 
 - **Setup collapses.** The setup screens become a Start button.
 - **Field categories.** Tenaball and List swap to boards and lists built from the field in the browser, under one heading, in a planned order.
@@ -122,10 +124,10 @@ On the home page you can swap the whole scene for one tournament's field; today 
 - **Where from:** country and region
 - **Who for:** has played for one of the ten richest organisations
 - **What won:** FNCS winner, 2+ or 3+ FNCS wins, Global, LAN or major winner, won a region's FNCS, won an FNCS in a given year
-- **Tic Tac Toe only** (their own kinds, so Connections' and Griefer's whitelists leave them out): the exact FNCS count (none, exactly 1, 2 or 3, 4+), won the FNCS back to back, won an FNCS with one of eight big names (Peterbot: Cold, Ritual, Pollo, Bylah), and top 3 at a LAN — the last once the `facts.json` appendix has written `podium`
+- **Tic Tac Toe only** (their own kinds, so Connections' and Griefer's whitelists leave them out): the exact FNCS count (none, exactly 1, 2 or 3, 4+), won the FNCS back to back, top 3 at a LAN (35 players), and won an FNCS with a named player — any Easy-tier player with 3+ FNCS-winning partners can be named (23 of them; Peterbot: Cold, Ritual, Pollo, Bylah)
 - **What earned:** $100K, $250K, $500K or $1M+ career earnings
 - **Where played:** at a named Globals or LAN
-- **The rest:** age (under 18, 20+) and active or retired
+- **The rest:** age (under 18, 20+). There is no active or retired rule: Liquipedia rarely marks a player retired, so "Retired" refused players everyone knows have stopped (removed 28 Sep 2026)
 
 No two rules on one board may be nearly the same: if 90% of one fits inside the other, they do not go together (`NEAR_NESTED`). That is what stops "has won a major" (164 of 165 are FNCS winners) sharing a board with "has won an FNCS".
 
@@ -335,7 +337,7 @@ A tournament board ranks placements, so on a duos or trios event one slot is a w
 
 ### Event-mode boards
 
-For a field, the shipped boards are replaced by 14 built on the spot, under one heading, in the order planned for the limited mode:
+For a field, the shipped boards are replaced by up to 17 built on the spot, under one heading, in the order planned for the limited mode:
 
 1. career earnings
 2. youngest
@@ -349,10 +351,20 @@ For a field, the shipped boards are replaced by 14 built on the spot, under one 
 10. North America by earnings
 11. LAN appearances
 12. FNCS grand finals played
-13. tournaments played
-14. countries by career earnings
+13. the event's top 10: the final standings, one duo per slot
+14. biggest upsets
+15. biggest disappointments
+16. tournaments played
+17. countries by career earnings
 
-Boards that need the event's results come later; see Limited mode.
+**Results boards (13–15)** appear once `pools.json` carries the event's placements. Upsets and disappointments also need `earningsBefore`, cell 5's career prize money from every tournament that started before the event:
+
+- **Seed.** Each team is ranked by its players' combined earnings before the event, richest 1st. The published career figure is not used, because it already holds this event's prize and would make every winner look like the favourite.
+- **Upsets** rank places gained from seed to finish, e.g. Izzi & Nociff, seeded 46th, finished 16th: +30. Level teams go to the better finish.
+- **Disappointments** rank places lost, e.g. EpikWhale & PXMP, seeded 2nd, finished 42nd: −40. Level teams go to the higher seed.
+- **Whole teams only.** A board is not offered if one of its eleven teams has a player the roster cannot name.
+
+Top 10 of day one, eliminations and damage still need data the export does not have; see Limited mode.
 
 ## List
 
@@ -423,13 +435,15 @@ The confirm step exists because a mis-tap on a phone used to end the round outri
 
 A 3×3 grid has a rule on each row and each column; every cell needs one player who fits both. You don't pick the cell: you type a player and the grid works out where they go. Each player can be used once.
 
-| Level | The board is built so every cell has | Mistakes allowed |
+| Level | The board is built so every cell has | Lives |
 | --- | --- | --- |
 | Easy | 3+ household names (Easy tier) | 3 |
 | Medium | 2+ regulars | 3 |
-| Hard | at least one player from anywhere on record | none: 9 guesses, one per cell |
+| Hard | at least one player from anywhere on record | 1 |
 
-At every level any player who fits is accepted. The level decides what the board is built around, not who you may type.
+At every level any player who fits is accepted. The level decides what the board is built around, not who you may type. A name that fits no open cell costs a life, and the last life ends the board. Hard used to say "nine guesses, one per cell", which was one life said the long way round.
+
+**Lives are hearts in every game that has them:** Tic Tac Toe, Tenaball Hard, Connections and Guess the Player (`Hearts` in `components/ui.tsx`). Career Path and Who Are Ya count clues instead, Fortnitedle's rows are its tries, and Higher or Lower and Griefer end on the first mistake.
 
 ### How a board is built
 
@@ -585,7 +599,7 @@ It plays every game with a perfect player, generating the random games many time
   - Under 75% of answers flip direction, and on Hard a shown 0 must not always go up.
 - **Tenaball:** every board has ten answers you can type, and a tie at 10th is never settled by name.
 - **List:** every list has enough answers, none repeated, all typable. Lists answered with countries or organisations search more than their answers.
-- **Tic Tac Toe:** 25 boards per level, every one fillable with nine different players, and a Hard board ends when nine guesses cannot fill nine cells.
+- **Tic Tac Toe:** 25 boards per level, every one fillable with nine different players, and a Hard board ends on its first wrong answer.
 - **Connections:** 40 boards on a tier and 20 on Random. Each splits exactly one way, no rule covers a fifth player, and no two rules are nearly the same.
 - **Event mode:**
   - The field's Tenaball boards come in the planned order, and the planned lists exist.

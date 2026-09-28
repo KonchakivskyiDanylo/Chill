@@ -85,8 +85,8 @@ export const GAMES: GameMeta[] = [
         items: [
           'Age — how old each player is today, from their published birthday.',
           'Career Earnings — every dollar of tournament prize money on record.',
-          'FNCS Wins — FNCS grand finals won, across every season and region. Players on nought are included, because “a name you know on one title against a name you do not” is the best round this category has.',
-          'FNCS Finals — FNCS grand finals reached, the Globals and the other FNCS LANs included. Only players who have reached one are in, so a shown number can always go either way.',
+          'FNCS Wins — FNCS grand finals won, across every season and region. Players with none are included.',
+          'FNCS Finals — FNCS grand finals reached, the Globals and the other FNCS LANs included.',
         ],
       },
       {
@@ -100,9 +100,9 @@ export const GAMES: GameMeta[] = [
         title: 'Ties',
         items: [
           'Easy and Medium never deal two players on the same number, so one of Higher and Lower is always right.',
-          'Hard does, and only Equal is right for them — two players who have never won an FNCS included.',
+          'Hard does, and then only Equal is right — two players with no FNCS wins included.',
           'Age is compared in whole years: two 19-year-olds are level even with birthdays months apart.',
-          'Career earnings are never dealt level. Two careers equal to the dollar would be a coincidence nobody could know.',
+          'Career earnings are never dealt level.',
         ],
       },
     ],
@@ -128,8 +128,7 @@ export const GAMES: GameMeta[] = [
       {
         title: 'Names with numbers in them',
         items: [
-          'A digit is the one thing in this game you cannot reason your way to: a letter tile tells you something every round, a digit tells you nothing until you happen to try it.',
-          'So they are given away, never before your third guess and all of them by guess 5 — how much depends on the difficulty.',
+          'Digits are given away, never before your third guess and all of them by guess 5.',
           'Easy 🟢 shows the digit itself, Medium 🟡 only a # where it sits. Hard 🔴 and Random 🎲 show nothing at all.',
         ],
       },
@@ -146,32 +145,28 @@ export const GAMES: GameMeta[] = [
     icon: '🗺️',
     intro: [
       'A secret player’s tournament results are revealed one at a time. Name them from the career alone.',
-      'You get one guess per revealed clue, so guessing early scores better — and every clue you take is one you cannot get back.',
+      'A wrong guess reveals the next clue, and running out of clues loses the round. The fewer clues you need, the better.',
     ],
     rules: [
-      'Clues are majors only: the Epic-run grand finals since the 2019 World Cup — FNCS regionals, the Globals, the World Cup itself.',
+      'Clues are majors only: Epic’s grand finals since the 2019 World Cup — regional FNCS finals, the Globals, the World Cup itself.',
       'Each clue is one tournament and where the player finished.',
       'Only players with at least five majors on record can be the answer.',
-      'Get it right and the rest of the ten clues turn face up, dimmed, so you can see what you would have been shown next.',
+      'When the round ends, the clues you did not need turn face up, dimmed.',
     ],
     sections: [
       {
         title: 'Game modes',
         items: [
-          'Order — ten results read oldest first, spread across the whole career, so you get an arc — 2019 → 2021 → 2024 → 2026 — rather than one good year.',
-          'Random — the same kind of ten, in no order at all. No arc to read, just ten facts.',
+          'Order — ten results spread across the career, oldest first.',
+          'Random — the same kind of ten, in no order.',
         ],
       },
       {
         title: 'Which ten',
         items: [
-          'Not the ten best. A hand mixes finishes — a win, a top 10, a 40th — rather than five 1sts in a row that only say “a winner”.',
-          'Bigger stages are preferred: a Globals or a World Cup placing over a small regional final.',
-          'The ten describe exactly one player whenever the career allows it: a duo partner who stood beside them at every one of those events is ruled out by at least one result they did not share.',
-          'The exception is the thirteen players who never played a major without the same partner — the clues fit the partner too, so if you name the partner, the next guess is the one.',
-          'The opening does not give it away. For the best-known players the first three clues are never a win or a podium on a $1M stage; for regulars the first two. The deep cuts get their big results early, because nobody could name them otherwise.',
-          'A career of ten majors or fewer is shown whole — there is nothing to choose — so in Order it reads oldest first whatever it opens on. Random still keeps the big results out of the opening.',
-          'The same player is dealt a different ten the next time they come round.',
+          'A mix of finishes — a win, a top 10, a 40th — with the bigger stages preferred.',
+          'The first clues never give it away: no win or big podium in the first three for the best-known players.',
+          'The ten fit only one player, except for thirteen who played every major beside the same partner. Name the partner and your next guess is the one.',
         ],
       },
       POOL_SECTION,
@@ -190,9 +185,9 @@ export const GAMES: GameMeta[] = [
       'You may guess after every clue. The round ends on a correct guess or when the clues run out.',
     ],
     rules: [
-      'Teammates are ranked by how many tournaments the pair entered together, counted across every tournament in the export.',
-      'A clue is a teammate who entered at least three tournaments with the answer. The answer needs three such teammates and five majors on record.',
-      'Get it right and the rest of the clue list turns face up, dimmed, with the counts shown.',
+      'Teammates are ranked by how many tournaments the pair entered together, across every tournament on record.',
+      'A clue is a teammate who entered at least three tournaments with the answer. Only players with three such teammates and five majors can be the answer.',
+      'When the round ends, the rest of the list turns face up with the counts.',
     ],
     sections: [
       {
@@ -221,29 +216,24 @@ export const GAMES: GameMeta[] = [
     ],
     rules: [
       'Easy: unlimited guesses — just find all ten.',
-      'Hard: you start with 3 lives and every wrong guess costs one.',
-      'A tournament board ranks the finishing positions, so on a duos or trios event a slot is a whole team — it fills in as you name them and only locks once you have every one.',
-      'Under every board, “What counts here” says what its words mean — which events are majors, which are LANs, whose nationality a dual national counts for.',
+      'Hard: 3 lives, and every wrong guess costs one.',
+      'On a duos or trios board a slot is a whole team, and it locks once you have named everyone on it.',
+      '“What counts here” under each board explains its words — which events are majors or LANs, whose nationality a dual national counts for.',
     ],
     sections: [
       {
         title: 'Categories',
         items: [
-          'Nearly four hundred boards, grouped: players, regions, countries, tournaments, FNCS grand finals by region, organisations, paydays.',
-          'Some are about the whole career — earnings, FNCS wins, LAN appearances. Some are about one year, one region, one country or one tournament.',
-          'Not every board wants a player. An organisations board wants org names, a countries board wants country names, and a paydays board wants the tournament where the money was won — the prompt above the input says which.',
-          'Hit Random for a board you did not choose, or search the list if you have one in mind.',
+          'Nearly four hundred boards: players, regions, countries, tournaments, FNCS finals, organisations and paydays. Hit Random, or search for one.',
+          'Not every board wants a player. Some want an organisation, a country or a tournament — the input says which.',
         ],
       },
       {
         title: 'Ties',
         items: [
-          'Every board prints its tie rule above the ten slots, because they differ.',
-          'Counts — wins, appearances, players — are split by career earnings: of two players on the same number, the bigger earner ranks higher. Countries and organisations are split by their players’ combined earnings.',
-          'Money boards are straight money order, and youngest and oldest go by the birth date rather than the age in years.',
-          'If 10th and 11th are still level after the tie rule, the board is not offered at all. The alphabet never decides who is 10th.',
-          'Naming someone level with 10th but ranked out by the tie rule is a near miss: it is called out, and it never costs a life.',
-          'A tournament where two teams share a place in the top eleven is not offered either.',
+          'Every board prints its tie rule above the slots. On a count, the bigger career earner ranks higher.',
+          'If 10th and 11th are still level after the tie rule, the board is not offered.',
+          'Naming the 11th is a near miss: it is called out, and it never costs a life.',
         ],
       },
     ],
@@ -278,7 +268,7 @@ export const GAMES: GameMeta[] = [
       'Repeating a name you already found does not count again.',
       'Easy: wrong answers cost nothing.',
       'Hard: every wrong answer takes 3 seconds off the clock.',
-      'Name every player on the list and the round ends there and then — you do not have to sit out the clock to win it.',
+      'Name everyone on the list and you win straight away.',
       'When time runs out you see everyone you missed.',
       'The suggestion box helps you spell a name you already thought of — it never tells you whether that name is on the list.',
     ],
@@ -286,10 +276,8 @@ export const GAMES: GameMeta[] = [
       {
         title: 'The lists',
         items: [
-          'Qualified fields — everyone who made it to the FNCS Globals, or to the Esports World Cup.',
-          'FNCS grand final winners, split by region, because Europe’s winners and North America’s are two different memories.',
-          'LAN winners — Epic’s offline majors only; “What counts here” under the list names every one of them.',
-          'Major tournament winners, year by year — Epic’s tier-1 finals: FNCS grand finals, the Globals, the World Cup and Epic’s LANs.',
+          'Nearly two hundred: an organisation’s players, FNCS winners by region or year, earnings thresholds, countries, the top earners’ teammates, and who played two events.',
+          '“What counts here” under each list explains its words — which events are LANs or majors, whose nationality a dual national counts for.',
         ],
       },
     ],
@@ -358,35 +346,32 @@ export const GAMES: GameMeta[] = [
     tagline: 'Fill the grid with players who match both conditions.',
     icon: '⭕',
     intro: [
-      'A 3×3 grid has a category on every row and every column. Each cell needs a player who satisfies both.',
-      'You do not pick the cell. Type a player’s name and the grid works out where they belong.',
+      'A 3×3 grid has a category on every row and every column. Fill each cell with a player who fits both.',
+      'Type a player’s name and the grid places them. If they fit more than one cell, you tap which.',
+    ],
+    rules: [
+      'A player who fits no open cell costs a life.',
+      'Each player can be used once.',
+      'The grid never offers a cell that would leave another with nobody left to fill it.',
     ],
     sections: [
       {
-        title: 'Where your player lands',
-        items: [
-          'Fits no open cell — rejected, and on Easy and Medium that costs a mistake.',
-          'The grid only ever offers a cell that leaves every other empty cell still fillable with players you have not used. A cell that would strand another is never offered.',
-          'Exactly one such cell — placed there automatically. That includes the cell you are the last possible answer for: putting you anywhere else would strand it.',
-          'Several — the grid highlights them and you tap one.',
-        ],
-      },
-      {
         title: 'Difficulty',
         items: [
-          'Easy 🟢 — built on the names everyone knows, at least three of them per cell. Three wrong answers end the board.',
-          'Medium 🟡 — the scene’s regulars join in, at least two per cell. Three wrong answers end the board.',
-          'Hard 🔴 — a cell may have a single answer from anywhere on record. Nine guesses, one per cell.',
-          'At every level any player who fits is accepted — the level decides what the board is built around, not who you may type.',
+          'Easy 🟢 — every cell has at least three names everyone knows. 3 lives.',
+          'Medium 🟡 — every cell has at least two of the scene’s regulars. 3 lives.',
+          'Hard 🔴 — a cell may have only one answer. 1 life.',
+          'At every level, any player who fits is accepted.',
         ],
       },
       {
-        title: 'Other rules',
+        title: 'Categories',
         items: [
-          'Every player may only be used once on the board.',
-          'Boards are generated and checked, so all nine cells can always be filled with nine different players.',
-          'Title rules say what was won: “Won EU FNCS” is the regional FNCS, and a Globals never makes someone a European winner because it was held in Copenhagen.',
-          'Cells show the handle alone, for the same reason Griefer does.',
+          'Won EU FNCS, Won FNCS in 2023 — the regional FNCS finals. A Globals is not an FNCS win.',
+          'Won FNCS with Peterbot — was on one of his FNCS-winning teams: Cold, Ritual, Pollo or Bylah.',
+          'Top 3 at a LAN — a podium finish at any LAN in “What the words mean”.',
+          'Won FNCS back to back — won two FNCS in a row, in any region.',
+          'Played at an event — was in its field, whatever the result.',
         ],
       },
     ],
@@ -401,7 +386,7 @@ export const GAMES: GameMeta[] = [
     icon: '🧩',
     intro: [
       '16 players hide 4 groups of 4. Select four and submit; a correct group locks in and reveals what its connection was.',
-      'You have four lives, shown as hearts. Every wrong group costs one.',
+      'You have 4 lives, and every wrong group costs one.',
     ],
     rules: [
       'A group is a country, a region, an organisation, a title — FNCS, LAN, major — or an earnings threshold. Nothing more obscure than that, and no birth years: nobody can tell a 2005 from a 2006.',
@@ -423,7 +408,7 @@ export const GAMES: GameMeta[] = [
     icon: '🎯',
     intro: [
       'Guess any player and you get a row of comparisons against the secret one. Use them to close in.',
-      'You have 8 guesses.',
+      'You have 8 lives, and every wrong guess costs one.',
     ],
     rules: [
       'Green means a match, red means not. There is no in-between colour — the arrows already say which way to go.',

@@ -37,7 +37,6 @@ export type CriterionKind =
   | 'won-fncs-region'
   | 'won-fncs-year'
   | 'played-event'
-  | 'status'
   | 'age';
 
 export interface PlayerCriterion {
@@ -77,18 +76,11 @@ export interface CriteriaOptions {
 }
 
 /**
- * Players who may anchor a "has won an FNCS with X" rule, biggest earners
- * first. Capped for the reason `maxOrgs` is: forty of them would crowd every
- * other kind off the board.
+ * The fewest partners that make an anchor for "has won an FNCS with X". Lower
+ * than the usual minimum, because three is already a long FNCS career:
+ * Peterbot's five titles were won with four people.
  */
-const MAX_ANCHORS = 8;
-
-/**
- * The fewest partners that make an anchor. Lower than the usual minimum,
- * because four is a long FNCS career: Peterbot's five titles were won with
- * four people.
- */
-const MIN_PARTNERS = 4;
+const MIN_PARTNERS = 3;
 
 /**
  * How the scene writes each FNCS region. South America is Liquipedia's label
@@ -133,12 +125,12 @@ export function buildCriteria(
     add(`region:${region}`, 'region', `competes in ${region}`, region, (p) => p.region === region);
   }
 
-  add('status:active', 'status', 'is still competing', 'Active', (p) => p.status === 'active');
-  add('status:retired', 'status', 'has retired from competing', 'Retired', (p) => p.status !== 'active');
+  // No active / retired rule: Liquipedia rarely marks a player retired, so
+  // "Retired" refused players everyone knows have stopped (removed 28 Sep 2026).
 
   for (const [id, label, short, test] of [
-    ['age:under-18', 'is under 18', 'Under 18', (p: RosterPlayer) => p.age !== null && p.age < 18],
-    ['age:20-plus', 'is 20 or older', '20+', (p: RosterPlayer) => p.age !== null && p.age >= 20],
+    ['age:under-18', 'is under 18', 'Aged under 18', (p: RosterPlayer) => p.age !== null && p.age < 18],
+    ['age:20-plus', 'is 20 or older', 'Aged 20+', (p: RosterPlayer) => p.age !== null && p.age >= 20],
   ] as const) {
     add(id, 'age', label, short, test);
   }
@@ -204,18 +196,22 @@ export function buildCriteria(
   add(
     'fncs-back-to-back',
     'fncs-back-to-back',
-    'has won the FNCS back to back',
-    'Back-to-back FNCS',
+    'has won two FNCS in a row',
+    'Won FNCS back to back',
     (p) => backToBack.has(p.id),
   );
 
-  // "Won FNCS with Peterbot": anyone who was on one of his winning teams.
-  let anchors = 0;
-  for (const anchor of [...players].sort((a, b) => b.earnings - a.earnings)) {
-    if (anchors >= MAX_ANCHORS) break;
+  /*
+   * "Won FNCS with Peterbot": anyone who was on one of his winning teams.
+   *
+   * Any household name can be the anchor: the Easy fame tier, so the rule is
+   * never about someone you would have to look up. This used to be the eight
+   * biggest earners only, which put the same eight names on every board.
+   */
+  for (const anchor of players) {
+    if (anchor.tier !== 'easy') continue;
     const partners = facts.fncsPartners(anchor.id);
     if (partners.size < MIN_PARTNERS) continue;
-    const before = out.length;
     add(
       `fncs-with:${anchor.id}`,
       'fncs-with',
@@ -224,7 +220,6 @@ export function buildCriteria(
       (p) => partners.has(p.id),
       MIN_PARTNERS,
     );
-    if (out.length > before) anchors++;
   }
 
   // Top 3 at one of Epic's LANs. Empty until `facts.json` carries `podium`.
@@ -232,7 +227,7 @@ export function buildCriteria(
     'lan-podium',
     'lan-podium',
     'has finished top 3 at a LAN',
-    'LAN podium',
+    'Top 3 at a LAN',
     (p) => facts.of(p.id).podium.some((index) => facts.events[index]?.lan),
   );
 

@@ -44,8 +44,8 @@ const meta = getGame('higher-lower')!;
  */
 const LEVELS: LevelOption<Difficulty>[] = [
   { id: 'easy', label: '🟢 Easy', hint: 'Famous names far apart. Gets harder slowly.' },
-  { id: 'medium', label: '🟡 Medium', hint: 'Starts the same, gets harder sooner.' },
-  { id: 'hard', label: '🔴 Hard', hint: 'Gets harder much quicker, and adds an Equal button.' },
+  { id: 'medium', label: '🟡 Medium', hint: 'Famous names far apart. Gets harder sooner.' },
+  { id: 'hard', label: '🔴 Hard', hint: 'Gets harder much quicker, and adds an Equal button for ties.' },
 ];
 
 function displayValue(player: Contender, category: Category): string {

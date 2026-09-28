@@ -16,10 +16,6 @@ export { NEAR_NESTED };
 /** Pure logic for the 3x3 grid game. */
 
 export const SIZE = 3;
-/** Easy and Medium allow this many wrong answers. Hard counts guesses instead. */
-export const MAX_MISTAKES = 3;
-/** Hard gives exactly one guess per cell, so every one has to land. */
-export const HARD_GUESSES = SIZE * SIZE;
 /** How many candidate boards to try per pass. */
 const GENERATION_ATTEMPTS = 600;
 
@@ -42,11 +38,15 @@ export type Difficulty = 'easy' | 'medium' | 'hard';
  * `answers` is how many players from the level's fame band every cell must
  * have — three household names per cell on Easy, so there is always one you
  * know, and a single answer from anywhere on Hard.
+ *
+ * `lives` is how many wrong answers end the board. Hard used to give "nine
+ * guesses, one per cell", which is one life said the long way round: the
+ * first wrong guess left eight for nine cells.
  */
-export const LEVELS: Record<Difficulty, { answers: number }> = {
-  easy: { answers: 3 },
-  medium: { answers: 2 },
-  hard: { answers: 1 },
+export const LEVELS: Record<Difficulty, { answers: number; lives: number }> = {
+  easy: { answers: 3, lives: 3 },
+  medium: { answers: 2, lives: 3 },
+  hard: { answers: 1, lives: 1 },
 };
 
 export interface Board {
@@ -76,7 +76,7 @@ export interface GameState {
   /** Filled cells keyed "row,col". */
   filled: Map<string, RosterPlayer>;
   mistakes: number;
-  /** Every player submitted, right or wrong. Hard is capped on this. */
+  /** Every player submitted, right or wrong. */
   guesses: number;
   status: 'playing' | 'won' | 'lost';
 }
@@ -237,8 +237,8 @@ export function createGame(board: Board, difficulty: Difficulty): GameState {
   return { board, difficulty, filled: new Map(), mistakes: 0, guesses: 0, status: 'playing' };
 }
 
-export function guessesLeft(state: GameState): number {
-  return state.difficulty === 'hard' ? HARD_GUESSES - state.guesses : Number.POSITIVE_INFINITY;
+export function livesLeft(state: GameState): number {
+  return Math.max(0, LEVELS[state.difficulty].lives - state.mistakes);
 }
 
 export interface Cell {
@@ -349,23 +349,12 @@ export function place(
   };
 }
 
-/**
- * Books a guess and ends the round if it was the last one available.
- *
- * Easy and Medium count mistakes and forgive three. Hard counts guesses and
- * gives exactly nine — one per cell — so a wrong answer is not punished
- * separately, it simply costs a cell you can no longer fill.
- */
+/** Books a guess, and ends the round when a wrong one spends the last life. */
 function charge(state: GameState, correct: boolean): GameState {
   const guesses = state.guesses + 1;
   const mistakes = state.mistakes + (correct ? 0 : 1);
   const out = { ...state, guesses, mistakes };
-  if (state.difficulty !== 'hard') {
-    return mistakes >= MAX_MISTAKES ? { ...out, status: 'lost' } : out;
-  }
-  // Hard: nine guesses total, and every unfilled cell needs one of them.
-  const remaining = SIZE * SIZE - out.filled.size;
-  return HARD_GUESSES - guesses < remaining ? { ...out, status: 'lost' } : out;
+  return mistakes >= LEVELS[state.difficulty].lives ? { ...out, status: 'lost' } : out;
 }
 
 /** Ends the round unsolved, so the remaining cells can be revealed. */
@@ -391,10 +380,7 @@ export function solutionFor(state: GameState, row: number, col: number): RosterP
  * FaZe" adds up across every board it appears on.
  */
 export function record(state: GameState): { outcome: Outcome; r: GamePayloads['tic-tac-toe'] } {
-  const outOfGuesses =
-    state.difficulty === 'hard'
-      ? HARD_GUESSES - state.guesses < SIZE * SIZE - state.filled.size
-      : state.mistakes >= MAX_MISTAKES;
+  const outOfGuesses = livesLeft(state) === 0;
   const rule = (criterion: PlayerCriterion) => ({ id: criterion.id, name: criterion.short });
   return {
     outcome: state.status === 'won' ? 'won' : outOfGuesses ? 'lost' : 'gave-up',

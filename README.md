@@ -46,7 +46,7 @@ To bring it up to date: [UPDATE_DATA.md](UPDATE_DATA.md).**
 | Tenaball | ~290 categories × Easy / Hard | Boards answer in players, organisations, countries *or* tournaments. Each states its own tie rule. A tournament board is ten placements, so a duos slot wants both names |
 | List | Easy / Hard | ~180 categories. 90s, +5s per correct answer, −3s per miss on Hard. Naming everyone ends the round as a win |
 | Griefer | All at once / One by one | Ten cards, four to six of which **fit** the rule, and the board never says how many. Cards show the handle only |
-| Tic Tac Toe | Easy / Medium / Hard | Type any player; the grid only offers cells that keep the board solvable, and places them itself when there is one. Easy boards have 3+ household names per cell, Medium 2+ regulars; Hard may have one answer and gives 9 guesses |
+| Tic Tac Toe | Easy / Medium / Hard | Type any player; the grid only offers cells that keep the board solvable, and places them itself when there is one. Easy boards have 3+ household names per cell, Medium 2+ regulars; Hard may have one answer. Lives shown as hearts: 3, 3 and 1 |
 | Connections | — | 16 players, 4 groups that each land on exactly their own four, 4 lives shown as hearts. No birth-year groups |
 | Guess the Player | Exact / Direction | 8 attributes — including FNCS finals played and "played together" (10+ events as teammates) — green or red, 8 guesses |
 

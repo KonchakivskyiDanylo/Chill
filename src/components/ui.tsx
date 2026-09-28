@@ -63,6 +63,23 @@ export function Stat({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
+/**
+ * Lives as hearts, full ones first, emptying as they are spent. Every game
+ * with lives shows them this way, so how many you can still get wrong reads
+ * the same at a glance everywhere.
+ */
+export function Hearts({ left, total }: { left: number; total: number }) {
+  return (
+    <span className="hearts" aria-label={`${left} of ${total} ${total === 1 ? 'life' : 'lives'} left`}>
+      {Array.from({ length: total }, (_, index) => (
+        <span key={index} className={index < left ? 'heart' : 'heart heart--spent'} aria-hidden="true">
+          {index < left ? '♥' : '♡'}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 export function Banner({
   tone = 'info',
   title,

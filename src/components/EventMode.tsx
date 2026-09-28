@@ -1,5 +1,5 @@
 import { usePools } from '@/data/liquipedia/usePools';
-import { activePool, useEventMode } from '@/games/shared/mode';
+import { activePool, SHOW_EVENT_MODE, useEventMode } from '@/games/shared/mode';
 import { plural } from '@/lib/format';
 
 /**
@@ -25,8 +25,9 @@ export function ModePicker() {
   const [event, setEvent] = useEventMode();
 
   const available = pools?.pools ?? [];
-  // No pools generated yet — say nothing rather than showing a mode of one.
-  if (available.length === 0) return null;
+  // Switched off, or no pools generated yet — say nothing rather than showing
+  // a mode of one.
+  if (!SHOW_EVENT_MODE || available.length === 0) return null;
 
   return (
     <section className="card stack-sm">

@@ -234,8 +234,9 @@ export function giveUp(state: GameState): GameState {
   return state.status === 'playing' ? { ...state, status: 'lost' } : state;
 }
 
-export function guessesLeft(state: GameState): number {
-  return MAX_GUESSES - state.rows.length;
+/** Hearts still full: every wrong guess spends one, the right one does not. */
+export function livesLeft(state: GameState): number {
+  return MAX_GUESSES - state.rows.filter((row) => row.player.id !== state.secret.id).length;
 }
 
 /** The round as the analytics record it. Lost with guesses left means given up. */
