@@ -441,6 +441,65 @@ export const GAMES: GameMeta[] = [
     hidden: true,
     Component: lazy(() => import('./guess-the-player/GuessThePlayerGame')),
   },
+  {
+    id: 'pyramid',
+    slug: 'pyramid',
+    title: 'Pyramid',
+    tagline: 'Sort ten players into order, best at the top.',
+    icon: '🔺',
+    intro: [
+      'Ten players and one category — FNCS finals, titles, earnings, LANs or a tournament’s top ten. Sort them into the pyramid with the best at the top, then check.',
+      'Every player in the right place turns green and locks. Red ones are in the wrong place.',
+    ],
+    rules: [
+      'Tap two players to swap them, or drag one onto another.',
+      'Players level on the value can go either way round.',
+    ],
+    sections: [
+      {
+        title: 'Difficulty',
+        items: [
+          'Easy 🟢 — famous players, and check as often as you like.',
+          'Medium 🟡 — the regulars too, closer values, 2 lives: a check that is not perfect costs one.',
+          'Hard 🔴 — anyone, the closest values, 1 life: one check, then the right order.',
+        ],
+      },
+    ],
+    terms: ['fncs-final', 'fncs-title', 'lan', 'earnings'],
+    // New 30 Sep 2026, not hosted yet.
+    hidden: true,
+    Component: lazy(() => import('./pyramid/PyramidGame')),
+  },
+  {
+    id: 'bingo',
+    slug: 'bingo',
+    title: 'Bingo',
+    tagline: 'Players are dealt one by one — fill all 16 squares before the deck runs out.',
+    icon: '🎱',
+    intro: [
+      'Every square is a category. Players are dealt one at a time: tap a square they fit, or skip them. Fill the whole card before the deck runs out.',
+    ],
+    rules: [
+      'A player on a square they do not fit costs a life, and that player.',
+      'Skipping is free — some players fit nothing on the card.',
+      'The deck always holds enough players for a full card, with some to spare.',
+      'No player fits more than 5 squares.',
+    ],
+    sections: [
+      {
+        title: 'Difficulty',
+        items: [
+          'Easy 🟢 — 50 famous players, 3 lives.',
+          'Medium 🟡 — 45 players, the regulars too, 3 lives.',
+          'Hard 🔴 — 40 players from anywhere, 2 lives.',
+        ],
+      },
+    ],
+    terms: ['nationality', 'region', 'org', 'fncs-title', 'fncs-final', 'lan', 'global', 'earnings', 'teammates'],
+    // New 30 Sep 2026, not hosted yet.
+    hidden: true,
+    Component: lazy(() => import('./bingo/BingoGame')),
+  },
 ];
 
 /**

@@ -70,6 +70,10 @@ function Detail({ game, data, text }: { game: GameId; data: Dashboard; text: str
       return <Boards rows={data.tenaball.filter((row) => has(row.name, ...row.answers.map((a) => a.name)))} wrong />;
     case 'list':
       return <Boards rows={data.list.filter((row) => has(row.name, ...row.answers.map((a) => a.name)))} />;
+    case 'bingo':
+      return <Boards rows={data.bingo.filter((row) => has(row.name, ...row.answers.map((a) => a.name)))} />;
+    case 'pyramid':
+      return <Boards rows={data.pyramid.filter((row) => has(row.name, ...row.answers.map((a) => a.name)))} />;
     case 'impostor':
       return <Griefer data={data} has={has} />;
     case 'tic-tac-toe':

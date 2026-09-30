@@ -20,15 +20,17 @@ The site is React, Vite and TypeScript. Every game splits in two: a pure `engine
 | Tic Tac Toe | Fill a 3×3 grid where every cell is a row rule and a column rule | `tic-tac-toe` |
 | Connections | Sort 16 players into four groups of four | `connections` |
 | Guess the Player | Close in on a secret player attribute by attribute, eight guesses | `guess-the-player` |
+| Pyramid | Sort ten players into a 1-2-3-4 pyramid on one category, best at the top | `pyramid` |
+| Bingo | Players are dealt one by one; put each on a 4×4 card of categories or skip, and fill the whole card | `bingo` |
 
-**Hidden for now (26 Sep 2026): Guess the Player, Connections and Griefer.** A `hidden` flag in the registry takes a game off the home page and the side nav, and the live site sends its address home. A dev server still opens it by URL, and `check:games` still plays it. Guess the Player needs more than it has. Of the three rule-grid games only one is kept, Tic Tac Toe: every board builds at every level and none repeats over 200 deals. Its Easy level is the thin one, with 30 distinct rules, and "won the EU FNCS" and "$1M+ earner" each sit on 41% of Easy boards. Delete the flag to bring a game back.
+**Hidden for now: Guess the Player, Connections and Griefer (26 Sep 2026), Pyramid and Bingo (new, 30 Sep 2026).** A `hidden` flag in the registry takes a game off the home page and the side nav, and the live site sends its address home. A dev server still opens it by URL, and `check:games` still plays it. Guess the Player needs more than it has. Of the three rule-grid games only one is kept, Tic Tac Toe: every board builds at every level and none repeats over 200 deals. Its Easy level is the thin one, with 30 distinct rules, and "won the EU FNCS" and "$1M+ earner" each sit on 41% of Easy boards. Delete the flag to bring a game back.
 
 Two folders keep old names: Fortnitedle lives in `wordle` and Griefer in `impostor`. The ids stay unchanged because best scores are stored under them.
 
 How it runs:
 
 - **Locally:** `npm run dev:all` starts the site on port 5173 and the API on port 3000. The analytics page opens without a password, and rounds you play are recorded to `server/.data` on your machine.
-- **In production:** Heroku is planned, not live yet. `npm start` serves the built site and the API from one Node process, stores records in Postgres, and puts `#/analytics` behind `ADMIN_PASSWORD`.
+- **In production:** Heroku, live since the end of September 2026. `npm start` serves the built site and the API from one Node process, stores records in Postgres, and puts `#/analytics` behind `ADMIN_PASSWORD`.
 - **No accounts yet.** Best scores live in each browser's local storage.
 
 ## The data
@@ -512,6 +514,37 @@ Birth year came off the list because nobody can tell a 2005 from a 2006 across f
 | FNCS 2026 Globals | 10 of 10 (was 7) | the field |
 
 Known gaps: most single-region pools (Asia, Oceania, several Hard tiers) cannot build a board, before and after the rebuild. South America Easy and Medium went from 4 in 10 to none: that pool has only five usable rules.
+
+## Pyramid
+
+Ten players and one category; sort them into a pyramid of 1, 2, 3 and 4, best at the top, and check. Everything in place turns green and locks; the rest is red until moved. Tap two to swap, or drag one onto another (pointer events, so it works on a phone).
+
+| Level | Who | Values | Checks |
+| --- | --- | --- | --- |
+| Easy | the Easy tier | start in the top quarter of the ranking; money at least 12% apart | unlimited |
+| Medium | Easy + Medium tiers | top third; 6% apart | 2 lives |
+| Hard | everyone | top half; 3% apart | 1 life |
+
+- **Categories:** FNCS grand finals played, FNCS wins, career earnings, earnings in a year, LAN appearances, and a tournament's top ten (Tenaball's tournament boards: the LANs on Easy, plus EU/NA finals since 2024 on Medium, every final on Hard; on a duos event each item is the team). Each kind is equally likely.
+- **Close but orderable:** money walks down the ranking taking the next player at least the level's gap below the last. Counts take one player per distinct value; FNCS wins and LANs have fewer than ten values, so up to three pairs share a value.
+- **Ties:** players level on a value are right either way round.
+- **Left out:** LAN wins — fifteen players have one, nearly all exactly one.
+
+## Bingo
+
+A 4×4 card of categories and a deck of players dealt one at a time: tap a square the player on show fits, or skip them. The aim is the full card (the user, 30 Sep 2026: "the aim is to solve full bingo"); lines are only progress. A player on a square they do not fit costs a life and that player; skipping is free.
+
+| Level | Deck | Dealt from | Every square has in the deck | Lives |
+| --- | --- | --- | --- | --- |
+| Easy | 50 | the Easy tier | 3 players | 3 |
+| Medium | 45 | Easy + Medium | 2 | 3 |
+| Hard | 40 | everyone | 2 | 2 |
+
+- **The deck:** players until every square is covered that many times, then anyone from the band — some fit nothing and are there to be skipped (about 3 per Easy deck, 10 on Medium and Hard). It is kept only if a full card is possible and stays possible with any one player removed, so no single player is the only way to a square.
+
+- **Squares:** Tic Tac Toe's categories plus Bingo's own: FNCS finals played (1+, 2+, 10+), played for 3+ organisations, FNCS finals in 2+ regions, played the World Cup, won FNCS with 2+ teammates, and 10+ tournaments with a famous player (complete at 10 — the teammates file keeps each player's top 50).
+- **How a card is drawn:** weighted by kind like Tic Tac Toe, at most two of a kind, no two nearly the same, and no player fitting more than 5 squares (one name used to fit 7–10).
+- **Not possible from the export:** "is a controller player" (no input device in the data) and "was in a trio with X" (teammates are not split by mode).
 
 ## Guess the Player
 

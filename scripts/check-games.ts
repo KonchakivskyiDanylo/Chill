@@ -29,6 +29,7 @@ import { GAMES, getGame, VISIBLE_GAMES } from '@/games/registry';
 import {
   buildCriteria,
   hasNestedPair,
+  isNested,
   NEAR_NESTED,
   type CriteriaSource,
   type PlayerCriterion,
@@ -36,6 +37,7 @@ import {
 import { makeRng, shuffle } from '@/lib/rng';
 import { aggregate, playerIndex, playerLens } from '@/analytics/aggregate';
 import {
+  GAME_IDS,
   MAX_RECORD_BYTES,
   RECORD_VERSION,
   type GameId,
@@ -56,6 +58,8 @@ import * as griefer from '@/games/impostor/engine';
 import * as ttt from '@/games/tic-tac-toe/engine';
 import * as connections from '@/games/connections/engine';
 import * as gtp from '@/games/guess-the-player/engine';
+import * as pyramid from '@/games/pyramid/engine';
+import * as bingo from '@/games/bingo/engine';
 
 const problems: string[] = [];
 const notes: string[] = [];
@@ -83,7 +87,11 @@ for (const game of GAMES) {
   check(getGame(game.slug) === game, `registry: getGame('${game.slug}') did not find ${game.title}`);
   check(getGame(game.id) === game, `registry: getGame('${game.id}') did not find ${game.title}`);
 }
-check(GAMES.length === 10, `registry: expected 10 games, found ${GAMES.length}`);
+// Every game records its rounds under an id the analytics know, and every id has a game.
+check(
+  GAMES.length === GAME_IDS.length && GAME_IDS.every((id) => GAMES.some((game) => game.id === id)),
+  `registry: ${GAMES.length} games but ${GAME_IDS.length} analytics ids`,
+);
 // Hidden games leave the lists, not the registry: they are still played below.
 check(
   VISIBLE_GAMES.length > 0 && VISIBLE_GAMES.every((game) => !game.hidden),
@@ -1239,6 +1247,175 @@ if (facts) {
   }
 }
 
+// ------------------------------------------------------------------ Pyramid
+if (facts) {
+  /** Swaps a game into the right order, the way a player would. */
+  const solve = (game: pyramid.GameState): pyramid.GameState => {
+    for (let i = 0; i < pyramid.SIZE; i++) {
+      const j = game.order.findIndex((item, k) => k >= i && item.value === game.puzzle.items[i].value);
+      game = pyramid.swap(game, i, j);
+    }
+    return game;
+  };
+  for (const level of ['easy', 'medium', 'hard'] as const) {
+    let built = 0;
+    let pairs = 0;
+    const kinds = new Map<string, number>();
+    for (let seed = 0; seed < 40; seed++) {
+      const puzzle = pyramid.generatePuzzle(roster, facts, rankings, level, `p-${level}-${seed}`);
+      if (!puzzle) continue;
+      built++;
+      const tag = `pyramid ${level}: "${puzzle.title}"`;
+      const kind = puzzle.id.replace(/:\d{4}$/, ':year').replace(/^tournament:.*/, 'tournament');
+      kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+      const values = puzzle.items.map((item) => item.value);
+      check(puzzle.items.length === pyramid.SIZE, `${tag} has ${puzzle.items.length} items`);
+      check(new Set(puzzle.items.map((item) => item.id)).size === pyramid.SIZE, `${tag} repeats an item`);
+      const lowerBetter = puzzle.id.startsWith('tournament:');
+      check(
+        values.every((value, i) => i === 0 || (lowerBetter ? value > values[i - 1] : value <= values[i - 1])),
+        `${tag} is not in order`,
+      );
+      // Never three on one value; money never level, and never a coin flip.
+      const perValue = new Map<number, number>();
+      for (const value of values) perValue.set(value, (perValue.get(value) ?? 0) + 1);
+      check(Math.max(...perValue.values()) <= 2, `${tag} has three players on one value`);
+      pairs += [...perValue.values()].filter((n) => n === 2).length;
+      if (puzzle.id.startsWith('earnings')) {
+        const gap = pyramid.LEVELS[level].gap;
+        check(
+          values.every((value, i) => i === 0 || value <= values[i - 1] * (1 - gap) + 1e-9),
+          `${tag} has two amounts closer than ${gap * 100}%`,
+        );
+      }
+
+      // The start gives nothing away; sorted and checked, it wins on the first check.
+      const fresh = pyramid.createGame(puzzle, level, `o-${seed}`);
+      check(pyramid.inPlace(fresh) <= 1, `${tag} starts with ${pyramid.inPlace(fresh)} in place`);
+      const won = pyramid.check(solve(fresh));
+      check(won.status === 'won' && won.checks === 1, `${tag} sorted right read ${won.status}`);
+      // A level pair is right either way round.
+      const pair = values.findIndex((value, i) => i > 0 && value === values[i - 1]);
+      if (pair > 0) {
+        const flipped = pyramid.check(pyramid.swap(solve(fresh), pair - 1, pair));
+        check(flipped.status === 'won', `${tag} refused a level pair the other way round`);
+      }
+    }
+    check(built >= 38, `pyramid ${level}: only ${built} of 40 seeds made a pyramid`);
+    notes.push(
+      `pyramid ${level}: ${built}/40 built, ${pairs} level pairs; ` +
+        [...kinds].sort((a, b) => b[1] - a[1]).map(([kind, n]) => `${kind} ${n}`).join(', '),
+    );
+  }
+
+  // Lives: Hard ends on the first imperfect check, Medium on the second, Easy never.
+  const puzzle = pyramid.generatePuzzle(roster, facts, rankings, 'easy', 'lives')!;
+  const unsorted = (level: pyramid.Difficulty) => {
+    let game = pyramid.createGame(puzzle, level, 'lives');
+    // Make sure it is not already right.
+    if (pyramid.inPlace(game) === pyramid.SIZE) game = pyramid.swap(game, 0, 1);
+    return game;
+  };
+  check(pyramid.check(unsorted('hard')).status === 'lost', 'pyramid: hard survived an imperfect check');
+  const medium = pyramid.check(unsorted('medium'));
+  check(medium.status === 'playing' && medium.lives === 1, 'pyramid: medium lost on the first imperfect check');
+  check(pyramid.check(medium).status === 'lost', 'pyramid: medium survived a second imperfect check');
+  let easy = unsorted('easy');
+  for (let i = 0; i < 5; i++) easy = pyramid.check(easy);
+  check(easy.status === 'playing', 'pyramid: easy ran out of checks');
+  // What a check locks stays put; what it marks wrong loses the mark once moved.
+  const locked = [...easy.locked][0];
+  if (locked) {
+    const at = easy.order.findIndex((item) => item.id === locked);
+    const other = easy.order.findIndex((item) => !easy.locked.has(item.id));
+    check(pyramid.swap(easy, at, other) === easy, 'pyramid: a locked player moved');
+  }
+  const [a, b] = easy.order.map((item, i) => (easy.wrong.has(item.id) ? i : -1)).filter((i) => i >= 0);
+  if (b !== undefined) {
+    const moved = pyramid.swap(easy, a, b);
+    check(!moved.wrong.has(easy.order[a].id), 'pyramid: a moved player kept its red mark');
+  }
+}
+
+// -------------------------------------------------------------------- Bingo
+if (facts && orgs) {
+  const source = { facts, orgs, teammates, roster: roster.players };
+  const eligible = facts.eligible(3);
+  const bandOf = (level: bingo.Difficulty) => bingo.LEVELS[level].bands.flatMap((band) => roster.exactly(band, { eligible }));
+  for (const level of ['easy', 'medium', 'hard'] as const) {
+    const answers = bandOf(level);
+    const kinds = new Map<string, number>();
+    let built = 0;
+    let decoys = 0;
+    for (let seed = 0; seed < 25; seed++) {
+      const board = bingo.generateBoard(source, { answers }, level, `bingo-${level}-${seed}`);
+      if (!board) continue;
+      built++;
+      const tag = `bingo ${level}: card ${seed}`;
+      check(board.squares.length === bingo.SQUARES, `${tag} has ${board.squares.length} squares`);
+      check(new Set(board.squares.map((sq) => sq.id)).size === bingo.SQUARES, `${tag} repeats a square`);
+      const perKind = new Map<string, number>();
+      for (const sq of board.squares) {
+        perKind.set(sq.kind, (perKind.get(sq.kind) ?? 0) + 1);
+        kinds.set(sq.kind, (kinds.get(sq.kind) ?? 0) + 1);
+      }
+      check(Math.max(...perKind.values()) <= 2, `${tag} has three squares of one kind`);
+      const most = Math.max(...answers.map((player) => board.squares.filter((sq) => sq.test(player)).length));
+      check(most <= bingo.MAX_REACH, `${tag} lets one player fit ${most} squares`);
+      for (let i = 0; i < board.squares.length; i++) {
+        for (let j = i + 1; j < board.squares.length; j++) {
+          check(!isNested(board.squares[i], board.squares[j], NEAR_NESTED), `${tag}: "${board.squares[i].short}" and "${board.squares[j].short}" are nearly the same`);
+        }
+      }
+      // The deck: the level's size, no one twice, every square covered, and a full
+      // card in it that survives losing any one player.
+      check(board.deck.length === bingo.LEVELS[level].deck, `${tag} deals ${board.deck.length} players`);
+      check(new Set(board.deck.map((p) => p.id)).size === board.deck.length, `${tag} deals a player twice`);
+      board.squares.forEach((sq) => {
+        const cover = board.deck.filter((p) => sq.test(p)).length;
+        check(cover >= bingo.LEVELS[level].cover, `${tag}: "${sq.short}" has ${cover} players in the deck`);
+      });
+      check(bingo.robust(board.squares, board.deck), `${tag} has a player the full card cannot do without`);
+      decoys += board.deck.filter((p) => !board.squares.some((sq) => sq.test(p))).length;
+      const full = bingo.fullCard(board.squares, board.deck);
+
+      // A perfect round: each player the full card needs goes to their square, the rest are skipped.
+      if (full) {
+        const plan = new Map([...full].map(([square, player]) => [player.id, square]));
+        let game = bingo.createGame(board, level);
+        while (game.status === 'playing') {
+          const player = bingo.current(game)!;
+          const square = plan.get(player.id);
+          game = square === undefined ? bingo.skip(game) : bingo.place(game, square)!.state;
+        }
+        check(
+          game.filled.size === bingo.SQUARES && bingo.lines(game).length === bingo.LINES.length && game.wrong.length === 0,
+          `${tag}: a perfect round filled ${game.filled.size} squares`,
+        );
+        check(bingo.outcomeOf(game) === 'won', `${tag}: a full card read ${bingo.outcomeOf(game)}`);
+      }
+    }
+    check(built >= 24, `bingo ${level}: only ${built} of 25 seeds made a card`);
+    notes.push(`bingo ${level}: ${built}/25 cards, ${bingo.LEVELS[level].deck}-player decks with ${(decoys / Math.max(built, 1)).toFixed(1)} who fit nothing; ${[...kinds].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, n]) => `${k} ${n}`).join(', ')}`);
+  }
+
+  // A wrong square costs a life and the player; skipping costs nothing; the deck running out ends it.
+  const board = bingo.generateBoard(source, { answers: bandOf('hard') }, 'hard', 'bingo-lives')!;
+  const wrongSquare = (game: bingo.GameState) =>
+    board.squares.findIndex((sq, i) => !game.filled.has(i) && !sq.test(bingo.current(game)!));
+  let game = bingo.createGame(board, 'hard');
+  while (game.status === 'playing' && wrongSquare(game) < 0) game = bingo.skip(game);
+  if (game.status === 'playing') {
+    const missed = bingo.place(game, wrongSquare(game))!;
+    check(missed.outcome.kind === 'wrong' && bingo.livesLeft(missed.state) === bingo.LEVELS.hard.lives - 1, 'bingo: a wrong square did not cost one life');
+    check(missed.state.turn === game.turn + 1, 'bingo: a wrong square did not move to the next player');
+  }
+  let skipped = bingo.createGame(board, 'hard');
+  while (skipped.status === 'playing') skipped = bingo.skip(skipped);
+  check(skipped.skipped === board.deck.length && bingo.livesLeft(skipped) === bingo.LEVELS.hard.lives, 'bingo: skipping cost something');
+  check(bingo.outcomeOf(skipped) === 'lost', `bingo: skipping the whole deck read ${bingo.outcomeOf(skipped)}`);
+}
+
 // --------------------------------------------------------- 13. analytics records
 // One real round per game through its own engine, recorded the way the game
 // records it, then aggregated — so a record that stops matching what the
@@ -1389,6 +1566,38 @@ if (facts) {
       `analytics: higher-lower recorded ${made.outcome}, score ${made.r.score}, ${made.r.pairs.length} pairs`,
     );
     keep('higher-lower', made, { level: 'easy', category: 'earnings' });
+  }
+
+  // Pyramid: one check with some wrong, then given up.
+  if (facts) {
+    const puzzle = pyramid.generatePuzzle(roster, facts, rankings, 'easy', 'analytics')!;
+    let game = pyramid.createGame(puzzle, 'easy', 'analytics');
+    game = pyramid.giveUp(pyramid.check(game));
+    const made = pyramid.record(game);
+    check(
+      made.outcome === 'gave-up' && made.r.items.length === pyramid.SIZE && made.r.checks === 1,
+      `analytics: pyramid recorded ${made.outcome}, ${made.r.items.length} items, ${made.r.checks} checks`,
+    );
+    keep('pyramid', made, { level: 'easy' });
+  }
+
+  // Bingo: one square marked, one wrong, then given up.
+  if (facts && orgs) {
+    const easy = roster.exactly('easy', { eligible: facts.eligible(3) });
+    const board = bingo.generateBoard({ facts, orgs, teammates, roster: roster.players }, { answers: easy }, 'easy', 'analytics')!;
+    let game = bingo.createGame(board, 'easy');
+    while (!board.squares.some((sq) => sq.test(bingo.current(game)!))) game = bingo.skip(game);
+    const first = bingo.current(game)!;
+    game = bingo.place(game, board.squares.findIndex((sq) => sq.test(first)))!.state;
+    const second = bingo.current(game)!;
+    const wrong = board.squares.findIndex((sq, i) => !game.filled.has(i) && !sq.test(second));
+    if (wrong >= 0) game = bingo.place(game, wrong)!.state;
+    const made = bingo.record(bingo.giveUp(game));
+    check(
+      made.outcome === 'gave-up' && made.r.squares.length === bingo.SQUARES && made.r.placed.length === 1 && made.r.deck === board.deck.length,
+      `analytics: bingo recorded ${made.outcome}, ${made.r.squares.length} squares, ${made.r.placed.length} placed`,
+    );
+    keep('bingo', made, { level: 'easy' });
   }
 
   // A malformed row must cost itself, not the dashboard.

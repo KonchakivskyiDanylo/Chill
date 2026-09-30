@@ -1,0 +1,192 @@
+/*
+ * Pyramid: ten tiles in rows of 1, 2, 3 and 4, first place at the top.
+ *
+ * Every tile is a quarter of the bottom row's width, whatever row it is in,
+ * and each row is centred — that is the whole of the pyramid shape. Capped at
+ * 620px so four handles sit comfortably and the Check button stays on screen.
+ */
+
+.pyr-play {
+  max-width: 640px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.pyr-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+.pyr-head__group {
+  font-size: 0.72rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.pyr-head__title {
+  margin: 0;
+}
+.pyr-head__direction {
+  margin: 0;
+}
+.pyr-head__direction span {
+  color: var(--primary);
+}
+
+.pyr {
+  --pyr-gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pyr-gap);
+  width: 100%;
+  max-width: 620px;
+  margin: 0 auto;
+  /* Room for a tile being dragged past the edge. */
+  padding: 2px 0;
+}
+
+.pyr__row {
+  display: flex;
+  justify-content: center;
+  gap: var(--pyr-gap);
+}
+
+.pyr-tile {
+  position: relative;
+  flex: 0 0 calc((100% - 3 * var(--pyr-gap)) / 4);
+  min-height: 70px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 18px 6px 8px;
+  border-radius: 12px;
+  border: 2px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: grab;
+  /* A finger on a tile drags it rather than scrolling the page. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transition:
+    transform 0.14s ease,
+    border-color 0.12s ease,
+    background 0.12s ease,
+    box-shadow 0.12s ease;
+}
+button.pyr-tile:hover:not(.pyr-tile--right) {
+  border-color: var(--primary);
+}
+button.pyr-tile:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.pyr-tile__rank {
+  position: absolute;
+  top: 5px;
+  left: 7px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+/* First place gets the one bit of colour on the board. */
+.pyr__row:first-child .pyr-tile__rank {
+  color: var(--warning);
+}
+
+.pyr-tile__name {
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.pyr-tile__value {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pyr-tile__was {
+  font-size: 0.68rem;
+  color: var(--danger);
+}
+
+.pyr-tile__lock {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 0.66rem;
+}
+
+.pyr-tile--selected {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 18px rgba(91, 140, 255, 0.25);
+}
+
+.pyr-tile--dragging {
+  z-index: 5;
+  cursor: grabbing;
+  border-color: var(--primary);
+  box-shadow: var(--shadow);
+  /* Follows the pointer exactly; the easing would make it lag. */
+  transition: none;
+}
+
+.pyr-tile--target {
+  border-style: dashed;
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.pyr-tile--right {
+  border-color: rgba(34, 197, 94, 0.55);
+  background: var(--success-soft);
+  cursor: default;
+}
+
+.pyr-tile--wrong {
+  border-color: rgba(239, 68, 68, 0.55);
+  background: var(--danger-soft);
+}
+
+.pyr--answer .pyr-tile {
+  cursor: default;
+  padding-bottom: 6px;
+}
+
+@media (max-width: 480px) {
+  .pyr {
+    --pyr-gap: 6px;
+  }
+  .pyr-tile {
+    min-height: 64px;
+    padding: 16px 4px 6px;
+    border-radius: 10px;
+  }
+  .pyr-tile__name {
+    font-size: 0.74rem;
+  }
+  .pyr-tile__value {
+    font-size: 0.68rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pyr-tile {
+    transition: none;
+  }
+  .pyr-tile--selected {
+    transform: none;
+  }
+}

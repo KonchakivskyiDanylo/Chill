@@ -71,6 +71,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   tile: 'a tile',
   misgrouped: 'in a wrong four',
   hidden: 'the one to call',
+  sorted: 'one of a Pyramid’s ten',
 };
 
 /** What "got right" means in each role, where it means anything. */
@@ -81,6 +82,7 @@ export const GOOD_LABEL: Partial<Record<Role, string>> = {
   griefer: 'left out',
   tile: 'group solved',
   hidden: 'called right',
+  sorted: 'placed right',
 };
 
 export const pct = (part: number, whole: number) => (whole ? `${Math.round((part / whole) * 100)}%` : '—');

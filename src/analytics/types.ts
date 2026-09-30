@@ -31,6 +31,8 @@ export const GAME_IDS = [
   'tic-tac-toe',
   'connections',
   'guess-the-player',
+  'pyramid',
+  'bingo',
 ] as const;
 
 export type GameId = (typeof GAME_IDS)[number];
@@ -111,6 +113,17 @@ export interface GamePayloads {
   'higher-lower': {
     score: number;
     pairs: { shown: Ref; hidden: Ref; answer: string; correct: boolean }[];
+  };
+  /** The final arrangement: each item and whether it ended in its place. */
+  pyramid: { puzzle: Ref; items: { id: string; name: string; placed: boolean }[]; checks: number };
+  /** The sixteen squares, who went where, who was put on a square they did not fit, and how far through the deck. */
+  bingo: {
+    squares: Ref[];
+    placed: { square: number; player: Ref }[];
+    wrong: { square: number; player: Ref }[];
+    dealt: number;
+    deck: number;
+    lines: number;
   };
 }
 

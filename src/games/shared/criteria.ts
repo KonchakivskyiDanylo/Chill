@@ -37,7 +37,14 @@ export type CriterionKind =
   | 'won-fncs-region'
   | 'won-fncs-year'
   | 'played-event'
-  | 'age';
+  | 'age'
+  // Bingo's own (games/bingo/engine.ts); no other game builds these.
+  | 'fncs-finals'
+  | 'org-count'
+  | 'fncs-regions'
+  | 'world-cup'
+  | 'fncs-partners'
+  | 'played-with';
 
 export interface PlayerCriterion {
   id: string;

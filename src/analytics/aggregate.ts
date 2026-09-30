@@ -251,6 +251,10 @@ export interface Dashboard {
   whoAreYa: ClueRow[];
   tenaball: BoardRow[];
   list: BoardRow[];
+  /** Per category: how often each item ended in its place. */
+  pyramid: BoardRow[];
+  /** One row: every square that has come up, and how often it was marked. */
+  bingo: BoardRow[];
   griefer: { rules: RuleRow[]; misreads: Misread[] };
   ticTacToe: CellRow[];
   connections: { groups: GroupRow[]; misgrouped: Count[] };
@@ -469,6 +473,48 @@ function tenaball(rounds: Stored<RoundRecord<'tenaball'>>[]): BoardRow[] {
       wrong: top(wrongMap, 10),
     }))
     .sort((a, b) => b.plays - a.plays);
+}
+
+/**
+ * Pyramid, read as boards: a category is a board and its items the answers,
+ * "found" when they ended in their place — so the Tenaball table shows it.
+ */
+function pyramid(rounds: Stored<RoundRecord<'pyramid'>>[]): BoardRow[] {
+  return tenaball(
+    rounds.map((round) => ({
+      ...round,
+      body: {
+        ...round.body,
+        game: 'tenaball' as const,
+        r: {
+          board: round.body.r.puzzle,
+          answers: round.body.r.items.map((item) => ({ name: item.name, found: item.placed })),
+          wrong: [],
+        },
+      },
+    })),
+  );
+}
+
+/** Bingo, read as one board whose answers are the squares: "found" means marked. */
+function bingo(rounds: Stored<RoundRecord<'bingo'>>[]): BoardRow[] {
+  return tenaball(
+    rounds.map((round) => {
+      const marked = new Set(round.body.r.placed.map((entry) => entry.square));
+      return {
+        ...round,
+        body: {
+          ...round.body,
+          game: 'tenaball' as const,
+          r: {
+            board: { id: 'bingo', name: 'Bingo squares' },
+            answers: round.body.r.squares.map((square, index) => ({ name: square.name, found: marked.has(index) })),
+            wrong: [],
+          },
+        },
+      };
+    }),
+  );
 }
 
 function list(rounds: Stored<RoundRecord<'list'>>[]): BoardRow[] {
@@ -710,6 +756,8 @@ export function aggregate(
     whoAreYa: clueGames(of(valid, 'who-are-ya')),
     tenaball: tenaball(of(valid, 'tenaball')),
     list: list(of(valid, 'list')),
+    pyramid: pyramid(of(valid, 'pyramid')),
+    bingo: bingo(of(valid, 'bingo')),
     griefer: griefer(of(valid, 'impostor')),
     ticTacToe: ticTacToe(of(valid, 'tic-tac-toe')),
     connections: connections(of(valid, 'connections')),
@@ -729,10 +777,11 @@ export function aggregate(
  *   answer     an answer on a Tenaball board or a List
  *   fits       a Griefer card that fitted the rule
  *   griefer    a Griefer card that did not
- *   placed     a Tic Tac Toe answer someone used
+ *   placed     a Tic Tac Toe or Bingo answer someone used
  *   tile       a Connections tile
  *   misgrouped put in a wrong four in Connections
  *   hidden     the player to call Higher or Lower on
+ *   sorted     one of a Pyramid's ten
  */
 export type Role =
   | 'secret'
@@ -745,7 +794,8 @@ export type Role =
   | 'placed'
   | 'tile'
   | 'misgrouped'
-  | 'hidden';
+  | 'hidden'
+  | 'sorted';
 
 /** One appearance. `good` is whether whoever was playing got this player right, where that means anything. */
 interface Mention {
@@ -824,6 +874,19 @@ function mentions(body: RoundRecord): Mention[] {
     }
     case 'higher-lower': {
       for (const pair of (body.r as GamePayloads['higher-lower']).pairs) push('hidden', pair.hidden, pair.correct);
+      break;
+    }
+    case 'bingo': {
+      const r = body.r as GamePayloads['bingo'];
+      for (const entry of r.placed) push('placed', entry.player);
+      for (const entry of r.wrong ?? []) push('mistaken', entry.player);
+      break;
+    }
+    case 'pyramid': {
+      // A tournament's items are teams, "a|b" — not one player's id.
+      for (const item of (body.r as GamePayloads['pyramid']).items) {
+        if (!item.id.includes('|')) push('sorted', item, item.placed);
+      }
       break;
     }
   }
