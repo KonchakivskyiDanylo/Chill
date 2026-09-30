@@ -151,8 +151,8 @@ After changing one, you do not need Liquipedia again:
 `--from players` redoes titles and tiers too; `--out somewhere` builds into
 another folder so you can compare before touching the real files.
 
-**A new season.** List's season lists (who played every big event of the year,
-the top 10s, the top 10 duos) read the events named in `SEASON_YEAR` and
+**A new season.** Tenaball's season boards (the top 10s and top 10 duos) and
+List's "played every big event" read the events named in `SEASON_YEAR` and
 `SEASON_EVENTS` in `derived.py`. Change those when the year's big events change,
 then run `--from derived`.
 

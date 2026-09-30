@@ -167,10 +167,16 @@ def build(BASE):
         m = re.match(r'^(\d+)', str(raw or ''))
         return int(m.group(1)) if m else None
 
+    def did_not_play(row):
+        """A 'DNP' row: listed for the event, never took part - a substitute, or a
+        player replaced before it started. Three of them made the 2026 Globals a
+        field of 103; they are not results, appearances or entrants anywhere."""
+        return str(row.get('placement') or '').strip().upper() == 'DNP'
+
     PLACED = []
     for row in placements:
         t = tour_of.get(row.get('tournament'))
-        if not t:
+        if not t or did_not_play(row):
             continue
         r = rank_of(row.get('placement'))
         money = float(row.get('individualprizemoney') or 0)
@@ -181,6 +187,40 @@ def build(BASE):
         PLACED.append((t, r, money, pages))
 
     print(f'{len(PLACED):,} placement rows with at least one nameable player')
+
+    # ------------------------------------------------------------------ season --
+    # The big events of one year, for Tenaball's "Top 10 players of 2026" boards
+    # (cell 2) and List's "played all of them" (facts.json). Ranked by average
+    # finish, a missed event counting as SEASON_MISSED.
+    #
+    # The five were named by the user. EWC 2026 is Liquipedia's "Reload Elite
+    # Series 2026 - Championship" (its series is the Esports World Cup). A
+    # Major is its regional grand finals, and a player only plays their own.
+    SEASON_YEAR = 2026
+    SEASON_EVENTS = [
+        ("EWC", r"Reload Elite Series 2026 - Championship"),
+        ("Globals", r"FNCS 2026\s+Global Championship"),
+        ("Summit", r"FNCS 2026\s+Major 1 Summit"),
+        ("FNCS Major 1", r"FNCS 2026 - Major 1: .+ - Grand Finals"),
+        ("FNCS Major 2", r"FNCS 2026 - Major 2: .+ - Grand Finals"),
+    ]
+    SEASON_MISSED = 200
+    season_slot = {}
+    for slot, (label, pattern) in enumerate(SEASON_EVENTS):
+        names = {t["name"] for t in tournaments if re.fullmatch(pattern, t["name"])}
+        if not names:
+            print(f"  season: nothing matches {label!r} - its boards and lists will not be built")
+        season_slot.update((name, slot) for name in names)
+
+    # Every team's finish at each event. A finish of None is a DQ or a blank row:
+    # not a result to average.
+    SEASON_TEAMS = sorted(
+        {
+            (season_slot[t["name"]], r, tuple(sorted(page for page, _team in pages)))
+            for t, r, _money, pages in PLACED
+            if t["name"] in season_slot and r is not None
+        }
+    )
 
     # ======================================================================
     # Cell 2 — rankings.json
@@ -198,27 +238,45 @@ def build(BASE):
         """Equal on the value and on every tiebreak after it."""
         return a[2] == b[2] and a[3:] == b[3:]
 
-    def board(bid, group, title, entity, tie, ranked, fmt):
+    def board(bid, group, title, entity, tie, ranked, fmt, lower=False, members_of=None):
         """`ranked` is [(key, label, value)] or [(key, label, value, tiebreak...)],
         already sorted best-first.
 
         A board whose 10th and 11th are level on everything it ranks by has no
-        single right answer for the last slot, and is not written. Those used to be
-        split by name - "exact ties are split by name" - which is a rule a player
-        can read but not play. Everywhere else in the ten a level pair is only a
-        question of which slot is drawn first, so the name still orders them there
-        and nothing says so."""
+        single right answer for the last slot. Those used to be split by name,
+        which is a rule a player can read but not play, and then left out. Now
+        either of the two fills 10th (`shareCut`, the user's call on 30 Sep 2026)
+        and the rule says so. Only a pair: a 12th level too has no spare to be
+        tested against, so that board is still left out. Everywhere else in the
+        ten a level pair is only a question of which slot is drawn first, so the
+        name still orders them there and nothing says so.
+
+        `members_of` makes each row a team, as on the tournament boards."""
         if len(ranked) < SLOTS + 1:
             return
+        shared = False
         if level(ranked[SLOTS - 1], ranked[SLOTS]):
-            LEVEL_AT_CUT.append(bid)
-            return
-        rows = [{'key': k, 'label': l, 'value': round(v, 2), 'display': fmt(v)}
-                for k, l, v, *_ in ranked[:SLOTS]]
-        k, l, v, *_ = ranked[SLOTS]
-        boards.append({'id': bid, 'group': group, 'title': title, 'entity': entity,
-                       'tieRule': tie, 'rows': rows,
-                       'next': {'key': k, 'label': l, 'value': round(v, 2)}})
+            if len(ranked) > SLOTS + 1 and level(ranked[SLOTS], ranked[SLOTS + 1]):
+                LEVEL_AT_CUT.append(bid)
+                return
+            shared = True
+            tie = f'{tie} 10th and 11th are level, so either one fills 10th.'
+
+        def row(k, l, v):
+            out = {'key': k, 'label': l, 'value': round(v, 2), 'display': fmt(v)}
+            if members_of:
+                out['members'] = members_of(k)
+            return out
+
+        spare = row(*ranked[SLOTS][:3])
+        del spare['display']             # the 11th is a near-miss test, never shown
+        out = {'id': bid, 'group': group, 'title': title, 'entity': entity,
+               'tieRule': tie, 'rows': [row(*e[:3]) for e in ranked[:SLOTS]], 'next': spare}
+        if lower:
+            out['lowerIsBetter'] = True
+        if shared:
+            out['shareCut'] = True
+        boards.append(out)
 
     money = lambda v: '${:,.0f}'.format(v)
     count = lambda word: (lambda v: f'{v:,.0f} {word}' + ('' if v == 1 else 's'))
@@ -310,6 +368,61 @@ def build(BASE):
     for y in YEARS:
         board(f'year-earnings:{y}', 'Players', f'Top 10 earners in {y}', 'player',
               TIE_MONEY, rank(year_earn[y], NAME), money)
+
+    # -------------------------------------------------------------- the season --
+    # The year's big events (SEASON_EVENTS, cell 1): Europe, North America, the
+    # world, everyone else - in 2026 the world's ten are all European and North
+    # American - and the duos that played every one of them together, so Cold,
+    # with Rapid at EWC and Ritual at the Globals, is in none.
+    #
+    # A missed event counts as SEASON_MISSED, which puts the players at all of
+    # them first and lets a region with fewer than ten of those still fill a
+    # board. Level at 10th, either one fills it, as on every board.
+    n_season = len(SEASON_EVENTS)
+    finish, team_at = defaultdict(dict), defaultdict(dict)
+    for slot, r, ids in SEASON_TEAMS:
+        for pg in ids:
+            # Best finish, for a player listed twice at one event: Liquipedia has
+            # Astell in two duos at the 2026 Major 2 Asia final.
+            if r < finish[pg].get(slot, r + 1):
+                finish[pg][slot], team_at[pg][slot] = r, ids
+    season_avg = {pg: sum(f.get(slot, SEASON_MISSED) for slot in range(n_season)) / n_season
+                  for pg, f in finish.items()}
+    names = [label for label, _ in SEASON_EVENTS]
+    SEASON_TIE = (f"Average finish at {', '.join(names[:-1])} and {names[-1]}; "
+                  f'a missed event counts as {SEASON_MISSED}th.')
+    average = lambda v: f'{v:.1f}'
+
+    def season_ranked(keep):
+        return sorted(((pg, NAME(pg), v) for pg, v in season_avg.items() if keep(pg)),
+                      key=lambda e: (e[2], e[1].lower()))
+
+    region = lambda pg: player_of[pg].get('region') if pg in player_of else None
+    for bid, where, keep in [
+        ('Europe', ' — Europe', lambda pg: region(pg) == 'Europe'),
+        ('North America', ' — North America', lambda pg: region(pg) == 'North America'),
+        ('world', '', lambda pg: True),
+        ('rest', ' — outside EU and NA',
+         lambda pg: region(pg) not in (None, 'Europe', 'North America')),
+    ]:
+        board(f'season:{SEASON_YEAR}:{bid}', f'{SEASON_YEAR} season',
+              f'Top 10 players of {SEASON_YEAR}{where}', 'player', SEASON_TIE,
+              season_ranked(keep), average, lower=True)
+
+    together = {}
+    for pg, f in finish.items():
+        teams = {team_at[pg][slot] for slot in range(n_season) if slot in f}
+        if len(f) == n_season and len(teams) == 1 and len(next(iter(teams))) == 2:
+            together['|'.join(next(iter(teams)))] = season_avg[pg]
+    pair_label = lambda key: ' & '.join(sorted((NAME(pg) for pg in key.split('|')), key=str.lower))
+    board(f'season:{SEASON_YEAR}:duos', f'{SEASON_YEAR} season',
+          f'Top 10 duos of {SEASON_YEAR}', 'player',
+          f'Duos who played all {n_season} together. {SEASON_TIE} Both names fill one slot.',
+          sorted(((k, pair_label(k), v) for k, v in together.items()),
+                 key=lambda e: (e[2], e[1].lower())),
+          average, lower=True,
+          members_of=lambda key: [{'key': pg, 'label': NAME(pg)}
+                                  for pg in sorted(key.split('|'), key=lambda pg: NAME(pg).lower())])
 
     # ------------------------------------------------- player: region / country --
     region_of_page  = {p['pagename']: p.get('region') for p in PLAYABLE}
@@ -1015,7 +1128,7 @@ def build(BASE):
             continue
         raw, named, placed = set(), set(), {}
         for row in placements:
-            if row.get('tournament') != event:
+            if row.get('tournament') != event or did_not_play(row):
                 continue
             # None until the result is in: the 2026 Globals rows are the entrants
             # with no place, plus fifty places with nobody in them yet.
@@ -1079,7 +1192,7 @@ def build(BASE):
     pair = Counter()
     for row in placements:
         parts = row.get('participants') or []
-        if len(parts) < 2:
+        if len(parts) < 2 or did_not_play(row):
             continue
         # `resolve` drops anyone the roster marks unused, so a mate who cannot be
         # shown or guessed never reaches the file in the first place.
@@ -1288,37 +1401,10 @@ def build(BASE):
         )
 
     # ------------------------------------------------------------------ season --
-    # The big events of one year, for List's season lists: who played all of
-    # them, the top ten by average finish, and the duos that played every one
-    # together. Only the teams' finishes are written here; the averaging is
-    # List's (src/games/list/criteria.ts), next to the rest of its rules.
-    #
-    # The five were named by the user. EWC 2026 is Liquipedia's "Reload Elite
-    # Series 2026 - Championship" (its series is the Esports World Cup). A
-    # Major is its regional grand finals, and a player only plays their own.
-    SEASON_YEAR = 2026
-    SEASON_EVENTS = [
-        ("EWC", r"Reload Elite Series 2026 - Championship"),
-        ("Globals", r"FNCS 2026\s+Global Championship"),
-        ("Summit", r"FNCS 2026\s+Major 1 Summit"),
-        ("FNCS Major 1", r"FNCS 2026 - Major 1: .+ - Grand Finals"),
-        ("FNCS Major 2", r"FNCS 2026 - Major 2: .+ - Grand Finals"),
-    ]
-    slot_of = {}
-    for slot, (label, pattern) in enumerate(SEASON_EVENTS):
-        names = {t["name"] for t in tournaments if re.fullmatch(pattern, t["name"])}
-        if not names:
-            print(f"  season: nothing matches {label!r} — its lists will not be built")
-        slot_of.update((name, slot) for name in names)
-
-    # A finish of None is a DNP, a DQ or a blank row: not a result to average.
-    season_teams = sorted(
-        {
-            (slot_of[t["name"]], r, tuple(sorted(page for page, _team in pages)))
-            for t, r, _money, pages in PLACED
-            if t["name"] in slot_of and r is not None
-        }
-    )
+    # Every team's finish at the year's big events (cell 1), for List's "played
+    # all of them". Tenaball's season boards are built from the same rows in
+    # cell 2.
+    season_teams = SEASON_TEAMS
     season = {
         "year": SEASON_YEAR,
         "events": [label for label, _pattern in SEASON_EVENTS],

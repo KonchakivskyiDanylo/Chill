@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { REPO_URL, SOURCE, WIKIPEDIA } from '@/data/liquipedia/roster';
+import { SOURCE, WIKIPEDIA } from '@/data/liquipedia/roster';
 
 /**
  * Attribution page.
@@ -8,9 +8,9 @@ import { REPO_URL, SOURCE, WIKIPEDIA } from '@/data/liquipedia/roster';
  * Kept short on purpose, but it has to hold everything the two licences and
  * Liquipedia's API terms ask for: credit with a link back, the licence's URI,
  * a note that the work was modified, the same licence on what we derive (and
- * the no-warranty disclaimer that travels with it), no implied endorsement,
- * and the project published as open source. Liquipedia's images are licensed
- * separately, which is why none are used.
+ * the no-warranty disclaimer that travels with it), and no implied
+ * endorsement. Liquipedia's images are licensed separately, which is why none
+ * are used. The repository is public, as the API terms ask, but not linked.
  */
 
 const Ext = ({ href, children }: { href: string; children: ReactNode }) => (
@@ -54,10 +54,10 @@ export function Credits() {
       <section className="card stack-sm">
         <div className="card__title">This site</div>
         <p className="small muted">
-          Our data files are shared under the same licence, as is, without warranty. The code is MIT and{' '}
-          <Ext href={REPO_URL}>open source on GitHub</Ext>, where you can also report wrong data. OffSpawn is
-          an unofficial fan project, not affiliated with or endorsed by Epic Games, Liquipedia, Team Liquid,
-          Wikipedia or any team or player. Fortnite is a trademark of Epic Games, Inc.
+          Our data files are shared under the same licence, as is, without warranty. Spotted wrong data? Tell
+          us with the 💬 button at the top. OffSpawn is unofficial and not affiliated with or endorsed
+          by Epic Games, Liquipedia, Team Liquid, Wikipedia or any team or player. Fortnite is a
+          trademark of Epic Games, Inc.
         </p>
       </section>
     </div>

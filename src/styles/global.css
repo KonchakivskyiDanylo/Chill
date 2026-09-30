@@ -709,20 +709,9 @@ textarea {
 }
 
 /*
- * On a phone the header cannot hold the brand, a badge, two buttons and this.
- *
- * The "Prototype" badge is the one that goes: it says the same thing on every
- * page forever, where the mode chip is the only thing up there that changes
- * what the site is doing — and it is the only way back out of a mode.
- *
- * Selected through `.site-header` because `.chip` sets `display: inline-flex`
- * at the same specificity and further down the file, so a bare
- * `.site-header__badge` loses on source order and the badge stays put.
+ * On a phone the header has to hold the brand, two buttons and this.
  */
 @media (max-width: 620px) {
-  .site-header .site-header__badge {
-    display: none;
-  }
   .site-header__inner {
     gap: 8px;
     padding-left: 12px;

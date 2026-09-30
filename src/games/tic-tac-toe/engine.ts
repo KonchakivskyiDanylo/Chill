@@ -1,6 +1,6 @@
 import { ref, type GamePayloads, type Outcome } from '@/analytics/types';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
-import { makeRng, sample } from '@/lib/rng';
+import { makeRng, type Rng } from '@/lib/rng';
 import {
   buildCriteria,
   hasNestedPair,
@@ -42,11 +42,17 @@ export type Difficulty = 'easy' | 'medium' | 'hard';
  * `lives` is how many wrong answers end the board. Hard used to give "nine
  * guesses, one per cell", which is one life said the long way round: the
  * first wrong guess left eight for nine cells.
+ *
+ * `reach` is the most cells any one player may fit. Without it the board was
+ * often solved by one name: on 15 of 80 Easy boards EpikWhale, Bugha or
+ * Peterbot fitted all nine cells, and someone fitted six on 48 more. Easy's
+ * pool is only the hundred-odd famous players, who share most achievements,
+ * so four is as tight as it can reliably go there.
  */
-export const LEVELS: Record<Difficulty, { answers: number; lives: number }> = {
-  easy: { answers: 3, lives: 3 },
-  medium: { answers: 2, lives: 3 },
-  hard: { answers: 1, lives: 1 },
+export const LEVELS: Record<Difficulty, { answers: number; lives: number; reach: number }> = {
+  easy: { answers: 3, lives: 3, reach: 4 },
+  medium: { answers: 2, lives: 3, reach: 3 },
+  hard: { answers: 1, lives: 1, reach: 2 },
 };
 
 export interface Board {
@@ -92,27 +98,94 @@ export const cellKey = (row: number, col: number) => `${row},${col}`;
  * The rules are built against `pools.answers`, so "has played for FaZe" on an
  * Easy board is a question about the famous FaZe players, and the guess box
  * then takes anyone in `pools.accepted` who fits.
+ *
+ * `recent` is the rules of the last few boards this player saw, newest first.
+ * They are left out when a board can be built without them — all of them, or
+ * failing that the last board's — so two boards in a row do not ask the same
+ * questions.
  */
 export function generateBoard(
   source: Omit<CriteriaSource, 'players'>,
   pools: BoardPools,
   difficulty: Difficulty,
   seed: string = String(Date.now()),
+  recent: readonly string[] = [],
 ): Board | null {
   const pool = buildCriteria({ ...source, players: pools.answers }, { minMatches: 5, maxShare: 0.45 });
   if (pool.length < SIZE * 2) return null;
+  const weights = kindWeights(pool);
+  const level = LEVELS[difficulty];
+  const avoids = [new Set(recent), new Set(recent.slice(0, SIZE * 2))].filter(
+    (avoid, index, all) => avoid.size > 0 && (index === 0 || avoid.size < all[0].size),
+  );
 
-  // Prefer a varied, non-redundant board; fall back to any solvable one rather
-  // than showing the player an error. A small field — an event mode on Easy —
-  // may not have three answers per cell anywhere, and a board with two beats
-  // "cannot start".
-  for (let answers = LEVELS[difficulty].answers; answers >= 1; answers--) {
-    const found =
-      attemptBoards(pool, seed, true, answers) ??
-      attemptBoards(pool, `${seed}:relaxed`, false, answers);
-    if (found) return { ...found, candidates: acceptedPerCell(found, pools.accepted) };
+  // Every promise first, then give way one at a time rather than showing an
+  // error: the recent rules, then redundant-looking axes, then the reach cap,
+  // and only then fewer answers per cell. A small field — an event mode on
+  // Easy — may not have three answers per cell anywhere, and a board with two
+  // beats "cannot start".
+  for (let answers = level.answers; answers >= 1; answers--) {
+    for (const reach of [level.reach, SIZE * SIZE]) {
+      const tries = { answers, reach, weights };
+      const found =
+        avoids.reduce<Board | null>(
+          (board, avoid, index) => board ?? attemptBoards(pool, `${seed}:${index}`, { ...tries, strict: true, avoid }),
+          null,
+        ) ??
+        attemptBoards(pool, `${seed}:any`, { ...tries, strict: true }) ??
+        attemptBoards(pool, `${seed}:relaxed`, { ...tries, strict: false });
+      if (found) return { ...found, candidates: acceptedPerCell(found, pools.accepted) };
+    }
   }
   return null;
+}
+
+/**
+ * The most cells one player fits: the rows they fit times the columns.
+ *
+ * Counted over the rules' own matches — the level's fame band, which on every
+ * level includes the famous players this is about.
+ */
+export function maxReach(board: Pick<Board, 'rows' | 'cols'>): number {
+  const count = (axes: PlayerCriterion[]) => {
+    const out = new Map<string, number>();
+    for (const axis of axes) {
+      for (const player of axis.matches) out.set(player.id, (out.get(player.id) ?? 0) + 1);
+    }
+    return out;
+  };
+  const rows = count(board.rows);
+  const cols = count(board.cols);
+  let most = 0;
+  for (const [id, fits] of rows) most = Math.max(most, fits * (cols.get(id) ?? 0));
+  return most;
+}
+
+/**
+ * How likely each rule is to be drawn: one over the square root of how many
+ * rules share its kind.
+ *
+ * A plain draw asked "Played <event>" on nearly every board, because there are
+ * nine headline events and only one "LAN winner". Fully even kinds would swing
+ * the other way and put "LAN winner" everywhere; the square root is between.
+ */
+function kindWeights(pool: PlayerCriterion[]): Map<string, number> {
+  const perKind = new Map<string, number>();
+  for (const rule of pool) perKind.set(rule.kind, (perKind.get(rule.kind) ?? 0) + 1);
+  return new Map(pool.map((rule) => [rule.id, 1 / Math.sqrt(perKind.get(rule.kind)!)]));
+}
+
+/** `count` distinct rules, drawn by `weights`. */
+function draw(rng: Rng, rules: PlayerCriterion[], count: number, weights: Map<string, number>): PlayerCriterion[] {
+  const left = [...rules];
+  const out: PlayerCriterion[] = [];
+  while (out.length < count && left.length > 0) {
+    let at = rng() * left.reduce((sum, rule) => sum + weights.get(rule.id)!, 0);
+    let index = 0;
+    while (index < left.length - 1 && (at -= weights.get(left[index].id)!) > 0) index++;
+    out.push(left.splice(index, 1)[0]);
+  }
+  return out;
 }
 
 /** Everyone in `accepted` who fits each cell, biggest earner first. */
@@ -142,15 +215,29 @@ function acceptedPerCell(
  * it.
  */
 function attemptBoards(
-  pool: PlayerCriterion[],
+  all: PlayerCriterion[],
   seed: string,
-  strict: boolean,
-  answers: number,
+  {
+    strict,
+    answers,
+    reach,
+    weights,
+    avoid,
+  }: {
+    strict: boolean;
+    answers: number;
+    /** The most cells one player may fit. */
+    reach: number;
+    weights: Map<string, number>;
+    /** Rules to leave out. */
+    avoid?: ReadonlySet<string>;
+  },
 ): Board | null {
   const rng = makeRng(seed);
+  const pool = avoid ? all.filter((rule) => !avoid.has(rule.id)) : all;
 
   for (let attempt = 0; attempt < GENERATION_ATTEMPTS; attempt++) {
-    const rows = sample(rng, pool, SIZE);
+    const rows = draw(rng, pool, SIZE, weights);
     // A board of three "played at X" rows is a dull puzzle before it is a hard
     // one, so reject the shape early — before the expensive part below.
     if (strict && !isVaried(rows)) continue;
@@ -162,7 +249,7 @@ function attemptBoards(
     );
     if (usable.length < SIZE) continue;
 
-    const cols = sample(rng, usable, SIZE);
+    const cols = draw(rng, usable, SIZE, weights);
     const picked = [...rows, ...cols];
     if (strict) {
       if (!isVaried(picked)) continue;
@@ -170,6 +257,8 @@ function attemptBoards(
       // and so is one that nearly does ("Won NA FNCS" vs "North America").
       if (hasNestedPair(picked, NEAR_NESTED)) continue;
     }
+    // No one name for the whole board.
+    if (maxReach({ rows, cols }) > reach) continue;
 
     const candidates: RosterPlayer[][][] = rows.map((row) =>
       cols.map((col) => intersect(row, col)),

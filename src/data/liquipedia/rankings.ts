@@ -86,6 +86,12 @@ export interface Board {
   next: { key: string; label: string; value: number; members?: BoardMember[] };
   /** True for finishing positions, where 1 beats 2. */
   lowerIsBetter?: boolean;
+  /**
+   * 10th and 11th are level and either one fills 10th: naming one takes the
+   * place, naming the other after that is told it is level and costs nothing.
+   * Otherwise a board level at the cut is not built at all.
+   */
+  shareCut?: boolean;
 }
 
 interface RawPayload {

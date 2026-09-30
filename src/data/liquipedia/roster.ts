@@ -58,9 +58,6 @@ export const WIKIPEDIA = {
   licenseUrl: 'https://creativecommons.org/licenses/by-sa/4.0/',
 } as const;
 
-/** The public repository — Liquipedia's API terms ask for the project to be open source. */
-export const REPO_URL = 'https://github.com/KonchakivskyiDanylo/Chill';
-
 /** One row of `players.json`, as the notebook writes it. */
 export interface LiquipediaRow {
   pageid: number;

@@ -19,7 +19,7 @@ import { useRoster } from '@/data/liquipedia/useRoster';
 import { activePool, useEventMode } from '@/games/shared/mode';
 import { termsIn } from '@/games/shared/glossary';
 import { poolPlayers } from '@/games/shared/pool';
-import { useProgress, type PuzzleStatus } from '@/games/shared/progress';
+import { pickFresh, useProgress, type PuzzleStatus } from '@/games/shared/progress';
 import type { Searchable } from '@/lib/text';
 import { useBestScore } from '@/lib/storage';
 import { getGame } from '@/games/registry';
@@ -30,7 +30,7 @@ import {
   giveUp,
   HARD_LIVES,
   namedIn,
-  slotsOf,
+  slotsIn,
   type Difficulty,
   type GameState,
   record as roundRecord,
@@ -259,7 +259,7 @@ function Game({
           <button
             type="button"
             className="btn btn--primary btn--lg btn--block"
-            onClick={() => start(active.random())}
+            onClick={() => start(pickFresh(active.boards, statusOf))}
           >
             🎲 Random category
           </button>
@@ -277,7 +277,7 @@ function Game({
   }
 
   const { board } = game;
-  const slots = slotsOf(board);
+  const slots = slotsIn(game);
   const finished = game.status !== 'playing';
   /*
    * Whether the value column says anything the slot number has not.
@@ -301,7 +301,7 @@ function Game({
         // A team slot closing is worth saying out loud; a one-name board has
         // nothing to close, so it keeps the flatter wording it always had.
         const rank = result.outcome.rank;
-        const team = slots[rank - 1].members.length > 1;
+        const team = slotsIn(result.state)[rank - 1].members.length > 1;
         setFeedback({
           tone: 'var(--success)',
           message: team
@@ -321,6 +321,12 @@ function Game({
         break;
       case 'duplicate':
         setFeedback({ tone: 'var(--warning)', message: `${entity.name} is already on the board.` });
+        break;
+      case 'level':
+        setFeedback({
+          tone: 'var(--warning)',
+          message: `${entity.name} is also ${ordinal(result.outcome.rank)}, level with ${result.outcome.holder} — no penalty.`,
+        });
         break;
       case 'tied':
         setFeedback({
@@ -396,6 +402,11 @@ function Game({
                       </span>
                     ),
                   )}
+                  {missed && slot.also ? (
+                    <span className="tb-member tb-member--revealed">
+                      or {slot.also.map((member) => member.label).join(' & ')}
+                    </span>
+                  ) : null}
                 </span>
                 <span className="tb-slot__value">{complete || finished ? value : ''}</span>
               </li>

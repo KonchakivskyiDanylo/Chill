@@ -23,6 +23,7 @@ import { loadRankings, membersOf } from '@/data/liquipedia/rankings';
 import { deal, dealInTurn, dealWeighted } from '@/games/shared/rotation';
 import { TERMS, termsIn, type TermId } from '@/games/shared/glossary';
 import { DEFAULT_POOL, RANDOM_MIX } from '@/games/shared/pool';
+import { pickFresh, type PuzzleStatus } from '@/games/shared/progress';
 import { GAMES, getGame, VISIBLE_GAMES } from '@/games/registry';
 import {
   buildCriteria,
@@ -596,10 +597,50 @@ if (rankings) {
     check(game.status === 'won', `tenaball: ${board.id} did not win on a perfect run`);
     check(game.lives === tenaball.HARD_LIVES, `tenaball: ${board.id} lost a life on a perfect run`);
 
-    // The 11th must be a free near miss, not a mistake.
-    const near = tenaball.applyGuess(tenaball.createGame(board, 'hard'), spare[0], board.next.label);
-    check(near.outcome.kind === 'tied', `tenaball: ${board.id} punished its own 11th place`);
-    check(near.state.lives === tenaball.HARD_LIVES, `tenaball: ${board.id} charged a life for the 11th`);
+    if (board.shareCut) {
+      // Level at the cut: the 11th fills 10th, and the 10th is then told it is level.
+      const tenth = board.rows[tenaball.SLOTS - 1];
+      check(tenth.value === board.next.value, `tenaball: ${board.id} shares a cut that is not level`);
+      let shared = tenaball.createGame(board, 'hard');
+      for (const key of spare) shared = tenaball.applyGuess(shared, key).state;
+      check(shared.found.has(tenaball.SLOTS), `tenaball: ${board.id}'s level 11th did not fill 10th`);
+      const other = tenaball.applyGuess(shared, membersOf(tenth)[0].key);
+      check(
+        other.outcome.kind === 'level' && other.state.lives === tenaball.HARD_LIVES,
+        `tenaball: ${board.id}'s 10th after its level 11th read ${other.outcome.kind}`,
+      );
+    } else {
+      // The 11th must be a free near miss, not a mistake.
+      const near = tenaball.applyGuess(tenaball.createGame(board, 'hard'), spare[0], board.next.label);
+      check(near.outcome.kind === 'tied', `tenaball: ${board.id} punished its own 11th place`);
+      check(near.state.lives === tenaball.HARD_LIVES, `tenaball: ${board.id} charged a life for the 11th`);
+    }
+  }
+
+  // The season boards: the user's worked example is Vico, 1 + 3 + 1 + 3 + 20 = 5.6.
+  const year = facts?.season?.year ?? 2026;
+  const europe = rankings.get(`season:${year}:Europe`);
+  if (!europe) {
+    skipped.push('tenaball: the season boards (rankings.json is older — run build_data.py)');
+  } else {
+    const vico = europe.rows.find((row) => row.key === 'Vic0try0na');
+    check(vico?.display === '5.6', `tenaball: Vic0try0na reads ${vico?.display} on Europe's 2026 board, not 5.6`);
+    // Cold played EWC with Rapid and the Globals with Ritual, so he is in no duo.
+    const duos = rankings.get(`season:${year}:duos`);
+    check(Boolean(duos), 'tenaball: no top 10 duos of the season');
+    check(
+      !duos?.rows.some((row) => membersOf(row).some((member) => member.key === 'Cold')),
+      'tenaball: Cold is in a top 10 duo',
+    );
+    for (const key of ['Europe', 'North America', 'world', 'rest', 'duos']) {
+      const board = rankings.get(`season:${year}:${key}`);
+      if (!board) {
+        notes.push(`tenaball: no ${year} "${key}" board — 11th and 12th are level too, or fewer than eleven`);
+        continue;
+      }
+      const cut = board.shareCut ? ` (10th shared with ${board.next.label})` : '';
+      notes.push(`tenaball: ${board.title} — ${board.rows.map((row) => row.label).join(', ')}${cut}`);
+    }
   }
   for (const [group, count] of [...byGroup].sort((a, b) => b[1] - a[1])) {
     notes.push(`  ${group}: ${count}`);
@@ -737,12 +778,15 @@ if (facts && orgs) {
     // it must never decide who you are allowed to answer with.
     let outsiders = 0;
     let nearNested = 0;
+    // Boards where one player fits more cells than the level allows.
+    let overReach = 0;
     // Boards carrying one of the rules added 27 Sep 2026, by kind.
     const added = new Map<string, number>();
     for (let seed = 0; seed < 25; seed++) {
       const board = ttt.generateBoard({ facts, orgs }, pools, difficulty, `t-${difficulty}-${seed}`);
       if (!board) continue;
       boards++;
+      if (ttt.maxReach(board) > ttt.LEVELS[difficulty].reach) overReach++;
       for (const kind of new Set([...board.rows, ...board.cols].map((axis) => axis.kind))) {
         if (['fncs-count', 'fncs-back-to-back', 'fncs-with', 'lan-podium'].includes(kind)) {
           added.set(kind, (added.get(kind) ?? 0) + 1);
@@ -819,6 +863,22 @@ if (facts && orgs) {
       check(outsiders > 0, `tic-tac-toe ${difficulty}: nobody from outside the band was ever placed`);
     }
     check(nearNested === 0, `tic-tac-toe ${difficulty}: ${nearNested} pairs of near-identical axes`);
+    // EpikWhale used to fit all nine cells on one Easy board in five.
+    check(overReach <= 1, `tic-tac-toe ${difficulty}: ${overReach} boards let one player fit over ${ttt.LEVELS[difficulty].reach} cells`);
+
+    // Ten boards in a row, the way the game deals them: the last three boards' rules kept out.
+    let recent: string[] = [];
+    let repeats = 0;
+    const rules = new Set<string>();
+    for (let round = 0; round < 10; round++) {
+      const board = ttt.generateBoard({ facts, orgs }, pools, difficulty, `run-${difficulty}-${round}`, recent);
+      if (!board) continue;
+      const ids = [...board.rows, ...board.cols].map((axis) => axis.id);
+      repeats += ids.filter((id) => recent.slice(0, 6).includes(id)).length;
+      ids.forEach((id) => rules.add(id));
+      recent = [...ids, ...recent].slice(0, 18);
+    }
+    notes.push(`tic-tac-toe ${difficulty}: 10 boards in a row use ${rules.size} rules, ${repeats} repeated from the board before`);
     notes.push(
       `tic-tac-toe ${difficulty}: ${boards}/25 boards over a ${answers.length}-player band, ` +
         `${autoPlaced} placed by typing alone, ${offers} asked which cell, ` +
@@ -1105,6 +1165,16 @@ if (facts && orgs) {
   }
 }
 
+// The Random buttons: something unplayed first, then something only tried, then anything.
+{
+  const puzzles = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  const status: Record<string, PuzzleStatus> = { a: 'won', b: 'tried' };
+  const statusOf = (id: string) => status[id] ?? null;
+  check(pickFresh(puzzles, statusOf)?.id === 'c', 'progress: Random did not prefer the unplayed puzzle');
+  status.c = 'won';
+  check(pickFresh(puzzles, statusOf)?.id === 'b', 'progress: Random did not fall back to a tried puzzle');
+}
+
 // List: FNCS winners by region are the regional finals, not the venue of a LAN.
 if (facts) {
   const lists = buildListCriteria(roster, facts, pools, orgs, teammates);
@@ -1145,29 +1215,11 @@ if (facts) {
       vico?.map((r) => r?.finish).join(',') === '1,3,1,3,20',
       `list: Vic0try0na's 2026 finishes are ${vico?.map((r) => r?.finish).join(',')}, not 1,3,1,3,20`,
     );
-    const europe = lists.find((c) => c.id === `season:${season.year}:top:Europe`);
-    check(Boolean(europe?.answers.some((a) => a.id === 'Vic0try0na')), 'list: Vic0try0na is not in Europe’s top 10');
-    // Cold played EWC with Rapid and the Globals with Ritual, so he is in no duo.
-    const duos = lists.find((c) => c.id === `season:${season.year}:duos`);
-    check(Boolean(duos), 'list: no top 10 duos');
-    check(!duos?.answers.some((a) => a.id.split('+').includes('Cold')), 'list: Cold is in a top 10 duo');
-    // Either handle offers the duo in the guess box.
-    for (const duo of duos?.answers ?? []) {
-      for (const handle of duo.name.split(' & ')) {
-        check(
-          suggestPlayers(handle, duos?.pool ?? [], 50).some((entry) => entry.id === duo.id),
-          `list: typing ${handle} does not offer ${duo.name}`,
-        );
-      }
-    }
-    for (const c of lists.filter((c) => c.id.startsWith('season:'))) {
-      notes.push(`list: ${c.title} — ${c.answers.map((a) => a.name).join(', ')}`);
-    }
-    for (const key of ['Europe', 'North America', 'world', 'rest']) {
-      if (!lists.some((c) => c.id === `season:${season.year}:top:${key}`)) {
-        notes.push(`list: no ${season.year} top 10 for "${key}" — 10th and 11th are level, or fewer than ten`);
-      }
-    }
+    const all = lists.find((c) => c.id === `season:${season.year}:all`);
+    check(Boolean(all?.answers.some((a) => a.id === 'Vic0try0na')), 'list: Vic0try0na did not play all five');
+    // The top tens are Tenaball boards now, not lists.
+    check(!lists.some((c) => c.id.startsWith(`season:${season.year}:top`)), 'list: a season top 10 is still a list');
+    notes.push(`list: ${all?.title} — ${all?.answers.length} players`);
   }
 }
 

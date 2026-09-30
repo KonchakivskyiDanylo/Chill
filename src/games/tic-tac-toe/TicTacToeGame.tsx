@@ -16,6 +16,7 @@ import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import { useEventMode } from '@/games/shared/mode';
 import { poolPlayers } from '@/games/shared/pool';
+import { useLocalState } from '@/lib/storage';
 import { getGame } from '@/games/registry';
 import {
   cellKey,
@@ -60,6 +61,9 @@ const DIFFICULTIES: LevelOption<Difficulty>[] = [
     hint: 'A cell may have only one answer, and it can be anyone. One wrong answer ends the board.',
   },
 ];
+
+/** Three boards' worth of rules are kept out of the next board. */
+const RECENT_RULES = 3 * 2 * SIZE;
 
 /** The fame bands each level's board is built around, widest last. */
 const BANDS: Record<Difficulty, ('easy' | 'medium' | 'hard')[]> = {
@@ -129,17 +133,21 @@ function Game({
     return BANDS[difficulty].flatMap((band) => roster.exactly(band, { eligible }));
   }, [facts, field, roster, difficulty]);
 
+  /** The rules of the last few boards, so the next one asks something else. */
+  const [recent, setRecent] = useLocalState<string[]>('tic-tac-toe:recent', []);
+
   const start = useCallback(() => {
-    const board = generateBoard({ facts, orgs }, { answers, accepted }, difficulty);
+    const board = generateBoard({ facts, orgs }, { answers, accepted }, difficulty, undefined, recent);
     if (!board) {
       setError('Not enough players in this field to build a solvable grid.');
       return;
     }
+    setRecent([...board.rows, ...board.cols].map((axis) => axis.id).concat(recent).slice(0, RECENT_RULES));
     setError(null);
     setFeedback(null);
     setChoosing(null);
     setGame(createGame(board, difficulty));
-  }, [answers, accepted, facts, orgs, difficulty]);
+  }, [answers, accepted, facts, orgs, difficulty, recent, setRecent]);
 
   const usedIds = useMemo(
     () => new Set(game ? [...game.filled.values()].map((player) => player.id) : []),

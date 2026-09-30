@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
 import { ModePicker } from '@/components/EventMode';
-import { SOURCE } from '@/data/liquipedia/roster';
 import { VISIBLE_GAMES } from '@/games/registry';
 
 const COUNT = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
@@ -38,21 +37,6 @@ export function Home() {
             </span>
           </Link>
         ))}
-      </section>
-
-      <section className="card card--muted stack">
-        <div className="card__title">About this prototype</div>
-        <p className="small muted">
-          An unfinished fan project: scores and progress stay in your browser. The data is from{' '}
-          <a className="link" href={SOURCE.url} target="_blank" rel="noreferrer noopener">
-            Liquipedia
-          </a>{' '}
-          and Wikipedia, modified, under CC BY-SA — and where they say nothing, neither do we: nothing is
-          estimated.{' '}
-          <Link to="/credits" className="link">
-            Credits &amp; licence
-          </Link>
-        </p>
       </section>
     </div>
   );

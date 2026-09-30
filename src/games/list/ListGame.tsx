@@ -21,7 +21,7 @@ import { getGame } from '@/games/registry';
 import { activePool, useEventMode } from '@/games/shared/mode';
 import { termsIn } from '@/games/shared/glossary';
 import { poolPlayers } from '@/games/shared/pool';
-import { useProgress, type PuzzleStatus } from '@/games/shared/progress';
+import { pickFresh, useProgress, type PuzzleStatus } from '@/games/shared/progress';
 import { buildCriteria, buildPoolCriteria, type Criterion } from './criteria';
 import './list.css';
 
@@ -264,7 +264,7 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
           <button
             type="button"
             className="btn btn--primary btn--lg btn--block"
-            onClick={() => setCriterion(criteria[Math.floor(Math.random() * criteria.length)])}
+            onClick={() => setCriterion(pickFresh(criteria, statusOf))}
           >
             🎲 Random list
           </button>

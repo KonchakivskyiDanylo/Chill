@@ -1,4 +1,4 @@
-import type { Facts, HeadlineEvent, Season, SeasonResult } from '@/data/liquipedia/facts';
+import type { Facts, HeadlineEvent, Season } from '@/data/liquipedia/facts';
 import type { Orgs } from '@/data/liquipedia/orgs';
 import type { Pool, Pools } from '@/data/liquipedia/pools';
 import { ageOn, type Roster, type RosterPlayer } from '@/data/liquipedia/roster';
@@ -413,113 +413,25 @@ export function buildCriteria(
   return out;
 }
 
-/** What a missed event counts as in an average finish — far below the biggest field (74). */
-const MISSED = 200;
-const TOP = 10;
-
 /**
- * The year's big events — for 2026: EWC, the Globals, the Summit and FNCS
- * Majors 1 and 2.
- *
- * Who played all of them, and the top ten by average finish in Europe, North
- * America, the world and everywhere else — in 2026 the world's ten are all
- * European and North American, which is why the last one exists. A missed
- * event counts as 200th: that puts the players at all five first, and lets a
- * region with fewer than ten of them still fill its list. Then the top ten duos:
- * the same two players at every event, so Cold, with Rapid at EWC and Ritual at
- * the Globals, is in no duo.
- *
- * Ranked on the sum of finishes — the same order as the average, in whole
- * numbers. When 10th and 11th are level the list is not built, as with
- * Tenaball: a tie at the cut is never split by name.
+ * Everyone at all of the year's big events — for 2026: EWC, the Globals, the
+ * Summit and FNCS Majors 1 and 2. The top tens by average finish are Tenaball
+ * boards, written by `scripts/pipeline/derived.py`.
  */
 function seasonCriteria(season: Season, byId: Map<string, RosterPlayer>): Criterion[] {
   const { year, events } = season;
-  const out: Criterion[] = [];
-  const which = `${events.slice(0, -1).join(', ')} and ${events[events.length - 1]}`;
-  const total = (results: readonly (SeasonResult | null)[]) =>
-    results.reduce((sum, result) => sum + (result?.finish ?? MISSED), 0);
-
-  const rows = [...season.results].flatMap(([id, results]) => {
+  const answers = [...season.results].flatMap(([id, results]) => {
     const player = byId.get(id);
-    return player ? [{ player, results, total: total(results) }] : [];
+    return player && results.every(Boolean) ? [player] : [];
   });
-  const atAll = rows.filter((row) => row.results.every(Boolean));
-
-  out.push({
-    id: `season:${year}:all`,
-    title: `Players who played all ${events.length} big events of ${year}`,
-    subtitle: which,
-    answers: atAll.map((row) => row.player),
-  });
-
-  /** The best ten, or null when 10th and 11th are level. */
-  const topTen = <T extends { total: number }>(candidates: T[]): T[] | null => {
-    const ranked = [...candidates].sort((a, b) => a.total - b.total);
-    if (ranked.length < TOP) return null;
-    if (ranked.length > TOP && ranked[TOP - 1].total === ranked[TOP].total) return null;
-    return ranked.slice(0, TOP);
-  };
-
-  const note = `Best average finish at ${which} — a missed event counts as ${MISSED}th`;
-  const bigTwo = ['Europe', 'North America'];
-  const tables: [string, string, (region: string | null) => boolean][] = [
-    ['Europe', `Europe’s top ${TOP} players of ${year}`, (region) => region === 'Europe'],
-    ['North America', `North America’s top ${TOP} players of ${year}`, (region) => region === 'North America'],
-    ['world', `The world’s top ${TOP} players of ${year}`, () => true],
-    [
-      'rest',
-      `The top ${TOP} players of ${year} outside Europe and North America`,
-      (region) => region !== null && !bigTwo.includes(region),
-    ],
+  return [
+    {
+      id: `season:${year}:all`,
+      title: `Players who played all ${events.length} big events of ${year}`,
+      subtitle: `${events.slice(0, -1).join(', ')} and ${events[events.length - 1]}`,
+      answers,
+    },
   ];
-  for (const [key, title, keep] of tables) {
-    const top = topTen(rows.filter((row) => keep(row.player.region)));
-    if (top) {
-      out.push({ id: `season:${year}:top:${key}`, title, subtitle: note, answers: top.map((row) => row.player) });
-    }
-  }
-
-  // ------------------------------------------------------------- duos --
-  // Answered with the duo, found by either player's handle. The guess box
-  // holds every duo that played any of the events together, so naming a pair
-  // that fell short is a wrong answer rather than one you cannot type.
-  const duoOf = (team: readonly string[]): Searchable | null => {
-    const players = team.map((id) => byId.get(id));
-    if (players.length !== 2 || !players[0] || !players[1]) return null;
-    const [a, b] = [...(players as RosterPlayer[])].sort((x, y) => x.name.localeCompare(y.name));
-    return {
-      id: [a.id, b.id].sort().join('+'),
-      name: `${a.name} & ${b.name}`,
-      aliases: [a.name, b.name, ...a.aliases, ...b.aliases],
-    };
-  };
-  const everyDuo = new Map<string, Searchable>();
-  for (const results of season.results.values()) {
-    for (const result of results) {
-      const duo = result && duoOf(result.team);
-      if (duo) everyDuo.set(duo.id, duo);
-    }
-  }
-  const together = new Map<string, { duo: Searchable; total: number }>();
-  for (const row of atAll) {
-    const duos = row.results.map((result) => duoOf(result!.team));
-    if (duos.every((duo) => duo && duo.id === duos[0]!.id)) {
-      together.set(duos[0]!.id, { duo: duos[0]!, total: row.total });
-    }
-  }
-  const topDuos = topTen([...together.values()]);
-  if (topDuos) {
-    out.push({
-      id: `season:${year}:duos`,
-      title: `The top ${TOP} duos of ${year}`,
-      subtitle: `Together at ${which}, by average finish`,
-      answers: topDuos.map((entry) => entry.duo),
-      pool: [...everyDuo.values()],
-      noun: 'duos',
-    });
-  }
-  return out;
 }
 
 /**

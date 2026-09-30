@@ -303,7 +303,7 @@ You get one top-10 board and ten empty slots, and name the ten. A correct answer
 
 ### The boards
 
-375 boards come precomputed from the notebook (`rankings.json`), because they are aggregated from 442,736 placements. Eleven more are built in the browser from the roster.
+381 boards come precomputed from the notebook (`rankings.json`), because they are aggregated from 442,736 placements. Eleven more are built in the browser from the roster.
 
 | Group | Boards | Answered with |
 | --- | --- | --- |
@@ -314,6 +314,7 @@ You get one top-10 board and ten empty slots, and name the ten. A correct answer
 | Countries | 20 | country names |
 | Paydays | 20 | the tournament where the money was won |
 | Organisations | 11 | organisation names |
+| 2026 season | 5 | top 10 by average finish at the year's big events: Europe, North America, the world, outside EU and NA, and duos |
 | FNCS finals — North America | 44 | an FNCS grand final's top ten placements: every NA final |
 | FNCS finals — Europe | 26 | every EU final |
 | FNCS finals — other regions | 21 | the other regions' 2025 and 2026 finals and the 2021 Grand Royale |
@@ -328,8 +329,12 @@ Every board prints its own tie rule above the slots:
 - **Counts.** Wins, appearances and players are split by career earnings, the bigger earner higher. Countries and organisations are split by their players' combined earnings.
 - **Money boards** are straight money order.
 - **Youngest and oldest** go by birth date, not age in years.
-- **Never the alphabet.** If 10th and 11th are still level after the tie rule, the board is not offered at all.
+- **Never the alphabet.** If 10th and 11th are still level after the tie rule, either of the two fills 10th (`shareCut`), and naming the other after that says it is level and costs nothing. Today that is the outside-EU-and-NA season board (Alex / Wreckless) and Top 10 earners in 2018 — Asia. A 12th level too still drops the board (squad earnings).
 - **Near miss.** Naming someone level with 10th but ranked out by the tie rule is called out and never costs a life.
+
+### Season boards
+
+The year's big events — for 2026 EWC, the Globals, the Summit and FNCS Majors 1 and 2, set in `SEASON_EVENTS` in `scripts/pipeline/derived.py` — ranked by average finish, a missed event counting as 200th (Vico: 1 + 3 + 1 + 3 + 20 = 5.6). Europe, North America, the world, and outside EU and NA, because the world's ten are all EU and NA. The duos board has only pairs who played all five together, both names filling one slot. Outside EU and NA, Alex and Wreckless share 10th.
 
 ### Tournament boards
 
@@ -375,7 +380,7 @@ You get one list and 90 seconds to name as many of it as you can. Every correct 
 - **Missed names.** When time runs out you see everyone you missed.
 - **The suggestion box** helps you spell a name you already thought of, and never says whether it is on the list.
 
-**The lists are hand-picked, not generated.** A recall game only works when you can picture the answer set, so there are 211 all-time lists with at least 8 answers each:
+**The lists are hand-picked, not generated.** A recall game only works when you can picture the answer set, so there are 207 all-time lists with at least 8 answers each:
 
 | Family | Lists | Example |
 | --- | --- | --- |
@@ -386,18 +391,14 @@ You get one list and 90 seconds to name as many of it as you can. Every correct 
 | Teammates | 20 | 10+ tournaments with one of the 30 top earners |
 | FNCS | 17 | FNCS winners by region; 20+ grand finals; won back to back; won one before turning 15, or aged 20+ |
 | Year by year | 8 | won a major in 2023 |
-| The 2026 season | 5 | played all five big events; Europe's top 10; the top 10 duos |
+| The 2026 season | 1 | played all five big events (the top 10s are Tenaball boards) |
 | Titles and fields | 2 | LAN winners; qualified for a field |
 
-Lists answered with countries, organisations or duos search every name, not just the answers.
+Lists answered with countries or organisations search every name, not just the answers.
 
-**The season lists** take the year's big events — for 2026 EWC, the Globals, the Summit and FNCS Majors 1 and 2, named in `SEASON_EVENTS` in `scripts/pipeline/derived.py` — and rank by average finish, a missed event counting as 200th:
-
-- **Top 10s** for Europe, North America, the world, and outside Europe and North America (the world's ten are all EU and NA). A list whose 10th and 11th are level is not built: today that is the one outside EU and NA, where Alex and Wreckless tie.
-- **Top 10 duos:** the same two players at all five, answered by typing either handle.
 - **Age at a win** is on the day of the grand final, from the published birthday; the dates are Liquipedia's regional finals, so a winner only Wikipedia records is on neither age list.
 
-**Played or not.** Tenaball's and List's pickers mark each board green (completed), yellow (tried: gave up or fell short) or red (not played), from `progress:<game>` in local storage (`games/shared/progress.ts`). Keyed by puzzle id, so a daily puzzle can key by date.
+**Played or not.** Tenaball's and List's pickers mark each board green (completed), yellow (tried: gave up or fell short) or red (not played), from `progress:<game>` in local storage (`games/shared/progress.ts`). Keyed by puzzle id, so a daily puzzle can key by date. The Random buttons pick an unplayed board first, then a tried one, then any (`pickFresh`).
 
 ### Event-mode lists
 
@@ -444,11 +445,11 @@ The confirm step exists because a mis-tap on a phone used to end the round outri
 
 A 3×3 grid has a rule on each row and each column; every cell needs one player who fits both. You don't pick the cell: you type a player and the grid works out where they go. Each player can be used once.
 
-| Level | The board is built so every cell has | Lives |
-| --- | --- | --- |
-| Easy | 3+ household names (Easy tier) | 3 |
-| Medium | 2+ regulars | 3 |
-| Hard | at least one player from anywhere on record | 1 |
+| Level | The board is built so every cell has | Most cells one player fits | Lives |
+| --- | --- | --- | --- |
+| Easy | 3+ household names (Easy tier) | 4 | 3 |
+| Medium | 2+ regulars | 3 | 3 |
+| Hard | at least one player from anywhere on record | 2 | 1 |
 
 At every level any player who fits is accepted. The level decides what the board is built around, not who you may type. A name that fits no open cell costs a life, and the last life ends the board. Hard used to say "nine guesses, one per cell", which was one life said the long way round.
 
@@ -456,11 +457,14 @@ At every level any player who fits is accepted. The level decides what the board
 
 ### How a board is built
 
-1. **Rows first.** Choose three row rules from the criteria.
+1. **Rows first.** Choose three row rules from the criteria, each weighted by one over the square root of how many rules share its kind, so nine "Played <event>" rules do not crowd out the one "LAN winner". The rules of the player's last three boards are left out (`tic-tac-toe:recent` in local storage), or failing that the last board's.
 2. **Columns second.** Choose the three columns only from rules that already share a player with all three rows. Picking six rules at random failed 36 times in 40, because 138 of the 276 rules are organisations and two organisations almost never share a player.
 3. **Enough answers.** Check each cell has the answers its level promises, from that level's fame band.
 4. **Varied rules.** No more than two rules of the same kind, and no two rules nearly the same (the 90% rule).
-5. **Nine different players.** Prove, by a quick backtracking search, that the nine cells can be filled with nine different players. Otherwise the "each player once" rule could make a board unwinnable.
+5. **No one answer for the whole board.** A player fits rows × columns cells; that may not pass the level's cap. Before it (30 Sep 2026), EpikWhale, Bugha or Peterbot fitted all nine cells on one Easy board in five, and someone fitted six on most of the rest. Easy's pool is only ~100 famous players who share most achievements, so 4 is as tight as it goes there, and Easy draws on only ~37 rules.
+6. **Nine different players.** Prove, by a quick backtracking search, that the nine cells can be filled with nine different players. Otherwise the "each player once" rule could make a board unwinnable.
+
+If no board passes, the promises give way one at a time: recent rules, then redundant-looking axes, then the cap, and last the answers per cell.
 
 ### Where a typed player lands
 
@@ -586,7 +590,9 @@ Locally, `npm run dev:all` sets `ADMIN_OPEN=1` for the API and `VITE_RECORD=1` f
 
 ## How it is tested and run
 
-Three commands must pass before anything ships: `npm run typecheck`, `npm run check:games` and `npm run check:server`. `npm run build` runs the typecheck again and then builds the site.
+Three commands must pass before anything ships: `npm run typecheck`, `npm run check:games` and `npm run check:server`. `npm run build` runs the typecheck again and then builds the site. GitHub Actions runs all of them, the build and `scripts/check_liquipedia_api.py` on every push (`.github/workflows/checks.yml`); Heroku waits for it only with "Wait for CI to pass before deploy" ticked.
+
+The code is GNU AGPL-3.0 or later (`LICENSE`, since 30 Sep 2026; MIT before); the data is CC BY-SA 3.0.
 
 | Command | What it does |
 | --- | --- |

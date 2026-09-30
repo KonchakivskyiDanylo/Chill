@@ -19,10 +19,33 @@ export interface Slot {
    * name on it has been given.
    */
   members: BoardMember[];
+  /**
+   * On a board whose cut is shared, the other level entry for 10th: the 11th
+   * until they are named in its place, then the 10th. Shown beside a 10th that
+   * was never found.
+   */
+  also?: BoardMember[];
 }
 
 export function slotsOf(board: Board): Slot[] {
   return board.rows.map((row, index) => ({ rank: index + 1, row, members: membersOf(row) }));
+}
+
+/**
+ * The slots as a round stands. The same as `slotsOf` except on a shared cut,
+ * where 10th is whichever of the two level entries was named there.
+ */
+export function slotsIn(state: GameState): Slot[] {
+  const { board } = state;
+  const slots = slotsOf(board);
+  if (!board.shareCut) return slots;
+  const last = slots[slots.length - 1];
+  const spare = membersOf(board.next);
+  const named = namedIn(state, last.rank);
+  slots[slots.length - 1] = spare.some((member) => named.has(member.key))
+    ? { rank: last.rank, row: { ...board.next, display: last.row.display }, members: spare, also: last.members }
+    : { ...last, also: spare };
+  return slots;
 }
 
 export interface GameState {
@@ -72,6 +95,8 @@ export type GuessOutcome =
   /** Right row, but the team it ranks is not complete yet. */
   | { kind: 'partial'; rank: number; remaining: number }
   | { kind: 'duplicate'; rank: number }
+  /** Level with the entry already holding a shared 10th — costs nothing. */
+  | { kind: 'level'; rank: number; holder: string }
   /** One place past the cut-off — costs nothing. `level` when genuinely tied. */
   | { kind: 'tied'; level: boolean }
   | { kind: 'wrong' }
@@ -104,12 +129,21 @@ export function applyGuess(
   if (state.status !== 'playing') return { state, outcome: { kind: 'wrong' } };
   if (!key) return { state, outcome: { kind: 'unknown' } };
 
-  const index = state.board.rows.findIndex((row) =>
-    membersOf(row).some((member) => member.key === key),
-  );
+  const slots = slotsIn(state);
+  let index = slots.findIndex((slot) => slot.members.some((member) => member.key === key));
+  let wanted = index >= 0 ? slots[index].members : [];
+  const last = slots[slots.length - 1];
+  if (index < 0 && last.also?.some((member) => member.key === key)) {
+    // A shared cut: the other level entry takes 10th while nobody holds it.
+    if (namedIn(state, last.rank).size > 0) {
+      const holder = last.members.map((member) => member.label).join(' & ');
+      return { state, outcome: { kind: 'level', rank: last.rank, holder } };
+    }
+    index = slots.length - 1;
+    wanted = last.also;
+  }
   if (index >= 0) {
     const rank = index + 1;
-    const wanted = membersOf(state.board.rows[index]);
     const already = namedIn(state, rank);
     if (already.has(key)) return { state, outcome: { kind: 'duplicate', rank } };
 
@@ -133,9 +167,9 @@ export function applyGuess(
     };
   }
 
-  const last = state.board.rows[state.board.rows.length - 1];
+  const tenth = state.board.rows[state.board.rows.length - 1];
   if (membersOf(state.board.next).some((member) => member.key === key)) {
-    return { state, outcome: { kind: 'tied', level: state.board.next.value === last.value } };
+    return { state, outcome: { kind: 'tied', level: state.board.next.value === tenth.value } };
   }
 
   const lives = state.difficulty === 'hard' ? state.lives - 1 : state.lives;
@@ -162,7 +196,7 @@ export function record(state: GameState): { outcome: Outcome; r: GamePayloads['t
     outcome: state.status === 'won' ? 'won' : state.lives <= 0 ? 'lost' : 'gave-up',
     r: {
       board: { id: state.board.id, name: state.board.title },
-      answers: slotsOf(state.board).flatMap((slot) =>
+      answers: slotsIn(state).flatMap((slot) =>
         slot.members.map((member) => ({
           name: member.label,
           found: namedIn(state, slot.rank).has(member.key),

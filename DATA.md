@@ -20,7 +20,7 @@ records and statistics* — they are matched into the `fncs_wins` column of
 `players.json` upstream, which is why the attribution still names both sources.
 
 Licensing is in [CREDITS.md](CREDITS.md) and
-[src/data/LICENSE.md](src/data/LICENSE.md) — the data is CC-BY-SA 3.0, not MIT.
+[src/data/LICENSE.md](src/data/LICENSE.md) — the data is CC BY-SA 3.0, not AGPL like the code.
 
 ```bash
 npm run check:games   # play all ten games headlessly

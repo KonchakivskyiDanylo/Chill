@@ -352,6 +352,7 @@ export const GAMES: GameMeta[] = [
     rules: [
       'A player who fits no open cell costs a life.',
       'Each player can be used once.',
+      'No player fits the whole grid: at most 4 cells on Easy, 3 on Medium, 2 on Hard.',
       'The grid never offers a cell that would leave another with nobody left to fill it.',
     ],
     sections: [

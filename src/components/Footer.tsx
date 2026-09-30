@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { REPO_URL, SOURCE } from '@/data/liquipedia/roster';
+import { SOURCE } from '@/data/liquipedia/roster';
 
 /**
  * Site footer.
@@ -7,8 +7,7 @@ import { REPO_URL, SOURCE } from '@/data/liquipedia/roster';
  * It carries the Liquipedia attribution, which is not decoration: the player
  * data is reused under CC BY-SA 3.0, and that licence requires the credit and a
  * link to the source to appear wherever the work is shown. `Credits` has the
- * long form; this is the version every page carries. The source-code link is
- * there because Liquipedia's API terms ask for the project to be open source.
+ * long form; this is the version every page carries.
  */
 
 /**
@@ -51,7 +50,7 @@ export function Footer() {
 
         <hr className="divider" />
 
-        <p className="tiny faint">
+        <p className="small faint">
           Data from{' '}
           <a className="link" href={SOURCE.url} target="_blank" rel="noreferrer noopener">
             Liquipedia
@@ -60,20 +59,23 @@ export function Footer() {
           <a className="link" href={SOURCE.licenseUrl} target="_blank" rel="noreferrer noopener">
             CC BY-SA
           </a>
-          ; our data files are shared under the same licence. Unofficial fan project, not affiliated with
-          or endorsed by Epic Games, Liquipedia or any team. Fortnite is a trademark of Epic Games, Inc.
+          ; our data files are shared under the same licence. Where the sources say nothing, neither do
+          we — nothing is estimated.
+        </p>
+
+        <p className="small faint">
+          OffSpawn is unofficial and not affiliated with or endorsed by Epic Games, Liquipedia or any team.
+          Fortnite is a trademark of Epic Games, Inc.
         </p>
 
         {/* The site sends one thing about you: how each round you finish went. Say so. */}
-        <p className="tiny faint">
-          Finished rounds are counted anonymously to tune the puzzles. No accounts, no tracking cookies.
+        <p className="small faint">
+          Your scores and progress stay in your browser. Finished rounds are counted anonymously to tune
+          the puzzles — no accounts, no tracking cookies.
         </p>
 
         <nav className="site-footer__links" aria-label="Site information">
           <Link to="/credits">Credits &amp; licence</Link>
-          <a href={REPO_URL} target="_blank" rel="noreferrer noopener">
-            Source code
-          </a>
         </nav>
       </div>
     </footer>

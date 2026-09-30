@@ -89,9 +89,6 @@ export function Layout({ children }: { children: ReactNode }) {
               Off<span className="brand__accent">Spawn</span>
             </span>
           </Link>
-          <span className="chip chip--primary tiny site-header__badge" style={{ marginLeft: 2 }}>
-            Prototype
-          </span>
           <div className="spacer" />
           {/* Only renders when an event mode is in force — see `EventMode`. */}
           <ModeChip />

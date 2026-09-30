@@ -1,8 +1,9 @@
 # OffSpawn — competitive Fortnite puzzles
 
-Ten browser puzzle games built around competitive Fortnite players. No accounts,
-no backend, no monetisation — everything runs in the browser, on data imported
-from Liquipedia and Wikipedia.
+Browser puzzle games built around competitive Fortnite players — ten built,
+seven on the site. No accounts and no monetisation: the games run in the browser
+on data from Liquipedia and Wikipedia, and a small Node server (`server/index.ts`)
+serves the site and records anonymous round stats and support requests.
 
 Player data comes from [Liquipedia](https://liquipedia.net/fortnite) and is
 reused and modified under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/us/);

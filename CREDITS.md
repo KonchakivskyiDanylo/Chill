@@ -2,7 +2,7 @@
 
 | What | Licence |
 | --- | --- |
-| Source code (`src/`, `scripts/`, `server/`, config) | MIT — see [LICENSE](LICENSE) |
+| Source code (`src/`, `scripts/`, `server/`, config) | GNU AGPL-3.0 or later — see [LICENSE](LICENSE). Copyright © 2026 Konchakivskyi Danylo |
 | Data (`liquipedia_data/clean_data/`, `src/data/`) | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/us/) |
 
 ## Liquipedia
@@ -32,6 +32,6 @@ changed, and share under the same licence. Provided as is, without warranty.
 
 ## Trademarks
 
-OffSpawn is an unofficial fan project, not affiliated with or endorsed by Epic
+OffSpawn is unofficial and not affiliated with or endorsed by Epic
 Games, Liquipedia, Team Liquid, Wikipedia or any team or player. Fortnite is a
 trademark of Epic Games, Inc. Wrong data or a rights issue? Open an issue.
