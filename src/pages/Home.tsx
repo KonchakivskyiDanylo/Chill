@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { ModePicker } from '@/components/EventMode';
+import { SOURCE } from '@/data/liquipedia/roster';
 import { VISIBLE_GAMES } from '@/games/registry';
 
 const COUNT = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
@@ -42,28 +43,14 @@ export function Home() {
       <section className="card card--muted stack">
         <div className="card__title">About this prototype</div>
         <p className="small muted">
-          OffSpawn is a fan project, and an unfinished one — the games work, the data is still growing, and
-          the scoring is all local to your browser. Everything it knows comes from people who wrote it down
-          first:{' '}
-          <a className="link" href="https://liquipedia.net/fortnite" target="_blank" rel="noreferrer noopener">
+          An unfinished fan project: scores and progress stay in your browser. The data is from{' '}
+          <a className="link" href={SOURCE.url} target="_blank" rel="noreferrer noopener">
             Liquipedia
           </a>{' '}
-          for who these players are, where they are from, when they were born and what they have won, and
-          Wikipedia's competitive Fortnite records for the FNCS title counts. Both are CC-BY-SA, so the data
-          this site derives from them is too.
-        </p>
-        <p className="small muted">
-          Where a source says nothing, so does OffSpawn: a missing earnings figure shows as a dash rather
-          than a zero, and a player with no published birthday is simply left out of the questions that need
-          one. Nothing on the site is estimated or filled in.
-        </p>
-        <p className="small muted">
-          Every game reads through one repository interface, so a live API can replace the imported files
-          without a single game changing.
-        </p>
-        <p className="tiny faint">
+          and Wikipedia, modified, under CC BY-SA — and where they say nothing, neither do we: nothing is
+          estimated.{' '}
           <Link to="/credits" className="link">
-            Credits &amp; data licence
+            Credits &amp; licence
           </Link>
         </p>
       </section>

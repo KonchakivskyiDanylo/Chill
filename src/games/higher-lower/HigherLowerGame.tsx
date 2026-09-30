@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRoundRecorder } from '@/analytics/client';
-import { Link } from 'react-router-dom';
-import { formatDate, GameShell } from '@/components/GameShell';
+import { GameShell } from '@/components/GameShell';
+import { RosterNote } from '@/components/LiquipediaGate';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { LevelSetup, type LevelOption } from '@/components/PoolSetup';
@@ -10,7 +10,7 @@ import { loadFacts, type Facts } from '@/data/liquipedia/facts';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import type { Pools } from '@/data/liquipedia/pools';
-import { EXPORT_DATE, SOURCE, type Roster, type RosterPlayer } from '@/data/liquipedia/roster';
+import { EXPORT_DATE, type Roster, type RosterPlayer } from '@/data/liquipedia/roster';
 import { activePool, useEventMode } from '@/games/shared/mode';
 import { poolPlayers } from '@/games/shared/pool';
 import { ordinal, playerMoney, plural } from '@/lib/format';
@@ -240,29 +240,6 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
         />
       )}
     </GameShell>
-  );
-}
-
-/** Where this game's numbers come from, and under what licence. */
-function RosterNote() {
-  const source = SOURCE;
-  return (
-    <p className="tiny faint">
-      Player values come from{' '}
-      <a href={source.url} className="link" target="_blank" rel="noreferrer noopener">
-        {source.name}
-      </a>{' '}
-      (last update {formatDate(EXPORT_DATE)}), reused under{' '}
-      <a href={source.licenseUrl} className="link" target="_blank" rel="noreferrer noopener">
-        {source.license}
-      </a>
-      . FNCS titles come from Wikipedia’s “Competitive Fortnite records and statistics”. Where a source
-      publishes no figure the player is left out of that category rather than counted as a zero.{' '}
-      <Link to="/credits" className="link">
-        Full attribution
-      </Link>
-      .
-    </p>
   );
 }
 

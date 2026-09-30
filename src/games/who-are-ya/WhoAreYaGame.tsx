@@ -158,7 +158,7 @@ function Game({
     setGame(createGame(drawn.pick, cluesFor(drawn.pick.id), mode));
   }, [players, pools, event, choice, cluesFor, mode, field]);
 
-  const note = <RosterNote what="Teammates" generated={teammates.generated} />;
+  const note = <RosterNote />;
 
   if (!game) {
     return (

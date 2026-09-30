@@ -5,9 +5,9 @@ no backend, no monetisation — everything runs in the browser, on data imported
 from Liquipedia and Wikipedia.
 
 Player data comes from [Liquipedia](https://liquipedia.net/fortnite) and is
-reused and modified under [CC-BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/);
-FNCS title counts come from Wikipedia. The derived data files are shared under
-the same licence — see [CREDITS.md](CREDITS.md).
+reused and modified under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/us/);
+FNCS title counts come from Wikipedia (CC BY-SA 4.0). The derived data files are
+shared under the same licence — see [CREDITS.md](CREDITS.md).
 
 ```bash
 npm install

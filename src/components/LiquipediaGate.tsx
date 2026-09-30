@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { EXPORT_DATE, SOURCE } from '@/data/liquipedia/roster';
-import { formatDate } from './GameShell';
+import { EXPORT_DATE, SOURCE, WIKIPEDIA } from '@/data/liquipedia/roster';
+import { formatDate } from '@/lib/format';
 import { Banner } from './ui';
 
 /**
@@ -33,36 +33,37 @@ export function LiquipediaGate({
 /**
  * Where a game's players came from and under what licence.
  *
- * CC-BY-SA asks for attribution wherever the work is used, so every game that
- * reads the export carries it rather than relying on the site footer alone.
+ * Liquipedia's API terms want the credit "in close proximity to the data", so
+ * every game carries this rather than relying on the footer. One line, but it
+ * holds everything CC BY-SA asks of it: the source with a link back, that it
+ * was modified, and the licence's URI. The long form is on /credits.
+ *
+ * Wikipedia is named on every game, not only the ones with an FNCS column:
+ * its title counts sit on every roster row and several games' questions use them.
  */
-export function RosterNote({
-  what = 'Secret players',
-  /** The date the derived file was generated, when the game reads one. */
-  generated,
-  /** True for the games whose numbers include the Wikipedia FNCS counts. */
-  fncs = false,
-}: {
-  what?: string;
-  generated?: string;
-  fncs?: boolean;
-}) {
+export function RosterNote() {
   return (
     <p className="tiny faint">
-      {what} come from{' '}
+      Data from{' '}
       <a href={SOURCE.url} className="link" target="_blank" rel="noreferrer noopener">
         {SOURCE.name}
       </a>{' '}
-      (last update {formatDate(EXPORT_DATE)}
-      {generated ? `, results built ${formatDate(generated)}` : ''}), reused under{' '}
+      (
       <a href={SOURCE.licenseUrl} className="link" target="_blank" rel="noreferrer noopener">
         {SOURCE.license}
       </a>
-      .{fncs ? ' FNCS titles come from Wikipedia’s “Competitive Fortnite records and statistics”.' : ''}{' '}
+      ) and{' '}
+      <a href={WIKIPEDIA.url} className="link" target="_blank" rel="noreferrer noopener">
+        Wikipedia
+      </a>{' '}
+      (
+      <a href={WIKIPEDIA.licenseUrl} className="link" target="_blank" rel="noreferrer noopener">
+        {WIKIPEDIA.license}
+      </a>
+      ), modified · updated {formatDate(EXPORT_DATE)} ·{' '}
       <Link to="/credits" className="link">
-        Full attribution
+        Credits
       </Link>
-      .
     </p>
   );
 }

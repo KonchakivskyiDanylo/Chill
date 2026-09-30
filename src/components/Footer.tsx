@@ -1,12 +1,14 @@
 import { Link } from 'react-router-dom';
+import { REPO_URL, SOURCE } from '@/data/liquipedia/roster';
 
 /**
  * Site footer.
  *
  * It carries the Liquipedia attribution, which is not decoration: the player
- * data is reused under CC-BY-SA 3.0, and that licence requires the credit and a
+ * data is reused under CC BY-SA 3.0, and that licence requires the credit and a
  * link to the source to appear wherever the work is shown. `Credits` has the
- * long form; this is the version every page carries.
+ * long form; this is the version every page carries. The source-code link is
+ * there because Liquipedia's API terms ask for the project to be open source.
  */
 
 /**
@@ -50,43 +52,28 @@ export function Footer() {
         <hr className="divider" />
 
         <p className="tiny faint">
-          Player data from{' '}
-          <a
-            className="link"
-            href="https://liquipedia.net/fortnite"
-            target="_blank"
-            rel="noreferrer noopener"
-          >
+          Data from{' '}
+          <a className="link" href={SOURCE.url} target="_blank" rel="noreferrer noopener">
             Liquipedia
+          </a>{' '}
+          and Wikipedia, modified, under{' '}
+          <a className="link" href={SOURCE.licenseUrl} target="_blank" rel="noreferrer noopener">
+            CC BY-SA
           </a>
-          , reused and modified under{' '}
-          <a
-            className="link"
-            href="https://creativecommons.org/licenses/by-sa/3.0/"
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            CC-BY-SA 3.0
-          </a>
-          . FNCS titles from Wikipedia, “Competitive Fortnite records and statistics”, also CC-BY-SA. The
-          data files derived from them are shared under the same licence.
-        </p>
-
-        <p className="tiny faint">
-          © {new Date().getFullYear()} OffSpawn. Player names, team names, logos and trademarks are used
-          solely for identification and informational purposes; all rights remain with their respective
-          owners. Fortnite is a trademark of Epic Games, Inc. — OffSpawn is an unofficial fan project and
-          is not affiliated with or endorsed by Epic Games, Liquipedia or any team shown here.
+          ; our data files are shared under the same licence. Unofficial fan project, not affiliated with
+          or endorsed by Epic Games, Liquipedia or any team. Fortnite is a trademark of Epic Games, Inc.
         </p>
 
         {/* The site sends one thing about you: how each round you finish went. Say so. */}
         <p className="tiny faint">
-          Finished rounds are counted anonymously — which game, which board, how it went — to see which
-          puzzles are too hard or too easy. No accounts, no tracking cookies, nothing that identifies you.
+          Finished rounds are counted anonymously to tune the puzzles. No accounts, no tracking cookies.
         </p>
 
         <nav className="site-footer__links" aria-label="Site information">
-          <Link to="/credits">Credits &amp; data licence</Link>
+          <Link to="/credits">Credits &amp; licence</Link>
+          <a href={REPO_URL} target="_blank" rel="noreferrer noopener">
+            Source code
+          </a>
         </nav>
       </div>
     </footer>

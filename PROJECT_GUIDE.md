@@ -42,7 +42,7 @@ Every game reads one Liquipedia export in `liquipedia_data/clean_data/fortnite/`
 | `career_path.json` | 187 majors and every player's finishes in them: 1,175 with five or more, 3,348 in all once cell 7 has run | cell 7 | Career Path |
 | `teammates.json` | each player's 50 most frequent teammates | cell 6 | Who Are Ya, List |
 | `orgs.json` | 979 organisations, with current and past players | the export | Griefer, Tic Tac Toe, Connections, Tenaball, List |
-| `facts.json` | per player: tournaments played, LAN and FNCS appearances, wins by kind, which headline events they played | notebook appendix | the criteria games, List, Tenaball's field boards, FNCS Finals, the glossary |
+| `facts.json` | per player: tournaments played, LAN and FNCS appearances, wins by kind, which headline events they played; plus `season`, every team's finish at the year's big events | notebook appendix | the criteria games, List, Tenaball's field boards, FNCS Finals, the glossary |
 | `rankings.json` | 375 precomputed Tenaball boards (284 until cells 2–4 are re-run), plus the tournament names the paydays boards answer from | cells 2–4 | Tenaball |
 | `pools.json` | event fields; today one, the FNCS 2026 Globals with 103 players, where each finished and what each had earned before it | cell 5 | event mode |
 
@@ -375,20 +375,29 @@ You get one list and 90 seconds to name as many of it as you can. Every correct 
 - **Missed names.** When time runs out you see everyone you missed.
 - **The suggestion box** helps you spell a name you already thought of, and never says whether it is on the list.
 
-**The lists are hand-picked, not generated.** A recall game only works when you can picture the answer set, so there are 184 all-time lists with at least 8 answers each:
+**The lists are hand-picked, not generated.** A recall game only works when you can picture the answer set, so there are 211 all-time lists with at least 8 answers each:
 
 | Family | Lists | Example |
 | --- | --- | --- |
 | Organisations | 52 | has played for FaZe Clan (anyone, at any point) |
 | Two events at once | 45 | at both the 2023 and 2024 Globals; played every Globals; two FNCS finals in a row |
-| Earnings | 19 | $1M+ career; $200K+ in 2021; $500K+ in a single year |
-| Teammates | 19 | 10+ tournaments with one of the 30 top earners |
-| By country | 26 | French FNCS winners; countries with a player over $1M; countries with an FNCS winner |
-| FNCS | 13 | FNCS winners by region; 20+ grand finals; won back to back |
+| By country | 42 | French FNCS winners; French players who have played a LAN; countries with a player over $1M |
+| Earnings | 20 | $1M+ career; $200K+ in 2021; $500K+ in a single year |
+| Teammates | 20 | 10+ tournaments with one of the 30 top earners |
+| FNCS | 17 | FNCS winners by region; 20+ grand finals; won back to back; won one before turning 15, or aged 20+ |
 | Year by year | 8 | won a major in 2023 |
+| The 2026 season | 5 | played all five big events; Europe's top 10; the top 10 duos |
 | Titles and fields | 2 | LAN winners; qualified for a field |
 
-Lists answered with countries or organisations search every name, not just the answers.
+Lists answered with countries, organisations or duos search every name, not just the answers.
+
+**The season lists** take the year's big events — for 2026 EWC, the Globals, the Summit and FNCS Majors 1 and 2, named in `SEASON_EVENTS` in `scripts/pipeline/derived.py` — and rank by average finish, a missed event counting as 200th:
+
+- **Top 10s** for Europe, North America, the world, and outside Europe and North America (the world's ten are all EU and NA). A list whose 10th and 11th are level is not built: today that is the one outside EU and NA, where Alex and Wreckless tie.
+- **Top 10 duos:** the same two players at all five, answered by typing either handle.
+- **Age at a win** is on the day of the grand final, from the published birthday; the dates are Liquipedia's regional finals, so a winner only Wikipedia records is on neither age list.
+
+**Played or not.** Tenaball's and List's pickers mark each board green (completed), yellow (tried: gave up or fell short) or red (not played), from `progress:<game>` in local storage (`games/shared/progress.ts`). Keyed by puzzle id, so a daily puzzle can key by date.
 
 ### Event-mode lists
 

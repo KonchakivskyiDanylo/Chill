@@ -1,137 +1,63 @@
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { REPO_URL, SOURCE, WIKIPEDIA } from '@/data/liquipedia/roster';
 
 /**
  * Attribution page.
  *
- * Liquipedia's text is licensed CC-BY-SA 3.0, which asks for three things from
- * anyone reusing it: credit the source with a link, say what was changed, and
- * pass the same licence on to the derived work. Section 4(a) also wants the
- * licence itself — or its URI — to travel with the work, which is why every
- * link below points at the real licence text rather than paraphrasing it.
+ * Kept short on purpose, but it has to hold everything the two licences and
+ * Liquipedia's API terms ask for: credit with a link back, the licence's URI,
+ * a note that the work was modified, the same licence on what we derive (and
+ * the no-warranty disclaimer that travels with it), no implied endorsement,
+ * and the project published as open source. Liquipedia's images are licensed
+ * separately, which is why none are used.
  */
 
-/** What was taken from Liquipedia, in the wiki's own terms. */
-const LIQUIPEDIA_TABLES = [
-  'Player pages — handle, real name, nationality, region, birth date, career and per-year earnings, current team',
-  'Team pages — organisation names, regions, founding and disband dates',
-  'Tournament pages — name, dates, mode, region, prize pool and Liquipedia tier',
-  'Placement tables — who finished where, and alongside whom',
-  'Transfer tables — moves between organisations',
-];
+const Ext = ({ href, children }: { href: string; children: ReactNode }) => (
+  <a className="link" href={href} target="_blank" rel="noreferrer noopener">
+    {children}
+  </a>
+);
 
 export function Credits() {
   return (
     <div className="page page--narrow stack-lg">
-      <div className="stack">
+      <div className="stack-sm">
         <Link to="/" className="small muted" style={{ width: 'fit-content' }}>
           ← All games
         </Link>
-        <h1>Credits &amp; data licence</h1>
-        <p className="muted">
-          OffSpawn is a fan project. Everything it knows about Fortnite players was written by other people,
-          and this page says who they are and what was done with their work.
-        </p>
+        <h1>Credits &amp; licence</h1>
       </div>
 
-      <section className="card stack">
+      <section className="card stack-sm">
         <div className="card__title">Liquipedia</div>
         <p className="small">
-          Some content on OffSpawn is from the Liquipedia Fortnite wiki —{' '}
-          <a className="link" href="https://liquipedia.net/fortnite" target="_blank" rel="noreferrer noopener">
-            https://liquipedia.net/fortnite
-          </a>{' '}
-          — and is used under the{' '}
-          <a
-            className="link"
-            href="https://creativecommons.org/licenses/by-sa/3.0/"
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            Creative Commons Attribution-ShareAlike 3.0
-          </a>{' '}
-          licence. Liquipedia is a Team Liquid project, written and maintained by its contributors.
+          Player, team, tournament, placement and transfer data is from the{' '}
+          <Ext href={SOURCE.url}>Liquipedia Fortnite wiki</Ext> and its contributors, fetched through the
+          Liquipedia API and used under <Ext href={SOURCE.licenseUrl}>{SOURCE.license}</Ext>.
         </p>
-        <p className="small">What was taken:</p>
-        <ul className="stack-sm list-reset small">
-          {LIQUIPEDIA_TABLES.map((table) => (
-            <li key={table} className="row" style={{ alignItems: 'flex-start', flexWrap: 'nowrap', gap: 8 }}>
-              <span aria-hidden="true" style={{ color: 'var(--primary)', lineHeight: 1.55 }}>
-                ▸
-              </span>
-              <span>{table}</span>
-            </li>
-          ))}
-        </ul>
-        <hr className="divider" />
-        <div className="stack-sm">
-          <h3>What was changed</h3>
-          <p className="small muted">
-            The original work has been modified. Liquipedia's player, tournament, team, transfer and
-            placement tables were exported, then: rows were narrowed to people with a competitive record;
-            nationalities were mapped to two-letter country codes; team page names were swapped for display
-            names; ages are computed from published birth dates; and a “fame” ranking was derived from
-            career earnings and tournament wins weighted by the tier of the tournament, which is what the
-            Easy / Medium / Hard settings select on. None of those derived numbers appear on Liquipedia —
-            they are this site's reading of Liquipedia's data, and any error in them is ours.
-          </p>
-          <p className="small muted">
-            No photographs or images were taken from Liquipedia. Many files there are licensed separately
-            from the text and would need their own clearance.
-          </p>
-        </div>
-        <hr className="divider" />
-        <div className="stack-sm">
-          <h3>ShareAlike</h3>
-          <p className="small muted">
-            Because the data files in this project are a derivative of CC-BY-SA text, they are shared under
-            the same licence: <strong>CC-BY-SA 3.0</strong>. That covers{' '}
-            <code className="mono tiny">src/data/</code> and the build scripts' output. The site's own
-            source code is MIT-licensed, which is a separate thing from the data it reads.
-          </p>
-        </div>
+        <p className="small muted">
+          <strong>Modified:</strong> filtered to players with a competitive record, countries turned into
+          flags, team pages into team names, and ages, difficulty tiers, rankings and puzzle answers derived
+          by this site. Errors in those are ours. No Liquipedia images are used.
+        </p>
       </section>
 
-      <section className="card stack">
+      <section className="card stack-sm">
         <div className="card__title">Wikipedia</div>
         <p className="small">
-          The FNCS title counts carried on every player row come from the English Wikipedia article{' '}
-          <a
-            className="link"
-            href="https://en.wikipedia.org/wiki/Competitive_Fortnite_records_and_statistics"
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            “Competitive Fortnite records and statistics”
-          </a>
-          , used under{' '}
-          <a
-            className="link"
-            href="https://creativecommons.org/licenses/by-sa/4.0/"
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            CC-BY-SA 4.0
-          </a>
-          . Its FNCS winners table lists every grand-final winner in every region since 2019, which is why
-          Higher or Lower can ask about FNCS wins at all — the Liquipedia export does not publish that as a
-          per-player number.
+          FNCS title counts are from <Ext href={WIKIPEDIA.url}>“Competitive Fortnite records and statistics”</Ext>,
+          used under <Ext href={WIKIPEDIA.licenseUrl}>{WIKIPEDIA.license}</Ext>.
         </p>
       </section>
 
-      <section className="card stack">
-        <div className="card__title">Epic Games</div>
+      <section className="card stack-sm">
+        <div className="card__title">This site</div>
         <p className="small muted">
-          Fortnite is a trademark of Epic Games, Inc. OffSpawn is an unofficial, non-commercial fan project
-          with no affiliation to Epic Games, Liquipedia, Team Liquid, Wikipedia or any organisation or
-          player named on the site. Player names, team names and logos appear for identification only.
-        </p>
-      </section>
-
-      <section className="card stack">
-        <div className="card__title">Something wrong?</div>
-        <p className="small muted">
-          If you are a rights holder and something here needs correcting or removing, or if a player's data
-          is simply wrong, open an issue on the repository and it will be fixed.
+          Our data files are shared under the same licence, as is, without warranty. The code is MIT and{' '}
+          <Ext href={REPO_URL}>open source on GitHub</Ext>, where you can also report wrong data. OffSpawn is
+          an unofficial fan project, not affiliated with or endorsed by Epic Games, Liquipedia, Team Liquid,
+          Wikipedia or any team or player. Fortnite is a trademark of Epic Games, Inc.
         </p>
       </section>
     </div>

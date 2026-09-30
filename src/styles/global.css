@@ -794,6 +794,31 @@ textarea {
   background: var(--primary-soft);
 }
 
+/* Played / tried / not played, in front of a picker option — `StatusDot`. */
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  border-radius: 50%;
+  vertical-align: 1px;
+}
+.status-dot--won {
+  background: var(--success);
+}
+.status-dot--tried {
+  background: var(--warning);
+}
+.status-dot--none {
+  box-shadow: inset 0 0 0 1.5px var(--danger);
+}
+
+.status-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
 /* ----------------------------------------------------------------- chips -- */
 
 .chip {

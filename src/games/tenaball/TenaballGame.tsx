@@ -4,7 +4,7 @@ import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PlayerSearch } from '@/components/PlayerSearch';
-import { Banner, Hearts, OptionCard, OptionGrid, Stat } from '@/components/ui';
+import { Banner, Hearts, OptionCard, OptionGrid, Stat, StatusDot, StatusLegend } from '@/components/ui';
 import { WhatCounts } from '@/components/Glossary';
 import type { Board } from '@/data/liquipedia/rankings';
 import { loadFacts, type Facts } from '@/data/liquipedia/facts';
@@ -19,6 +19,7 @@ import { useRoster } from '@/data/liquipedia/useRoster';
 import { activePool, useEventMode } from '@/games/shared/mode';
 import { termsIn } from '@/games/shared/glossary';
 import { poolPlayers } from '@/games/shared/pool';
+import { useProgress, type PuzzleStatus } from '@/games/shared/progress';
 import type { Searchable } from '@/lib/text';
 import { useBestScore } from '@/lib/storage';
 import { getGame } from '@/games/registry';
@@ -83,6 +84,11 @@ function Game({
     setup: { event, level: game!.difficulty },
     ...roundRecord(game!),
   }));
+  // Green, yellow or red in the picker: completed, tried, not played.
+  const { statusOf, mark } = useProgress('tenaball');
+  useEffect(() => {
+    if (game && game.status !== 'playing') mark(game.board.id, game.status === 'won');
+  }, [game, mark]);
   const [query, setQuery] = useState('');
   const [feedback, setFeedback] = useState<{ tone: string; message: string } | null>(null);
 
@@ -221,7 +227,7 @@ function Game({
 
   if (!game) {
     return (
-      <GameShell game={meta} dataNote={<RosterNote what="Rankings" generated={rankings.generated} />}>
+      <GameShell game={meta} dataNote={<RosterNote />}>
         <div className="stack">
           <section className="card stack">
             <div className="card__title">Difficulty</div>
@@ -258,7 +264,13 @@ function Game({
             🎲 Random category
           </button>
 
-          <CategoryPicker rankings={active} query={query} onQuery={setQuery} onPick={start} />
+          <CategoryPicker
+            rankings={active}
+            query={query}
+            onQuery={setQuery}
+            onPick={start}
+            statusOf={statusOf}
+          />
         </div>
       </GameShell>
     );
@@ -326,7 +338,7 @@ function Game({
   return (
     <GameShell
       game={meta}
-      dataNote={<RosterNote what="Rankings" generated={rankings.generated} />}
+      dataNote={<RosterNote />}
       toolbar={
         <button type="button" className="icon-btn" onClick={() => setGame(null)}>
           ↺ New category
@@ -454,11 +466,13 @@ function CategoryPicker({
   query,
   onQuery,
   onPick,
+  statusOf,
 }: {
   rankings: Rankings;
   query: string;
   onQuery: (value: string) => void;
   onPick: (board: Board) => void;
+  statusOf: (board: string) => PuzzleStatus | null;
 }) {
   const grouped = useMemo(() => {
     const out = new Map<string, Board[]>();
@@ -478,6 +492,7 @@ function CategoryPicker({
         <div className="card__title">Or pick a category</div>
         <span className="tiny faint">{total} available</span>
       </div>
+      <StatusLegend statuses={rankings.boards.map((board) => statusOf(board.id))} />
       <input
         className="input"
         value={query}
@@ -502,6 +517,7 @@ function CategoryPicker({
                     className="picker-option"
                     onClick={() => onPick(board)}
                   >
+                    <StatusDot status={statusOf(board.id)} />
                     {board.title}
                   </button>
                 ))}

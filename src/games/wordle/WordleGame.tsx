@@ -196,7 +196,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
 
   if (!game) {
     return (
-      <GameShell game={meta} examples={<Examples />} dataNote={<RosterNote fncs />}>
+      <GameShell game={meta} examples={<Examples />} dataNote={<RosterNote />}>
         <div className="stack">
           <PoolSetup
             roster={roster}
@@ -236,7 +236,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
     <GameShell
       game={meta}
       examples={<Examples />}
-      dataNote={<RosterNote fncs />}
+      dataNote={<RosterNote />}
       toolbar={
         <button type="button" className="icon-btn" onClick={() => setGame(null)}>
           ⚙ Setup

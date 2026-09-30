@@ -73,3 +73,9 @@ export function playerMoney(player: { earnings: number; earningsKnown: boolean }
 export function playerMoneyShort(player: { earnings: number; earningsKnown: boolean }): string {
   return player.earningsKnown ? moneyShort(player.earnings) : '—';
 }
+
+/** "2026-09-28" -> "28/09/2026". */
+export function formatDate(iso: string): string {
+  const [year, month, day] = iso.split('-');
+  return `${day}/${month}/${year}`;
+}

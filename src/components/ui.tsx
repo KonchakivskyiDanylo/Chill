@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
+import type { PuzzleStatus } from '@/games/shared/progress';
 import type { Nameable } from '@/lib/text';
 import { CountryBadge } from './CountryBadge';
 import { PlayerAvatar } from './PlayerAvatar';
@@ -77,6 +78,40 @@ export function Hearts({ left, total }: { left: number; total: number }) {
         </span>
       ))}
     </span>
+  );
+}
+
+const STATUS_LABEL = { won: 'Completed', tried: 'Tried', none: 'Not played' } as const;
+
+/**
+ * Whether you have played a puzzle: green completed, yellow tried (gave up or
+ * fell short), red not played. The red one is a hollow ring, so a picker you
+ * have barely touched reads as a list, not as a wall of warnings.
+ */
+export function StatusDot({ status }: { status: PuzzleStatus | null }) {
+  const key = status ?? 'none';
+  return (
+    <span
+      className={`status-dot status-dot--${key}`}
+      role="img"
+      aria-label={STATUS_LABEL[key]}
+      title={STATUS_LABEL[key]}
+    />
+  );
+}
+
+/** What the dots mean, with how many of each — shown above a picker. */
+export function StatusLegend({ statuses }: { statuses: readonly (PuzzleStatus | null)[] }) {
+  const count = (key: PuzzleStatus | null) => statuses.filter((status) => status === key).length;
+  return (
+    <div className="status-legend tiny muted">
+      {(['won', 'tried', null] as const).map((key) => (
+        <span key={key ?? 'none'}>
+          <StatusDot status={key} />
+          {count(key)} {STATUS_LABEL[key ?? 'none'].toLowerCase()}
+        </span>
+      ))}
+    </div>
   );
 }
 

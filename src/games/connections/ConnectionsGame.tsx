@@ -102,7 +102,7 @@ function Game({
 
   if (!game) {
     return (
-      <GameShell game={meta} dataNote={<RosterNote what="Players" generated={facts.generated} />}>
+      <GameShell game={meta} dataNote={<RosterNote />}>
         <div className="stack">
           <PoolSetup
             roster={roster}
@@ -136,7 +136,7 @@ function Game({
   return (
     <GameShell
       game={meta}
-      dataNote={<RosterNote what="Players" generated={facts.generated} />}
+      dataNote={<RosterNote />}
       toolbar={
         <button type="button" className="icon-btn" onClick={() => setGame(null)}>
           ↺ New board

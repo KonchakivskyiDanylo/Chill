@@ -38,13 +38,28 @@ export type FameTier = 'easy' | 'medium' | 'hard';
  */
 export const EXPORT_DATE = '2026-09-28';
 
-/** Where the roster comes from, for the attribution line every game shows. */
+/**
+ * Where the roster comes from, for the attribution line every game shows.
+ *
+ * The licence link is the United States port, because that is the one
+ * Liquipedia's own copyright page names and links.
+ */
 export const SOURCE = {
-  name: 'Liquipedia Fortnite',
+  name: 'Liquipedia',
   url: 'https://liquipedia.net/fortnite',
-  license: 'CC-BY-SA 3.0',
-  licenseUrl: 'https://creativecommons.org/licenses/by-sa/3.0/',
+  license: 'CC BY-SA 3.0',
+  licenseUrl: 'https://creativecommons.org/licenses/by-sa/3.0/us/',
 } as const;
+
+/** Where the FNCS title counts come from — a different licence version from Liquipedia's. */
+export const WIKIPEDIA = {
+  url: 'https://en.wikipedia.org/wiki/Competitive_Fortnite_records_and_statistics',
+  license: 'CC BY-SA 4.0',
+  licenseUrl: 'https://creativecommons.org/licenses/by-sa/4.0/',
+} as const;
+
+/** The public repository — Liquipedia's API terms ask for the project to be open source. */
+export const REPO_URL = 'https://github.com/KonchakivskyiDanylo/Chill';
 
 /** One row of `players.json`, as the notebook writes it. */
 export interface LiquipediaRow {
@@ -125,7 +140,8 @@ export interface RosterPlayer {
   photoUrl: null;
 }
 
-function ageOn(birthDate: string | null, today: Date): number | null {
+/** Age in whole years on `today` — List also asks it of the day an FNCS was won. */
+export function ageOn(birthDate: string | null, today: Date): number | null {
   if (!birthDate) return null;
   const born = new Date(birthDate);
   if (Number.isNaN(born.getTime())) return null;

@@ -1117,6 +1117,58 @@ if (facts) {
     !lists.some((c) => c.id.startsWith('won-in-year:') && /title/i.test(c.title)),
     'list: a year list still asks for "a title"',
   );
+
+  // The age lists only hold players with a birthday; Peterbot won at 14.
+  const young = lists.find((c) => c.id === 'fncs-age:under:15');
+  check(Boolean(young?.answers.some((a) => a.name === 'Peterbot')), 'list: Peterbot is not an FNCS winner before 15');
+  for (const c of lists.filter((c) => c.id.startsWith('fncs-age:'))) {
+    check(
+      c.answers.every((a) => roster.players.find((p) => p.id === a.id)?.birthDate),
+      `list: "${c.title}" has a player with no birthday`,
+    );
+  }
+  for (const c of lists.filter((c) => c.id.startsWith('country-lan:'))) {
+    const country = c.id.slice('country-lan:'.length);
+    check(
+      c.answers.every((a) => facts.of(a.id).lanApps > 0 && roster.players.find((p) => p.id === a.id)?.countryName === country),
+      `list: "${c.title}" has a player from elsewhere or with no LAN`,
+    );
+  }
+
+  // The season: the user's worked example is Vico, 1 + 3 + 1 + 3 + 20 = 28, an average of 5.6.
+  const season = facts.season;
+  if (!season) {
+    skipped.push('list: the season lists (facts.json has no season block — run build_data.py)');
+  } else {
+    const vico = season.results.get('Vic0try0na');
+    check(
+      vico?.map((r) => r?.finish).join(',') === '1,3,1,3,20',
+      `list: Vic0try0na's 2026 finishes are ${vico?.map((r) => r?.finish).join(',')}, not 1,3,1,3,20`,
+    );
+    const europe = lists.find((c) => c.id === `season:${season.year}:top:Europe`);
+    check(Boolean(europe?.answers.some((a) => a.id === 'Vic0try0na')), 'list: Vic0try0na is not in Europe’s top 10');
+    // Cold played EWC with Rapid and the Globals with Ritual, so he is in no duo.
+    const duos = lists.find((c) => c.id === `season:${season.year}:duos`);
+    check(Boolean(duos), 'list: no top 10 duos');
+    check(!duos?.answers.some((a) => a.id.split('+').includes('Cold')), 'list: Cold is in a top 10 duo');
+    // Either handle offers the duo in the guess box.
+    for (const duo of duos?.answers ?? []) {
+      for (const handle of duo.name.split(' & ')) {
+        check(
+          suggestPlayers(handle, duos?.pool ?? [], 50).some((entry) => entry.id === duo.id),
+          `list: typing ${handle} does not offer ${duo.name}`,
+        );
+      }
+    }
+    for (const c of lists.filter((c) => c.id.startsWith('season:'))) {
+      notes.push(`list: ${c.title} — ${c.answers.map((a) => a.name).join(', ')}`);
+    }
+    for (const key of ['Europe', 'North America', 'world', 'rest']) {
+      if (!lists.some((c) => c.id === `season:${season.year}:top:${key}`)) {
+        notes.push(`list: no ${season.year} top 10 for "${key}" — 10th and 11th are level, or fewer than ten`);
+      }
+    }
+  }
 }
 
 // --------------------------------------------------------- 13. analytics records

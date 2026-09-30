@@ -1287,7 +1287,54 @@ def build(BASE):
             }
         )
 
-    payload = {"generated": TODAY, "events": events, "players": players_out}
+    # ------------------------------------------------------------------ season --
+    # The big events of one year, for List's season lists: who played all of
+    # them, the top ten by average finish, and the duos that played every one
+    # together. Only the teams' finishes are written here; the averaging is
+    # List's (src/games/list/criteria.ts), next to the rest of its rules.
+    #
+    # The five were named by the user. EWC 2026 is Liquipedia's "Reload Elite
+    # Series 2026 - Championship" (its series is the Esports World Cup). A
+    # Major is its regional grand finals, and a player only plays their own.
+    SEASON_YEAR = 2026
+    SEASON_EVENTS = [
+        ("EWC", r"Reload Elite Series 2026 - Championship"),
+        ("Globals", r"FNCS 2026\s+Global Championship"),
+        ("Summit", r"FNCS 2026\s+Major 1 Summit"),
+        ("FNCS Major 1", r"FNCS 2026 - Major 1: .+ - Grand Finals"),
+        ("FNCS Major 2", r"FNCS 2026 - Major 2: .+ - Grand Finals"),
+    ]
+    slot_of = {}
+    for slot, (label, pattern) in enumerate(SEASON_EVENTS):
+        names = {t["name"] for t in tournaments if re.fullmatch(pattern, t["name"])}
+        if not names:
+            print(f"  season: nothing matches {label!r} — its lists will not be built")
+        slot_of.update((name, slot) for name in names)
+
+    # A finish of None is a DNP, a DQ or a blank row: not a result to average.
+    season_teams = sorted(
+        {
+            (slot_of[t["name"]], r, tuple(sorted(page for page, _team in pages)))
+            for t, r, _money, pages in PLACED
+            if t["name"] in slot_of and r is not None
+        }
+    )
+    season = {
+        "year": SEASON_YEAR,
+        "events": [label for label, _pattern in SEASON_EVENTS],
+        "teams": [[slot, r, list(ids)] for slot, r, ids in season_teams],
+    }
+    at = defaultdict(set)
+    for slot, _r, ids in season_teams:
+        for page in ids:
+            at[page].add(slot)
+    print(
+        f"  season {SEASON_YEAR}: {len(season_teams)} team results, "
+        f"{sum(1 for slots in at.values() if len(slots) == len(SEASON_EVENTS))} players at all "
+        f"{len(SEASON_EVENTS)} events"
+    )
+
+    payload = {"generated": TODAY, "events": events, "players": players_out, "season": season}
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, separators=(",", ":"))
 

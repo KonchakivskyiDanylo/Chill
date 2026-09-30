@@ -112,7 +112,7 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
     setGame(createGame(drawn.pick, majors.resultsFor(drawn.pick.id), mode, majors));
   }, [players, pools, event, choice, majors, mode, field]);
 
-  const note = <RosterNote what="Results" generated={majors.generated} />;
+  const note = <RosterNote />;
 
   if (!game) {
     return (

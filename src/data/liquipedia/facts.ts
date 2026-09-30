@@ -50,10 +50,40 @@ interface RawPlayer {
   podium?: number[];
 }
 
+/** One team's result at a season event: [event, finish, player ids]. */
+type RawSeasonTeam = [number, number, string[]];
+
+interface RawSeason {
+  year: number;
+  events: string[];
+  teams: RawSeasonTeam[];
+}
+
 interface RawPayload {
   generated: string;
   events: RawEvent[];
   players: RawPlayer[];
+  /** Absent from a file written before the season block existed. */
+  season?: RawSeason;
+}
+
+/** A player's finish at one season event, and who they played it with. */
+export interface SeasonResult {
+  finish: number;
+  /** Every player on the team, this one included. */
+  team: readonly string[];
+}
+
+/**
+ * One year's big events — for 2026: EWC, the Globals, the Summit and FNCS
+ * Majors 1 and 2 — and everyone's finish at each.
+ */
+export interface Season {
+  year: number;
+  /** Short names, in the order `results` lists them. */
+  events: readonly string[];
+  /** Player id -> their result at each event, null where they were not there. */
+  results: ReadonlyMap<string, readonly (SeasonResult | null)[]>;
 }
 
 export interface HeadlineEvent extends RawEvent {
@@ -85,6 +115,8 @@ export interface PlayerFacts {
   fncsWinRegions: readonly string[];
   /** Years this player won a regional FNCS final — the same finals as above. */
   fncsWinYears: readonly number[];
+  /** The dates of those wins, oldest first. */
+  fncsWinDates: readonly string[];
   /** Headline events this player finished in the top 3 of, as indices like `played`. */
   podium: readonly number[];
 }
@@ -102,6 +134,7 @@ const NONE: PlayerFacts = {
   winYears: [],
   fncsWinRegions: [],
   fncsWinYears: [],
+  fncsWinDates: [],
   podium: [],
 };
 
@@ -121,6 +154,8 @@ function isRegionalFinal(event: RawEvent): boolean {
 export class Facts {
   readonly generated: string;
   readonly events: HeadlineEvent[];
+  /** Null until `build_data.py` has written the season block. */
+  readonly season: Season | null;
 
   private readonly byPlayer = new Map<string, PlayerFacts>();
   /** event index -> player ids who were there. Built lazily, once. */
@@ -146,9 +181,11 @@ export class Facts {
           ...new Set(regional.flatMap((event) => (event.region ? [event.region] : []))),
         ].sort(),
         fncsWinYears: [...new Set(regional.map((event) => Number(event.date.slice(0, 4))))].sort(),
+        fncsWinDates: regional.map((event) => event.date).sort(),
         podium: player.podium ?? [],
       });
     }
+    this.season = payload.season ? readSeason(payload.season) : null;
   }
 
   /** This player's facts, or an all-zero record when they have no results. */
@@ -271,6 +308,25 @@ export class Facts {
     (minApps: number) =>
     (players: readonly RosterPlayer[]): RosterPlayer[] =>
       players.filter((player) => this.of(player.id).apps >= minApps);
+}
+
+/**
+ * Indexes the season block by player.
+ *
+ * A player listed twice at one event keeps the better finish: Liquipedia has
+ * Astell in two different duos at the 2026 Major 2 Asia final.
+ */
+function readSeason(raw: RawSeason): Season {
+  const results = new Map<string, (SeasonResult | null)[]>();
+  for (const [event, finish, team] of raw.teams) {
+    for (const id of team) {
+      let row = results.get(id);
+      if (!row) results.set(id, (row = raw.events.map(() => null)));
+      const was = row[event];
+      if (!was || finish < was.finish) row[event] = { finish, team };
+    }
+  }
+  return { year: raw.year, events: raw.events, results };
 }
 
 let cached: Promise<Facts> | null = null;

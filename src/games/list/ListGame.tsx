@@ -4,7 +4,7 @@ import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PlayerSearch } from '@/components/PlayerSearch';
-import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
+import { Banner, OptionCard, OptionGrid, Stat, StatusDot, StatusLegend } from '@/components/ui';
 import { WhatCounts } from '@/components/Glossary';
 import type { Facts } from '@/data/liquipedia/facts';
 import { loadOrgs, type Orgs } from '@/data/liquipedia/orgs';
@@ -21,6 +21,7 @@ import { getGame } from '@/games/registry';
 import { activePool, useEventMode } from '@/games/shared/mode';
 import { termsIn } from '@/games/shared/glossary';
 import { poolPlayers } from '@/games/shared/pool';
+import { useProgress, type PuzzleStatus } from '@/games/shared/progress';
 import { buildCriteria, buildPoolCriteria, type Criterion } from './criteria';
 import './list.css';
 
@@ -153,6 +154,12 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
     if (finished) submitBest(found.length);
   }, [finished, found.length, submitBest]);
 
+  // Green, yellow or red in the picker: completed, tried, not played.
+  const { statusOf, mark } = useProgress('list');
+  useEffect(() => {
+    if (finished && criterion) mark(criterion.id, found.length >= criterion.answers.length);
+  }, [finished, criterion, found.length, mark]);
+
   const start = useCallback(() => {
     if (!criterion) return;
     setFound([]);
@@ -222,7 +229,7 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
   // ------------------------------------------------------------- setup --
   if (!criterion) {
     return (
-      <GameShell game={meta} dataNote={<RosterNote what="Answers" generated={facts.generated} />}>
+      <GameShell game={meta} dataNote={<RosterNote />}>
         <div className="stack">
           <section className="card stack">
             <div className="card__title">Difficulty</div>
@@ -268,6 +275,7 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
             onQuery={setQuery}
             onPick={setCriterion}
             scope={pool?.label ?? null}
+            statusOf={statusOf}
           />
         </div>
       </GameShell>
@@ -283,7 +291,7 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
   return (
     <GameShell
       game={meta}
-      dataNote={<RosterNote what="Answers" generated={facts.generated} />}
+      dataNote={<RosterNote />}
       toolbar={
         <button type="button" className="icon-btn" onClick={() => setCriterion(null)}>
           ↺ New list
@@ -433,6 +441,7 @@ function ListPicker({
   onQuery,
   onPick,
   scope,
+  statusOf,
 }: {
   criteria: Criterion[];
   query: string;
@@ -440,6 +449,7 @@ function ListPicker({
   onPick: (criterion: Criterion) => void;
   /** The event field in force, if any — shown so the header says what these are. */
   scope: string | null;
+  statusOf: (list: string) => PuzzleStatus | null;
 }) {
   const needle = query.trim().toLowerCase();
   const matching = needle
@@ -466,6 +476,7 @@ function ListPicker({
         </div>
         <span className="tiny faint">{matching.length} available</span>
       </div>
+      <StatusLegend statuses={criteria.map((entry) => statusOf(entry.id))} />
       <input
         className="input"
         value={query}
@@ -491,6 +502,7 @@ function ListPicker({
                     title={entry.subtitle}
                     onClick={() => onPick(entry)}
                   >
+                    <StatusDot status={statusOf(entry.id)} />
                     {entry.title}{' '}
                     <span className="faint">· {entry.answers.length}</span>
                   </button>
@@ -506,8 +518,10 @@ function ListPicker({
 
 /** Which heading a list sits under, read off its id prefix. */
 function groupOf(criterion: Criterion): string {
-  const [kind] = criterion.id.split(':');
+  const [kind, year] = criterion.id.split(':');
   switch (kind) {
+    case 'season':
+      return `The ${year} season`;
     case 'pool':
       return 'Qualified fields';
     case 'both':
@@ -518,6 +532,7 @@ function groupOf(criterion: Criterion): string {
     case 'fncs-wins':
     case 'fncs-apps':
     case 'fncs-back-to-back':
+    case 'fncs-age':
       return 'FNCS';
     case 'earnings':
     case 'year-earnings':
@@ -526,6 +541,7 @@ function groupOf(criterion: Criterion): string {
       return 'Year by year';
     case 'country-fncs':
     case 'country-earnings':
+    case 'country-lan':
     case 'countries-over':
       return 'By country';
     case 'org':
