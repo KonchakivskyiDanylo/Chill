@@ -162,11 +162,24 @@ try {
   const logout = await post('/api/admin/logout', {}, cookie);
   check(/Max-Age=0/.test(logout.setCookie), 'logging out did not clear the cookie');
 
-  // ---- the site itself, when it has been built: the page, gzipped
+  // ---- the site itself, when it has been built: the page, gzipped or brotli
   const page = await fetch(`${BASE}/`, { headers: { 'accept-encoding': 'gzip' } });
   if (page.status !== 404) {
-    check(page.status === 200 && (await page.text()).includes('<div id="root">'), 'the page did not come back');
+    const html = await page.text();
+    check(page.status === 200 && html.includes('<div id="root">'), 'the page did not come back');
     check(page.headers.get('content-encoding') === 'gzip', 'the page was not gzipped');
+    // The app's script, which the build compresses ahead (the page is too small to).
+    const script = /src="(\/assets\/[^"]+\.js)"/.exec(html)?.[1];
+    check(Boolean(script), 'the page names no script');
+    if (script) {
+      const plain = await (await fetch(`${BASE}${script}`, { headers: { 'accept-encoding': 'identity' } })).text();
+      const br = await fetch(`${BASE}${script}`, { headers: { 'accept-encoding': 'gzip, deflate, br' } });
+      check(br.headers.get('content-encoding') === 'br', 'a browser taking brotli did not get it');
+      check((await br.text()) === plain, 'the brotli script decodes to something else');
+      const gz = await fetch(`${BASE}${script}`, { headers: { 'accept-encoding': 'gzip' } });
+      check(gz.headers.get('content-encoding') === 'gzip', 'a browser taking only gzip did not get it');
+      check((await gz.text()) === plain, 'the gzipped script decodes to something else');
+    }
   }
   // ---- ADMIN_OPEN is for a laptop: in production it must do nothing
   const port = PORT + 1;

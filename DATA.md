@@ -93,7 +93,8 @@ file and reload.
 
 | file | holds | read through |
 | --- | --- | --- |
-| `players.json` | 5,678 playable rows: handle, aliases, country, birthday, earnings, status | `Roster` |
+| `roster.json` | the players the games use — `players.json`'s columns that are read, with empty values left out (`scripts/pipeline/site.py`) | `Roster` |
+| `players.json` | 5,678 playable rows in full: handle, aliases, country, birthday, earnings, status; `Roster` falls back to it when `roster.json` is missing | the pipeline |
 | `career_path.json` | 187 majors and every player's finishes in them (1,175 with five or more) | `Majors` |
 | `teammates.json` | each player's fifty most-played-with teammates | `Teammates` |
 | `orgs.json` | 979 organisations, with who has ever played for them | `Orgs` |

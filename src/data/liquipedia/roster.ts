@@ -58,24 +58,27 @@ export const WIKIPEDIA = {
   licenseUrl: 'https://creativecommons.org/licenses/by-sa/4.0/',
 } as const;
 
-/** One row of `players.json`, as the notebook writes it. */
+/**
+ * One row of `roster.json`, or of `players.json` before the first build that
+ * wrote it.
+ *
+ * `roster.json` is the same columns with empty values left out (see
+ * `scripts/pipeline/site.py`), so everything but the page name and tier is
+ * optional here and defaulted where it is read.
+ */
 export interface LiquipediaRow {
-  pageid: number;
   /** Unique page name, e.g. `Aqua_(Japanese_player)`. */
   pagename: string;
-  /** Competitive handle — what the UI shows. */
-  id: string;
+  /** Competitive handle — what the UI shows. Left out when it is the page name. */
+  id?: string;
   /** Former or alternate spellings, e.g. `Shark` for `shxrk`. */
-  alternateid_list: string[];
-  /** Real name, or null when the page does not give one. */
-  name: string | null;
-  type: string;
-  status: string | null;
-  nationalities: string[];
-  region: string | null;
-  birthdate: string | null;
-  teampagename: string | null;
-  earnings: number | null;
+  alternateid_list?: string[];
+  status?: string | null;
+  nationalities?: string[];
+  region?: string | null;
+  birthdate?: string | null;
+  teampagename?: string | null;
+  earnings?: number | null;
   /** Difficulty band, maintained in the dataset. `unused` never reaches a game. */
   tier: FameTier | 'unused';
   /**
@@ -96,7 +99,7 @@ export interface LiquipediaRow {
    * count under each difficulty card shows what that leaves.
    */
   region_tier?: FameTier | 'unused';
-  fncs_wins: number;
+  fncs_wins?: number;
 }
 
 /** A roster row in the shape the games read. */
@@ -105,7 +108,6 @@ export interface RosterPlayer {
   id: string;
   /** Competitive handle. */
   name: string;
-  realName: string | null;
   /** Other spellings this player answers to. */
   aliases: string[];
   /** ISO 3166-1 alpha-2, or null when no nationality is published. */
@@ -216,8 +218,7 @@ export class Roster {
       }
       this.players.push({
         id: row.pagename,
-        name: row.id,
-        realName: row.name || null,
+        name: row.id ?? row.pagename,
         aliases: row.alternateid_list ?? [],
         country: nationality ? (COUNTRY_CODES[nationality] ?? null) : null,
         countryName: nationality,
@@ -310,11 +311,15 @@ let cached: Promise<Roster> | null = null;
  * Loads (once) and indexes the roster.
  *
  * Imported dynamically so the player rows stay out of the app bundle and only
- * download when someone opens a game that reads them.
+ * download when someone opens a game that reads them — or when the home page
+ * fetches them ahead, see `Home`. `roster.json` is the slim copy the build
+ * writes; `players.json` has the same rows in full, for data built before it.
  */
 export function loadRoster(): Promise<Roster> {
   if (!cached) {
-    cached = loadJson('players').then((rows) => new Roster(rows as LiquipediaRow[]));
+    cached = loadJson('roster')
+      .catch(() => loadJson('players'))
+      .then((rows) => new Roster(rows as LiquipediaRow[]));
   }
   return cached;
 }

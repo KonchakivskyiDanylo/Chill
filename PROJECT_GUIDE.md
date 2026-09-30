@@ -37,7 +37,8 @@ Every game reads one Liquipedia export in `liquipedia_data/clean_data/fortnite/`
 
 | File | Holds | Written by | Read by |
 | --- | --- | --- | --- |
-| `players.json` | 5,678 playable rows: handle, aliases, nationalities, region, birthday, career and per-year earnings, status, FNCS wins, fame tier | the upstream notebook | every game |
+| `players.json` | 5,678 playable rows: handle, aliases, nationalities, region, birthday, career and per-year earnings, status, FNCS wins, fame tier | the upstream notebook | the pipeline |
+| `roster.json` | the same players with only the columns the games read and no empty values: 1.3 MB instead of 3.9 MB, 131 KB with brotli (`scripts/pipeline/site.py`, every build). `check:games` proves it gives the same players field for field | `site.py` | every game (falls back to `players.json` if missing) |
 | `tournaments.json`, `placements.json` | 14,645 tournaments and 442,736 placements (154 MB) | the export | the notebook only |
 | `career_path.json` | 187 majors and every player's finishes in them: 1,175 with five or more, 3,348 in all once cell 7 has run | cell 7 | Career Path |
 | `teammates.json` | each player's 50 most frequent teammates | cell 6 | Who Are Ya, List |
@@ -589,6 +590,8 @@ The site has its own small server (`server/index.ts`): plain Node HTTP with one 
 Locally, `npm run dev:all` sets `ADMIN_OPEN=1` for the API and `VITE_RECORD=1` for the site. The dashboard opens without a password, and rounds you play land in this machine's `server/.data`.
 
 ## How it is tested and run
+
+**Load speed.** The build writes a brotli and a gzip copy of every text file (`precompress` in `vite.config.ts`) and the server sends the brotli one to browsers that take it — about a third smaller than gzip. The home page fetches the players while you choose a game (`usePrefetchRoster` in `pages/Home.tsx`).
 
 Three commands must pass before anything ships: `npm run typecheck`, `npm run check:games` and `npm run check:server`. `npm run build` runs the typecheck again and then builds the site. GitHub Actions runs all of them, the build and `scripts/check_liquipedia_api.py` on every push (`.github/workflows/checks.yml`); Heroku waits for it only with "Wait for CI to pass before deploy" ticked.
 

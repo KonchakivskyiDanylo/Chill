@@ -17,6 +17,8 @@ The steps, each in scripts/pipeline/:
     enrich.py    FNCS titles, tiers, orgs.json (was players_optimize.ipynb)
     derived.py   rankings, pools, teammates, career_path, facts
                  (was the cells of notebook_cells.md)
+    site.py      roster.json, the slim players file the site downloads
+                 (run on every build, whichever step it starts from)
 
 Everything is built in a staging folder and checked with `npm run check:games`.
 Only then are the files in liquipedia_data/clean_data/fortnite/ replaced, all
@@ -40,14 +42,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from pipeline import clean, derived, enrich  # noqa: E402
+from pipeline import clean, derived, enrich, site  # noqa: E402
 
 RAW = ROOT / "liquipedia_data" / "raw_data" / "fortnite"
 CLEAN = ROOT / "liquipedia_data" / "clean_data" / "fortnite"
 ROSTER_TS = ROOT / "src" / "data" / "liquipedia" / "roster.ts"
 
 CLEAN_FILES = ["players.json", "teams.json", "tournaments.json", "transfers.json", "placements.json"]
-OUTPUTS = CLEAN_FILES + ["orgs.json", "rankings.json", "pools.json", "teammates.json", "career_path.json", "facts.json"]
+OUTPUTS = CLEAN_FILES + ["orgs.json", "rankings.json", "pools.json", "teammates.json", "career_path.json", "facts.json",
+                         "roster.json"]
 STEPS = ["clean", "players", "derived"]
 
 
@@ -130,6 +133,8 @@ def main(argv=None):
     if "derived" in todo:
         print("derived - rankings, pools, teammates, career path, facts")
         derived.build(str(stage).replace("\\", "/"))
+    print("site - roster.json")
+    site.run(stage)
 
     if not args.skip_check:
         print("\ncheck - npm run check:games on the new files")

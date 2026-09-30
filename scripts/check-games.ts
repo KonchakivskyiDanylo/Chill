@@ -13,7 +13,8 @@
  * sections that need them are skipped with a note rather than failing, so this
  * is still useful on a fresh clone.
  */
-import { loadRoster, EXPORT_DATE, type RosterPlayer } from '@/data/liquipedia/roster';
+import { loadRoster, EXPORT_DATE, Roster, type LiquipediaRow, type RosterPlayer } from '@/data/liquipedia/roster';
+import { loadJson } from '@/data/liquipedia/files';
 import { loadMajors } from '@/data/liquipedia/majors';
 import { loadTeammates } from '@/data/liquipedia/teammates';
 import { loadFacts } from '@/data/liquipedia/facts';
@@ -94,6 +95,21 @@ notes.push(
 
 const roster = await loadRoster();
 notes.push(`roster: ${roster.players.length} playable players (export ${EXPORT_DATE})`);
+
+// roster.json is players.json with the unused columns and empty values left
+// out. It must give the games exactly the same players, field for field.
+{
+  const slim = await optional(() => loadJson('roster'), 'roster: roster.json (run scripts/build_data.py)');
+  if (slim) {
+    const today = new Date();
+    const full = new Roster((await loadJson('players')) as LiquipediaRow[], today).players;
+    const lean = new Roster(slim as LiquipediaRow[], today).players;
+    check(full.length === lean.length, `roster: roster.json has ${lean.length} players, players.json ${full.length}`);
+    const differ = full.filter((player, i) => JSON.stringify(player) !== JSON.stringify(lean[i]));
+    check(differ.length === 0, `roster: roster.json reads differently for ${differ.slice(0, 3).map((p) => p.name).join(', ')}`);
+    if (differ.length === 0) notes.push(`roster: roster.json gives the same ${lean.length} players as players.json`);
+  }
+}
 for (const tier of ['easy', 'medium', 'hard'] as const) {
   notes.push(`  ${tier}: ${roster.playersFor(tier).length}`);
 }

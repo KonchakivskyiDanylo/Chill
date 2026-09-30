@@ -75,7 +75,7 @@ git commit -m "Data update"
 git push
 ```
 
-Only the seven files the site reads are committed (`players.json`,
+Only the files the site reads are committed (`roster.json`, `players.json`,
 `career_path.json`, `teammates.json`, `orgs.json`, `facts.json`,
 `rankings.json`, `pools.json`) plus the date in `src/data/liquipedia/roster.ts`.
 The raw dump and the large in-between files stay on your machine — `.gitignore`

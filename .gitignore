@@ -19,6 +19,7 @@ liquipedia_data/clean_data/*
 !liquipedia_data/clean_data/fortnite/
 liquipedia_data/clean_data/fortnite/*
 !liquipedia_data/clean_data/fortnite/players.json
+!liquipedia_data/clean_data/fortnite/roster.json
 !liquipedia_data/clean_data/fortnite/career_path.json
 !liquipedia_data/clean_data/fortnite/teammates.json
 !liquipedia_data/clean_data/fortnite/orgs.json

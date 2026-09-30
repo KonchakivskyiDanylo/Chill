@@ -1,10 +1,33 @@
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ModePicker } from '@/components/EventMode';
+import { loadRoster } from '@/data/liquipedia/roster';
 import { VISIBLE_GAMES } from '@/games/registry';
 
 const COUNT = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
 
+/**
+ * Fetches the players while someone is still choosing a game.
+ *
+ * Every game needs them, so by the time a card is tapped they are usually
+ * already downloaded and indexed. Waits for an idle moment so it never
+ * competes with the page itself; `loadRoster` caches, so the game just picks
+ * up the same promise. A failure is left for the game to report.
+ */
+function usePrefetchRoster() {
+  useEffect(() => {
+    const load = () => void loadRoster().catch(() => {});
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(load, { timeout: 3000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = window.setTimeout(load, 1500);
+    return () => window.clearTimeout(id);
+  }, []);
+}
+
 export function Home() {
+  usePrefetchRoster();
   return (
     <div className="page stack-lg">
       <section className="stack" style={{ paddingTop: 12 }}>

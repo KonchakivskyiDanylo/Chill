@@ -315,16 +315,33 @@ const TYPES: Record<string, string> = {
 };
 
 /**
- * Gzipped text files, made once and kept.
+ * Compressed text files, kept in memory.
  *
- * Heroku's router does not compress, and the roster alone is 2.4 MB of
- * JavaScript and 290 KB gzipped — on a phone that is the difference between
- * a game opening and a game loading. `dist/` never changes while the server
- * runs, so each file is compressed on first request and served from memory.
+ * Heroku's router does not compress, and the roster alone is over a megabyte
+ * of JavaScript — on a phone that is the difference between a game opening and
+ * a game loading. The build writes a brotli (`.br`) and a gzip (`.gz`) copy of
+ * every text file at the highest settings (`precompress` in vite.config.ts);
+ * brotli is about a third smaller. A browser that takes brotli gets the `.br`,
+ * any other the `.gz`, and a file the build did not compress is gzipped here
+ * on first request. `dist/` never changes while the server runs, so each body
+ * is read or made once.
  */
-const zipped = new Map<string, Promise<Buffer>>();
+const encoded = new Map<string, Promise<Buffer | null>>();
 const gzipAsync = promisify(gzip);
 const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.json', '.svg', '.txt']);
+
+function encodedBody(file: string, encoding: 'br' | 'gzip'): Promise<Buffer | null> {
+  const key = `${file}:${encoding}`;
+  if (!encoded.has(key)) {
+    encoded.set(
+      key,
+      encoding === 'br'
+        ? readFile(`${file}.br`).catch(() => null)
+        : readFile(`${file}.gz`).catch(() => readFile(file).then((raw) => gzipAsync(raw))),
+    );
+  }
+  return encoded.get(key)!;
+}
 
 /**
  * Files from `dist/`, and `index.html` for anything else — the app routes on
@@ -349,12 +366,15 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse, url: URL):
     'x-content-type-options': 'nosniff',
     vary: 'accept-encoding',
   };
-  const accepts = /\bgzip\b/.test(String(req.headers['accept-encoding'] ?? ''));
-  if (accepts && COMPRESSIBLE.has(path.extname(file))) {
-    if (!zipped.has(file)) zipped.set(file, readFile(file).then((raw) => gzipAsync(raw)));
-    const body = await zipped.get(file)!;
-    res.writeHead(200, { ...headers, 'content-encoding': 'gzip', 'content-length': String(body.length) }).end(body);
-    return;
+  const accepts = String(req.headers['accept-encoding'] ?? '');
+  if (COMPRESSIBLE.has(path.extname(file))) {
+    for (const encoding of ['br', 'gzip'] as const) {
+      if (!new RegExp(`\\b${encoding}\\b`).test(accepts)) continue;
+      const body = await encodedBody(file, encoding);
+      if (!body) continue;
+      res.writeHead(200, { ...headers, 'content-encoding': encoding, 'content-length': String(body.length) }).end(body);
+      return;
+    }
   }
   const body = await readFile(file);
   res.writeHead(200, { ...headers, 'content-length': String(body.length) }).end(body);

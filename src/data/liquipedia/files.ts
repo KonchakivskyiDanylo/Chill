@@ -20,6 +20,7 @@
 const DIR = '../../../liquipedia_data/clean_data/fortnite';
 
 export type DataFile =
+  | 'roster'
   | 'players'
   | 'career_path'
   | 'teammates'
@@ -41,7 +42,7 @@ type Loader = () => Promise<{ default: unknown }>;
 let FILES: Record<string, Loader> = {};
 try {
   FILES = import.meta.glob<{ default: unknown }>(
-    '../../../liquipedia_data/clean_data/fortnite/{players,career_path,teammates,orgs,facts,rankings,pools}.json',
+    '../../../liquipedia_data/clean_data/fortnite/{roster,players,career_path,teammates,orgs,facts,rankings,pools}.json',
   );
 } catch {
   /* not running under Vite — `readFromDisk` below takes over */
