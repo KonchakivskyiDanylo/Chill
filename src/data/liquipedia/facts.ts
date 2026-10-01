@@ -59,12 +59,26 @@ interface RawSeason {
   teams: RawSeasonTeam[];
 }
 
+/**
+ * A finished List category: the Div Cup and Performance Evaluation lists,
+ * built by `derived.py` from events `facts.json` does not otherwise carry.
+ */
+export interface PlayerList {
+  id: string;
+  title: string;
+  subtitle: string;
+  /** Page names, as roster ids. */
+  players: string[];
+}
+
 interface RawPayload {
   generated: string;
   events: RawEvent[];
   players: RawPlayer[];
   /** Absent from a file written before the season block existed. */
   season?: RawSeason;
+  /** Absent from a file written before the Div Cup lists existed. */
+  lists?: PlayerList[];
 }
 
 /** A player's finish at one season event, and who they played it with. */
@@ -156,6 +170,8 @@ export class Facts {
   readonly events: HeadlineEvent[];
   /** Null until `build_data.py` has written the season block. */
   readonly season: Season | null;
+  /** Empty until `build_data.py` has written the Div Cup lists. */
+  readonly lists: readonly PlayerList[];
 
   private readonly byPlayer = new Map<string, PlayerFacts>();
   /** event index -> player ids who were there. Built lazily, once. */
@@ -186,6 +202,7 @@ export class Facts {
       });
     }
     this.season = payload.season ? readSeason(payload.season) : null;
+    this.lists = payload.lists ?? [];
   }
 
   /** This player's facts, or an all-zero record when they have no results. */

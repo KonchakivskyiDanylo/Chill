@@ -122,6 +122,16 @@ export function buildCriteria(
       if (criterion.answers.length >= MIN_ANSWERS) out.push(criterion);
     }
   }
+  for (const criterion of everyFinalCriteria(facts, roster.players)) {
+    add(criterion.id, criterion.title, criterion.answers, criterion.subtitle);
+  }
+
+  // ------------------------------------- Div Cups and Evaluations --
+  // Finished in `derived.py`: these events are not in `facts.json`'s headline
+  // list, so the lists come over whole.
+  for (const list of facts.lists) {
+    add(list.id, list.title, list.players.flatMap((id) => byId.get(id) ?? []), list.subtitle);
+  }
 
   // --------------------------------------------------------- earnings --
   // Thresholds rather than a top-N, because a threshold is a list you can
@@ -432,6 +442,48 @@ function seasonCriteria(season: Season, byId: Map<string, RosterPlayer>): Criter
       answers,
     },
   ];
+}
+
+/**
+ * Everyone at every round of FNCS grand finals in one year, in whichever
+ * region they played it. A round is `Facts.fncsRounds`: every region's final
+ * inside one week. 2019 had two, Season X and Chapter 2 Season 1, so its list
+ * asks for the World Cup finals too, solo or duos.
+ */
+function everyFinalCriteria(
+  facts: Facts,
+  players: readonly RosterPlayer[],
+): { id: string; title: string; subtitle: string; answers: RosterPlayer[] }[] {
+  const atRound = (round: HeadlineEvent[]) =>
+    new Set(round.flatMap((event) => [...facts.playedAt(event.index)]));
+  const byYear = new Map<number, Set<string>[]>();
+  for (const round of facts.fncsRounds) {
+    const there = atRound(round);
+    // A round nobody has played yet is not one anybody missed.
+    if (there.size === 0) continue;
+    const year = round[0].year;
+    byYear.set(year, [...(byYear.get(year) ?? []), there]);
+  }
+  return [...byYear].map(([year, rounds]) => {
+    const worldCup = year === 2019
+      ? facts.headlineEvents.filter((event) => event.year === 2019 && event.name.startsWith('Fortnite World Cup Finals'))
+      : [];
+    const atWorldCup = atRound(worldCup);
+    return {
+      id: `fncs-every:${year}`,
+      title: worldCup.length
+        ? `Players who played the World Cup and every FNCS grand final of ${year}`
+        : `Players who played every FNCS grand final of ${year}`,
+      subtitle:
+        `${rounds.length === 2 ? 'Both' : `All ${rounds.length}`} rounds, each in the player’s own region` +
+        (worldCup.length ? ', and the World Cup finals, solo or duos' : ''),
+      answers: players.filter(
+        (player) =>
+          rounds.every((there) => there.has(player.id)) &&
+          (worldCup.length === 0 || atWorldCup.has(player.id)),
+      ),
+    };
+  });
 }
 
 /**

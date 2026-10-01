@@ -306,7 +306,7 @@ You get one top-10 board and ten empty slots, and name the ten. A correct answer
 
 ### The boards
 
-381 boards come precomputed from the notebook (`rankings.json`), because they are aggregated from 442,736 placements. Eleven more are built in the browser from the roster.
+901 boards come precomputed from the notebook (`rankings.json`), because they are aggregated from 442,736 placements. Eleven more are built in the browser from the roster.
 
 | Group | Boards | Answered with |
 | --- | --- | --- |
@@ -317,7 +317,10 @@ You get one top-10 board and ten empty slots, and name the ten. A correct answer
 | Countries | 20 | country names |
 | Paydays | 20 | the tournament where the money was won |
 | Organisations | 11 | organisation names |
-| 2026 season | 5 | top 10 by average finish at the year's big events: Europe, North America, the world, outside EU and NA, and duos |
+| 2019–2026 season | 190 | top 10 by average finish, at the year's majors and at its FNCS finals alone: the world and each FNCS region, and duos or trios from 2022 |
+| FNCS all time | 9 | top 10 by average finish across every FNCS round since 2019: the world and each FNCS region |
+| Div Cups | 285 | finals reached, wins and earnings (all time, by chapter, by year), and average finish for players and for duos or trios (by chapter, year and season): the world and each of the seven regions |
+| Performance Evaluations | 41 | sessions played and earnings (all time and by year, earnings by format too): the world, Europe and NA Central |
 | FNCS finals — North America | 44 | an FNCS grand final's top ten placements: every NA final |
 | FNCS finals — Europe | 26 | every EU final |
 | FNCS finals — other regions | 21 | the other regions' 2025 and 2026 finals and the 2021 Grand Royale |
@@ -332,12 +335,30 @@ Every board prints its own tie rule above the slots:
 - **Counts.** Wins, appearances and players are split by career earnings, the bigger earner higher. Countries and organisations are split by their players' combined earnings.
 - **Money boards** are straight money order.
 - **Youngest and oldest** go by birth date, not age in years.
-- **Never the alphabet.** If 10th and 11th are still level after the tie rule, either of the two fills 10th (`shareCut`), and naming the other after that says it is level and costs nothing. Today that is the outside-EU-and-NA season board (Alex / Wreckless) and Top 10 earners in 2018 — Asia. A 12th level too still drops the board (squad earnings).
+- **Never the alphabet.** If 10th and 11th are still level after the tie rule, either of the two fills 10th (`shareCut`), and naming the other after that says it is level and costs nothing. Today that is Top 10 earners in 2018 — Asia. A 12th level too still drops the board (squad earnings).
 - **Near miss.** Naming someone level with 10th but ranked out by the tie rule is called out and never costs a life.
 
 ### Season boards
 
-The year's big events — for 2026 EWC, the Globals, the Summit and FNCS Majors 1 and 2, set in `SEASON_EVENTS` in `scripts/pipeline/derived.py` — ranked by average finish, a missed event counting as 200th (Vico: 1 + 3 + 1 + 3 + 20 = 5.6). Europe, North America, the world, and outside EU and NA, because the world's ten are all EU and NA. The duos board has only pairs who played all five together, both names filling one slot. Outside EU and NA, Alex and Wreckless share 10th.
+Average finish, three ways, built in cell 2 of `scripts/pipeline/derived.py`:
+
+- **Top 10 players of 2025** — the year's majors: every round of FNCS grand finals plus the year's LANs (the World Cup finals, the 2022 Invitational, the Globals, the Summit, EWC). For 2026 that is EWC, the Globals, the Summit and Majors 1 and 2 (Vico: 1 + 3 + 1 + 3 + 20 = 5.6). Not built for 2020 and 2021, which had no LAN.
+- **Top 10 by average FNCS finish in 2025** — the rounds of FNCS grand finals alone, 2019 to 2026.
+- **Top 10 by average FNCS finish, all time** — every round since 2019.
+
+A round is every region's final in one week (the waves), and a player has one finish in it: their own region's. Each comes as a world board and one per FNCS region, with North America split the way the FNCS split it: NA East and NA West until Major 1 of 2023, one North America final (NA Central) to the end of 2024, NA Central and NA West from 2025. From 2022, when each year kept one team format, the same boards again for duos or trios: a team only has a finish where exactly those players played together, each player counts once with their best team, and every name fills one slot.
+
+A missed event counts as twice a full lobby's last place: 100th in duos, 66th in trios, 200th in solos, 50th in squads. Being there with no finish recorded (a DQ, or out of the Summit before its last stage) counts as a miss. Level averages go to the bigger career earner, a team's combined. A board with a player the roster cannot name in its top eleven is not built (2025's Middle East trios).
+
+### Div Cups and Performance Evaluations
+
+Built in cell 2 of `scripts/pipeline/derived.py` from every tournament named "Divisional" (FNCS Divisional Cup finals from C6S1, C6S4's three Practice Cups included) and "Fortnite Performance Evaluation". Both are read by pagename: Liquipedia named the C7S4 Div Cups after C7S3, and the placements, which only carry the name, are split between the two by date.
+
+- **Regions.** Seven Div Cup regions, NA Central and NA West separate. Every region's final is its own event, so a player in two regions in one week has two finals on the world boards; on a world average, they keep that week's better finish.
+- **Counts** (finals reached, wins, earnings) are all time, by chapter and by year; a year needs four weeks, so December 2024 counts only in all time and Chapter 6. Level counts go to the better average Div Cup finish over the same weeks, a missed week at 100th.
+- **Averages** are by chapter, year and season, a missed week at 100th whatever the format. Teams only have a finish where exactly those players played together. Chapter 6's duo Div Cups (C6S4) are left out of the team boards, so Chapter 6 and 2025 are trios, Chapter 7 and 2026 duos, and C6S4 has no team board.
+- **Performance Evaluations** are Europe and NA Central only: sessions played and money, all time and per year (2023's seven sessions count in all time only), money by format where a scope had two. Level ones go to the bigger career earner.
+- **Not built:** 19 Div Cup boards, mostly NA West and Middle East team averages, have a finisher in the top eleven with no Liquipedia page.
 
 ### Tournament boards
 
@@ -383,7 +404,7 @@ You get one list and 90 seconds to name as many of it as you can. Every correct 
 - **Missed names.** When time runs out you see everyone you missed.
 - **The suggestion box** helps you spell a name you already thought of, and never says whether it is on the list.
 
-**The lists are hand-picked, not generated.** A recall game only works when you can picture the answer set, so there are 207 all-time lists with at least 8 answers each:
+**The lists are hand-picked, not generated.** A recall game only works when you can picture the answer set, so there are 268 all-time lists with at least 8 answers each:
 
 | Family | Lists | Example |
 | --- | --- | --- |
@@ -393,7 +414,9 @@ You get one list and 90 seconds to name as many of it as you can. Every correct 
 | Earnings | 20 | $1M+ career; $200K+ in 2021; $500K+ in a single year |
 | Teammates | 20 | 10+ tournaments with one of the 30 top earners |
 | FNCS | 17 | FNCS winners by region; 20+ grand finals; won back to back; won one before turning 15, or aged 20+ |
-| Year by year | 8 | won a major in 2023 |
+| Year by year | 16 | won a major in 2023; played every FNCS grand final of 2024 (every year, 123–367 players; 2019's also asks for the World Cup, 65) |
+| Div Cups | 47 | winners by region, and duo and trio winners by region; 40+ and 50+ finals, 20+ and 30+ in one region; 5+ and 8+ wins; played every week of a season |
+| Performance Evaluations | 6 | 40+ and 60+ sessions, by region too |
 | The 2026 season | 1 | played all five big events (the top 10s are Tenaball boards) |
 | Titles and fields | 2 | LAN winners; qualified for a field |
 
@@ -525,7 +548,7 @@ Ten players and one category; sort them into a pyramid of 1, 2, 3 and 4, best at
 | Medium | Easy + Medium tiers | top third; 6% apart | 2 lives |
 | Hard | everyone | top half; 3% apart | 1 life |
 
-- **Categories:** FNCS grand finals played, FNCS wins, career earnings, earnings in a year, LAN appearances, and a tournament's top ten (Tenaball's tournament boards: the LANs on Easy, plus EU/NA finals since 2024 on Medium, every final on Hard; on a duos event each item is the team). Each kind is equally likely.
+- **Categories:** FNCS grand finals played, FNCS wins, career earnings, earnings in a year, LAN appearances, and ten finishers at one tournament (the events of Tenaball's tournament boards: the LANs on Easy, plus EU/NA finals since 2024 on Medium, every final on Hard; on a duos event each item is the team). The ten are drawn at random from the event's results in `career_path.json` (the user, 1 Oct 2026: not always the top ten): from the top 20 on Easy, the top 30 on Medium, anywhere on Hard, and only places whose whole team is on the roster. Without that file, the top ten. Each kind is equally likely.
 - **Close but orderable:** money walks down the ranking taking the next player at least the level's gap below the last. Counts take one player per distinct value; FNCS wins and LANs have fewer than ten values, so up to three pairs share a value.
 - **Ties:** players level on a value are right either way round.
 - **Left out:** LAN wins — fifteen players have one, nearly all exactly one.

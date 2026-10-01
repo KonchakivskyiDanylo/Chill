@@ -448,7 +448,7 @@ export const GAMES: GameMeta[] = [
     tagline: 'Sort ten players into order, best at the top.',
     icon: '🔺',
     intro: [
-      'Ten players and one category — FNCS finals, titles, earnings, LANs or a tournament’s top ten. Sort them into the pyramid with the best at the top, then check.',
+      'Ten players and one category — FNCS finals, titles, earnings, LANs or ten finishers at one tournament. Sort them into the pyramid with the best at the top, then check.',
       'Every player in the right place turns green and locks. Red ones are in the wrong place.',
     ],
     rules: [
@@ -459,9 +459,9 @@ export const GAMES: GameMeta[] = [
       {
         title: 'Difficulty',
         items: [
-          'Easy 🟢 — famous players, and check as often as you like.',
-          'Medium 🟡 — the regulars too, closer values, 2 lives: a check that is not perfect costs one.',
-          'Hard 🔴 — anyone, the closest values, 1 life: one check, then the right order.',
+          'Easy 🟢 — famous players, and check as often as you like. A tournament’s ten come from its top 20.',
+          'Medium 🟡 — the regulars too, closer values, 2 lives: a check that is not perfect costs one. A tournament’s ten come from its top 30.',
+          'Hard 🔴 — anyone, the closest values, 1 life: one check, then the right order. A tournament’s ten come from anywhere in the results.',
         ],
       },
     ],

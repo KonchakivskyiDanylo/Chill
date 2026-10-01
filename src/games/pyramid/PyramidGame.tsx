@@ -7,6 +7,7 @@ import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { LevelSetup, type LevelOption } from '@/components/PoolSetup';
 import { Banner, Hearts, Stat } from '@/components/ui';
 import type { Facts } from '@/data/liquipedia/facts';
+import { loadMajors, type Majors } from '@/data/liquipedia/majors';
 import { loadRankings, type Rankings } from '@/data/liquipedia/rankings';
 import type { Roster } from '@/data/liquipedia/roster';
 import { useFacts } from '@/data/liquipedia/useFacts';
@@ -67,10 +68,16 @@ function Game({ roster, facts }: { roster: Roster; facts: Facts }) {
    * costs that category rather than the game.
    */
   const [rankings, setRankings] = useState<Rankings | null>(null);
+  /** Every finish at every major, so a tournament pyramid can reach past the top ten. Same terms. */
+  const [majors, setMajors] = useState<Majors | null>(null);
   useEffect(() => {
     let cancelled = false;
     loadRankings().then(
       (loaded) => !cancelled && setRankings(loaded),
+      () => {},
+    );
+    loadMajors().then(
+      (loaded) => !cancelled && setMajors(loaded),
       () => {},
     );
     return () => {
@@ -86,7 +93,7 @@ function Game({ roster, facts }: { roster: Roster; facts: Facts }) {
   }));
 
   const start = useCallback(() => {
-    const puzzle = generatePuzzle(roster, facts, rankings, difficulty, undefined, game?.puzzle.id ?? null);
+    const puzzle = generatePuzzle(roster, facts, rankings, difficulty, undefined, game?.puzzle.id ?? null, majors);
     if (!puzzle) {
       setError('Could not build a pyramid from this data.');
       return;
@@ -95,7 +102,7 @@ function Game({ roster, facts }: { roster: Roster; facts: Facts }) {
     setFeedback(null);
     setSelected(null);
     setGame(createGame(puzzle, difficulty));
-  }, [roster, facts, rankings, difficulty, game]);
+  }, [roster, facts, rankings, majors, difficulty, game]);
 
   const move = (a: number, b: number) => {
     if (!game) return;

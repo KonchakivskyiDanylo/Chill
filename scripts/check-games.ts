@@ -641,22 +641,40 @@ if (rankings) {
     }
   }
 
-  // The season boards: the user's worked example is Vico, 1 + 3 + 1 + 3 + 20 = 5.6.
+  // The average-finish boards. The user's worked example is Vico at 2026's
+  // five majors, 1 + 3 + 1 + 3 + 20 = 5.6; Peterbot's 2024 FNCS was 2nd, 1st
+  // and 1st in NA Central, 4 / 3.
   const year = facts?.season?.year ?? 2026;
   const europe = rankings.get(`season:${year}:Europe`);
-  if (!europe) {
-    skipped.push('tenaball: the season boards (rankings.json is older — run build_data.py)');
+  const naCentral = rankings.get('fncs-avg:2024:NA Central');
+  if (!europe || !naCentral) {
+    skipped.push('tenaball: the average-finish boards (rankings.json is older — run build_data.py)');
   } else {
     const vico = europe.rows.find((row) => row.key === 'Vic0try0na');
     check(vico?.display === '5.6', `tenaball: Vic0try0na reads ${vico?.display} on Europe's 2026 board, not 5.6`);
-    // Cold played EWC with Rapid and the Globals with Ritual, so he is in no duo.
+    const peterbot = naCentral.rows.find((row) => row.key === 'Peterbot');
+    check(
+      peterbot?.display === '1.3',
+      `tenaball: Peterbot reads ${peterbot?.display} on NA Central's 2024 FNCS board, not 1.3`,
+    );
+    // Cold played EWC and the Summit with Rapid, Major 2 and the Globals with
+    // Ritual: as a duo, either pair missed two of the five, at 100th each.
     const duos = rankings.get(`season:${year}:duos`);
     check(Boolean(duos), 'tenaball: no top 10 duos of the season');
     check(
       !duos?.rows.some((row) => membersOf(row).some((member) => member.key === 'Cold')),
       'tenaball: Cold is in a top 10 duo',
     );
-    for (const key of ['Europe', 'North America', 'world', 'rest', 'duos']) {
+    // A miss is twice a full lobby's last place, 200th at the most, so no
+    // average can be worse than that.
+    for (const board of rankings.boards.filter((b) => /^(season|fncs-avg):/.test(b.id))) {
+      check(board.lowerIsBetter === true, `tenaball: ${board.id} is an average that is not lower-is-better`);
+      check(
+        [...board.rows, board.next].every((row) => row.value <= 200),
+        `tenaball: ${board.id} has an average worse than a missed solo final`,
+      );
+    }
+    for (const key of ['world', 'Europe', 'NA Central', 'NA West', 'duos']) {
       const board = rankings.get(`season:${year}:${key}`);
       if (!board) {
         notes.push(`tenaball: no ${year} "${key}" board — 11th and 12th are level too, or fewer than eleven`);
@@ -665,6 +683,39 @@ if (rankings) {
       const cut = board.shareCut ? ` (10th shared with ${board.next.label})` : '';
       notes.push(`tenaball: ${board.title} — ${board.rows.map((row) => row.label).join(', ')}${cut}`);
     }
+  }
+
+  // Div Cups and Performance Evaluations. C7S4's Div Cups carry C7S3's names,
+  // so both seasons have to come out as boards of their own — merged, C7S4
+  // would have no weeks and C7S3 eight.
+  const divcups = rankings.boards.filter((b) => b.id.startsWith('divcup:'));
+  if (divcups.length === 0) {
+    skipped.push('tenaball: the Div Cup boards (rankings.json is older — run build_data.py)');
+  } else {
+    const finals = rankings.get('divcup:finals:all:world');
+    check(
+      finals?.rows[0].key === 'Eomzo' && finals.rows[0].value === 62,
+      `tenaball: Div Cup finals all time opens on ${finals?.rows[0].label} ${finals?.rows[0].value}, not Eomzo 62`,
+    );
+    for (const season of ['C7S3', 'C7S4']) {
+      const board = rankings.get(`divcup:average:${season}:world`);
+      check(Boolean(board), `tenaball: no ${season} Div Cup average board`);
+      check(Boolean(board?.tieRule.includes('the 4 Div Cup weeks')), `tenaball: ${season} is not four weeks of Div Cups`);
+    }
+    for (const board of divcups) {
+      if (board.id.startsWith('divcup:average')) {
+        check(board.lowerIsBetter === true, `tenaball: ${board.id} is an average that is not lower-is-better`);
+        check(
+          [...board.rows, board.next].every((row) => row.value <= 100),
+          `tenaball: ${board.id} averages worse than a missed week`,
+        );
+      } else {
+        check(board.rows.every((row) => row.value > 0), `tenaball: ${board.id} lists someone on nothing`);
+      }
+    }
+    const fpe = rankings.boards.filter((b) => b.id.startsWith('fpe:'));
+    check(fpe.length > 0, 'tenaball: no Performance Evaluation boards');
+    notes.push(`tenaball: ${divcups.length} Div Cup boards, ${fpe.length} Performance Evaluation boards`);
   }
   for (const [group, count] of [...byGroup].sort((a, b) => b[1] - a[1])) {
     notes.push(`  ${group}: ${count}`);
@@ -733,6 +784,32 @@ if (facts) {
       'list: "Countries with an FNCS winner" is not the set of the winners’ countries',
     );
     notes.push(`list: ${winning.answers.length} countries with an FNCS winner`);
+  }
+  // One "every FNCS grand final" list per year since 2019, and 2019's asks for
+  // the World Cup as well.
+  const everyFinal = criteria.filter((criterion) => criterion.id.startsWith('fncs-every:'));
+  check(everyFinal.length >= 8, `list: only ${everyFinal.length} years of "every FNCS grand final"`);
+  check(
+    Boolean(everyFinal.find((criterion) => criterion.id === 'fncs-every:2019')?.title.includes('World Cup')),
+    'list: 2019’s "every FNCS grand final" does not ask for the World Cup',
+  );
+  notes.push(
+    `list: every FNCS grand final — ${everyFinal.map((c) => `${c.id.split(':')[1]}: ${c.answers.length}`).join(', ')}`,
+  );
+  // Div Cup and Evaluation lists come finished in facts.json: a winners list
+  // for every region, and every season's "played them all".
+  if (facts.lists.length === 0) {
+    skipped.push('list: the Div Cup lists (facts.json is older — run build_data.py)');
+  } else {
+    const ids = new Set(criteria.map((criterion) => criterion.id));
+    for (const region of ['Europe', 'NA Central', 'NA West', 'Brazil', 'Asia', 'Middle East', 'Oceania']) {
+      check(ids.has(`divcup-won:${region}`), `list: no Div Cup winners list for ${region}`);
+    }
+    check(ids.has('divcup-every:C7S4') && ids.has('divcup-every:C7S3'), 'list: C7S3 and C7S4 are not two seasons');
+    const weekly = criteria.filter((criterion) => /^(divcup|fpe)/.test(criterion.id));
+    notes.push(
+      `list: ${weekly.length} Div Cup and Evaluation lists, ${facts.lists.length - weekly.length} under 8 answers`,
+    );
   }
   notes.push(`list: ${criteria.length} categories`);
   for (const [kind, count] of [...byGroup].sort((a, b) => b[1] - a[1])) {
@@ -1260,9 +1337,10 @@ if (facts) {
   for (const level of ['easy', 'medium', 'hard'] as const) {
     let built = 0;
     let pairs = 0;
+    let deep = 0;
     const kinds = new Map<string, number>();
     for (let seed = 0; seed < 40; seed++) {
-      const puzzle = pyramid.generatePuzzle(roster, facts, rankings, level, `p-${level}-${seed}`);
+      const puzzle = pyramid.generatePuzzle(roster, facts, rankings, level, `p-${level}-${seed}`, null, majors);
       if (!puzzle) continue;
       built++;
       const tag = `pyramid ${level}: "${puzzle.title}"`;
@@ -1272,6 +1350,8 @@ if (facts) {
       check(puzzle.items.length === pyramid.SIZE, `${tag} has ${puzzle.items.length} items`);
       check(new Set(puzzle.items.map((item) => item.id)).size === pyramid.SIZE, `${tag} repeats an item`);
       const lowerBetter = puzzle.id.startsWith('tournament:');
+      // Tournaments draw ten from the field, not the top ten every time.
+      if (lowerBetter && values.some((value, i) => value !== i + 1)) deep++;
       check(
         values.every((value, i) => i === 0 || (lowerBetter ? value > values[i - 1] : value <= values[i - 1])),
         `${tag} is not in order`,
@@ -1302,6 +1382,9 @@ if (facts) {
       }
     }
     check(built >= 38, `pyramid ${level}: only ${built} of 40 seeds made a pyramid`);
+    if (majors && kinds.get('tournament')) {
+      check(deep > 0, `pyramid ${level}: every tournament pyramid was the top ten`);
+    }
     notes.push(
       `pyramid ${level}: ${built}/40 built, ${pairs} level pairs; ` +
         [...kinds].sort((a, b) => b[1] - a[1]).map(([kind, n]) => `${kind} ${n}`).join(', '),

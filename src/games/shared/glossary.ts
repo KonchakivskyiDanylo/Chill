@@ -27,11 +27,14 @@ export type TermId =
   | 'fncs-final'
   | 'nationality'
   | 'region'
+  | 'fncs-region'
   | 'org'
   | 'earnings'
   | 'age'
   | 'teammates'
-  | 'field';
+  | 'field'
+  | 'div-cup'
+  | 'fpe';
 
 export interface EventList {
   names: string[];
@@ -128,6 +131,12 @@ export const TERMS: Record<TermId, Term> = {
     text:
       'Where a player competes, as Liquipedia records it — not where they are from. There are six: Europe, North America (East and West together), South America (the FNCS’s Brazil region), Asia, Oceania and the Middle East.',
   },
+  'fncs-region': {
+    id: 'fncs-region',
+    name: 'FNCS region',
+    text:
+      'The region of the grand final a player played, not the one on their profile. North America is split the way the FNCS split it: NA East and NA West until Major 1 of 2023, one North America final from Major 2 of 2023 through 2024 — NA Central here — then NA Central and NA West again from 2025. Brazil is the FNCS’s South America.',
+  },
   org: {
     id: 'org',
     name: 'Organisation',
@@ -158,6 +167,18 @@ export const TERMS: Record<TermId, Term> = {
     text:
       'In the event’s field as Liquipedia lists it. An entrant with no Liquipedia player page cannot be an answer.',
   },
+  'div-cup': {
+    id: 'div-cup',
+    name: 'Div Cup',
+    text:
+      'An FNCS Divisional Cup final, Chapter 6 on: one a week in each of seven regions — Europe, NA Central, NA West, Brazil, Asia, the Middle East and Oceania — and C6S4’s three Practice Cups count too. Each region’s final is its own event, so a player in two regions’ finals in one week has two. The region is the final’s, not the one on the player’s profile. Chapter 6 was trios until C6S4’s duos; Chapter 7 is duos.',
+  },
+  fpe: {
+    id: 'fpe',
+    name: 'Performance Evaluation',
+    text:
+      'Epic’s Fortnite Performance Evaluation sessions, held in Europe and NA Central since 2023: one lobby, the top four paid. Reload and Arenas evaluations are not included.',
+  },
 };
 
 /**
@@ -173,7 +194,12 @@ export const TERMS: Record<TermId, Term> = {
 export function termsIn(text: string, id = ''): TermId[] {
   const found = new Set<TermId>();
   const field = id.startsWith('pool:');
-  const region = /\bby region\b|Europe|North America|South America|Brazil|\bAsia\b|Oceania|Middle East/i;
+  // The average-finish boards: their region is the final's, and their duos
+  // are teams ranked together rather than a count of tournaments shared.
+  const averages = /^(season|fncs-avg):/.test(id);
+  // Div Cups and Evaluations: their own term says what their regions are.
+  const weekly = /^(divcup|fpe)/.test(id);
+  const region = /\bby region\b|Europe|North America|South America|Brazil|\bAsia\b|Oceania|Middle East|\bNA (East|West|Central)\b/i;
   if (field) found.add('field');
   if (/\bLANs?\b/.test(text)) found.add(id === 'lan-wins' ? 'lan-wide' : 'lan');
   // "Major 1 Summit" is an event's name, not the word.
@@ -188,16 +214,18 @@ export function termsIn(text: string, id = ''): TermId[] {
   // "Qualifiers from Europe" is a region, "players from Poland" a nationality.
   const from = /\bfrom ([A-Z][\w ]+)/.exec(text);
   if (/countr|nation/i.test(text) || (from && !region.test(from[1]))) found.add('nationality');
-  if (region.test(text)) found.add('region');
+  if (region.test(text) && !weekly) found.add(averages ? 'fncs-region' : 'region');
   if (/organi[sz]ation|played for|\borgs?\b/i.test(text)) found.add('org');
   if (/earn|\$|prize|money|payday/i.test(text)) found.add('earnings');
   if (/youngest|oldest|\bage\b|born/i.test(text)) found.add('age');
   if (/tournaments (played|won|entered)|tournaments? on record|every tournament|tournaments with/i.test(text)) {
     found.add('tournament');
   }
-  if (/teammate|\bduos?\b|played together|entered together|queued|tournaments with [A-Z]/.test(text)) {
+  if (!averages && !weekly && /teammate|\bduos?\b|played together|entered together|queued|tournaments with [A-Z]/.test(text)) {
     found.add('teammates');
   }
   if (/qualif/i.test(text)) found.add('field');
+  if (/\bDiv Cups?\b/i.test(text)) found.add('div-cup');
+  if (/Performance Evaluations?/i.test(text)) found.add('fpe');
   return (Object.keys(TERMS) as TermId[]).filter((term) => found.has(term));
 }

@@ -538,6 +538,7 @@ function groupOf(criterion: Criterion): string {
     case 'year-earnings':
       return 'Earnings';
     case 'won-in-year':
+    case 'fncs-every':
       return 'Year by year';
     case 'country-fncs':
     case 'country-earnings':
@@ -548,6 +549,13 @@ function groupOf(criterion: Criterion): string {
       return 'Organisations';
     case 'with':
       return 'Teammates';
+    case 'divcup-finals':
+    case 'divcup-wins':
+    case 'divcup-won':
+    case 'divcup-every':
+      return 'Div Cups';
+    case 'fpe-sessions':
+      return 'Performance Evaluations';
     default:
       return 'Titles';
   }

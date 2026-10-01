@@ -1,5 +1,6 @@
 import type { GamePayloads, Outcome } from '@/analytics/types';
 import type { Facts } from '@/data/liquipedia/facts';
+import type { Majors } from '@/data/liquipedia/majors';
 import { membersOf, type Rankings } from '@/data/liquipedia/rankings';
 import type { FameTier, Roster, RosterPlayer } from '@/data/liquipedia/roster';
 import { money, ordinal } from '@/lib/format';
@@ -187,12 +188,65 @@ function drawPlayers(
 }
 
 /**
- * A tournament's top ten, from Tenaball's precomputed boards: on a duos or
- * trios event each item is the team. Easy asks about Epic's LANs only, Medium
- * adds the European and North American FNCS finals since 2024, Hard every
- * final there is a board for.
+ * How deep into a tournament's results the ten may come from: Easy the top 20,
+ * Medium the top 30, Hard anywhere. Ten of the top ten every time made the
+ * category a recital of the podium (the user, 1 Oct 2026: "it shouldn't be top
+ * 10 always, could be random placements").
  */
-function tournamentPuzzle(rankings: Rankings, difficulty: Difficulty, rng: Rng): Puzzle | null {
+const FIELD_DEPTH: Record<Difficulty, number> = { easy: 20, medium: 30, hard: Number.POSITIVE_INFINITY };
+
+/** "aqua & nyhrox", "Japko, panzer & Setty" — the board labels' style. */
+function teamLabel(names: string[]): string {
+  const sorted = [...names].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  return sorted.length <= 2 ? sorted.join(' & ') : `${sorted.slice(0, -1).join(', ')} & ${sorted[sorted.length - 1]}`;
+}
+
+/**
+ * Ten random placements from the event's whole field, from `career_path.json`.
+ * Only places whose whole team is on the roster: a team short of a member
+ * cannot be named, and a placement nobody can name is not a fair item. Null
+ * when the field is too thin to draw ten from, and the top ten stand in.
+ */
+function randomPlacements(
+  event: string,
+  teamSize: number,
+  majors: Majors,
+  names: ReadonlyMap<string, string>,
+  difficulty: Difficulty,
+  rng: Rng,
+): Item[] | null {
+  const pool = majors
+    .fieldOf(event)
+    .filter(({ placement, players }) =>
+      placement <= FIELD_DEPTH[difficulty] && players.length === teamSize && players.every((id) => names.has(id)),
+    );
+  if (pool.length < SIZE) return null;
+  return shuffle(rng, pool)
+    .slice(0, SIZE)
+    .sort((a, b) => a.placement - b.placement)
+    .map(({ placement, players }) => ({
+      id: [...players].sort().join('|'),
+      name: teamLabel(players.map((id) => names.get(id)!)),
+      value: placement,
+      display: ordinal(placement),
+    }));
+}
+
+/**
+ * Ten finishers at one tournament, events picked from Tenaball's precomputed
+ * boards: on a duos or trios event each item is the team. Easy asks about
+ * Epic's LANs only, Medium adds the European and North American FNCS finals
+ * since 2024, Hard every final there is a board for. With the majors loaded the
+ * ten are drawn from the whole field (`randomPlacements`); without, the board's
+ * top ten.
+ */
+function tournamentPuzzle(
+  rankings: Rankings,
+  difficulty: Difficulty,
+  rng: Rng,
+  majors: Majors | null,
+  names: ReadonlyMap<string, string>,
+): Puzzle | null {
   const boards = rankings.boards.filter((board) => {
     if (!board.id.startsWith('tournament:') || board.rows.length !== SIZE) return false;
     if (board.group === 'Tournaments') return true;
@@ -202,6 +256,25 @@ function tournamentPuzzle(rankings: Rankings, difficulty: Difficulty, rng: Rng):
   });
   if (boards.length === 0) return null;
   const board = boards[Math.floor(rng() * boards.length)];
+  const drawn = majors
+    ? randomPlacements(
+        board.id.slice('tournament:'.length),
+        membersOf(board.rows[0]).length,
+        majors,
+        names,
+        difficulty,
+        rng,
+      )
+    : null;
+  if (drawn) {
+    return {
+      id: board.id,
+      group: 'Tournament',
+      title: board.title.replace(/^Top 10 at /, 'Ten finishers at '),
+      direction: 'Best finish at the top',
+      items: drawn,
+    };
+  }
   return {
     id: board.id,
     group: 'Tournament',
@@ -233,17 +306,20 @@ export function generatePuzzle(
   difficulty: Difficulty,
   seed: string = String(Date.now()),
   avoid: string | null = null,
+  /** Every finish at every major, for tournaments drawn from the whole field. */
+  majors: Majors | null = null,
 ): Puzzle | null {
   const rng = makeRng(seed);
   const level = LEVELS[difficulty];
   const pool = level.bands.flatMap((band) => roster.exactly(band));
   const kinds: (PlayerCategory[] | 'tournament')[] = [...playerKinds(roster, facts)];
   if (rankings) kinds.push('tournament');
+  const names = new Map(roster.players.map((player) => [player.id, player.name]));
 
   for (let attempt = 0; attempt < 40; attempt++) {
     const kind = kinds[Math.floor(rng() * kinds.length)];
     if (kind === 'tournament') {
-      const puzzle = tournamentPuzzle(rankings!, difficulty, rng);
+      const puzzle = tournamentPuzzle(rankings!, difficulty, rng, majors, names);
       if (puzzle && puzzle.id !== avoid) return puzzle;
       continue;
     }

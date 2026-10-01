@@ -188,10 +188,36 @@ def build(BASE):
 
     print(f'{len(PLACED):,} placement rows with at least one nameable player')
 
+    # ------------------------------------------------------------- FNCS waves --
+    # A "wave" is one round of FNCS grand finals: every region's final inside a week
+    # of each other. Read off the dates rather than the names, because the naming
+    # changed four times (Season X, C2S1, FNCS 2023 - Major 1) and the dates did not.
+    # A cluster smaller than four regions is a one-off - a Global Championship, the
+    # 2022 Invitational, the 2026 Summit - and is left out, so missing an event
+    # nobody could qualify for does not break a streak. Cell 2's averages and
+    # cell 4's streaks both count in waves.
+    def day_of(t):
+        d = str(t.get('startdate') or '')[:10]
+        return d if re.match(r'^\d{4}-\d{2}-\d{2}$', d) else None
+    def days_apart(a, b):
+        return (date.fromisoformat(b) - date.fromisoformat(a)).days
+
+    _fncs_days = sorted((day_of(tour_of[n]), n) for n in FNCS if day_of(tour_of[n]))
+    _clusters, _cur = [], []
+    for _d, _n in _fncs_days:
+        if _cur and days_apart(_cur[-1][0], _d) > 7:
+            _clusters.append(_cur)
+            _cur = []
+        _cur.append((_d, _n))
+    if _cur:
+        _clusters.append(_cur)
+    WAVES = [c for c in _clusters if len(c) >= 4]
+    wave_of = {n: i for i, c in enumerate(WAVES) for _, n in c}
+
     # ------------------------------------------------------------------ season --
-    # The big events of one year, for Tenaball's "Top 10 players of 2026" boards
-    # (cell 2) and List's "played all of them" (facts.json). Ranked by average
-    # finish, a missed event counting as SEASON_MISSED.
+    # The big events of one year, for List's "played all of them" (facts.json).
+    # Tenaball's "Top 10 players of 2026" boards are cell 2's averages now, over
+    # the same five events and every other year's too.
     #
     # The five were named by the user. EWC 2026 is Liquipedia's "Reload Elite
     # Series 2026 - Championship" (its series is the Esports World Cup). A
@@ -204,7 +230,6 @@ def build(BASE):
         ("FNCS Major 1", r"FNCS 2026 - Major 1: .+ - Grand Finals"),
         ("FNCS Major 2", r"FNCS 2026 - Major 2: .+ - Grand Finals"),
     ]
-    SEASON_MISSED = 200
     season_slot = {}
     for slot, (label, pattern) in enumerate(SEASON_EVENTS):
         names = {t["name"] for t in tournaments if re.fullmatch(pattern, t["name"])}
@@ -369,60 +394,535 @@ def build(BASE):
         board(f'year-earnings:{y}', 'Players', f'Top 10 earners in {y}', 'player',
               TIE_MONEY, rank(year_earn[y], NAME), money)
 
-    # -------------------------------------------------------------- the season --
-    # The year's big events (SEASON_EVENTS, cell 1): Europe, North America, the
-    # world, everyone else - in 2026 the world's ten are all European and North
-    # American - and the duos that played every one of them together, so Cold,
-    # with Rapid at EWC and Ritual at the Globals, is in none.
+    # ---------------------------------------------------------------- averages --
+    # Average finish over a run of events (the user's spec, 1 Oct 2026), in
+    # three families, newest year first:
     #
-    # A missed event counts as SEASON_MISSED, which puts the players at all of
-    # them first and lets a region with fewer than ten of those still fill a
-    # board. Level at 10th, either one fills it, as on every board.
-    n_season = len(SEASON_EVENTS)
-    finish, team_at = defaultdict(dict), defaultdict(dict)
-    for slot, r, ids in SEASON_TEAMS:
-        for pg in ids:
-            # Best finish, for a player listed twice at one event: Liquipedia has
-            # Astell in two duos at the 2026 Major 2 Asia final.
-            if r < finish[pg].get(slot, r + 1):
-                finish[pg][slot], team_at[pg][slot] = r, ids
-    season_avg = {pg: sum(f.get(slot, SEASON_MISSED) for slot in range(n_season)) / n_season
-                  for pg, f in finish.items()}
-    names = [label for label, _ in SEASON_EVENTS]
-    SEASON_TIE = (f"Average finish at {', '.join(names[:-1])} and {names[-1]}; "
-                  f'a missed event counts as {SEASON_MISSED}th.')
+    #   "Top 10 players of 2025"                 the year's majors: each round of
+    #                                             FNCS grand finals plus the
+    #                                             year's LANs - the World Cup,
+    #                                             the Invitational, the Summit,
+    #                                             EWC, the Globals
+    #   "Top 10 by average FNCS finish in 2025"  the rounds of FNCS finals alone
+    #   "... average FNCS finish, all time"      every round since 2019
+    #
+    # Each is a world board plus one per FNCS region, with North America split
+    # the way the FNCS split it (`fncs_server`). From 2022, when a year kept one
+    # team format the whole way through, the same again for duos or trios. The
+    # majors are skipped in 2020 and 2021: with no LAN they would be the FNCS
+    # boards twice.
+    #
+    # A round is one slot - a player has one final in it, their own region's -
+    # and each LAN is a slot of its own. A slot missed counts as twice the last
+    # place of a full lobby in its format (MISSED): 100th in duos, 66th in
+    # trios. That puts the players at every event first without one missed
+    # final sinking a great year; it was a flat 200 until 1 Oct 2026. Being
+    # there with no finish on record - a DQ, or out of the Summit before its
+    # last stage - counts as a miss. Before 2022 the formats changed inside a
+    # year, and a trio's 12th of 33 and a solo 40th of 100 average as written
+    # (the user's call).
+    MISSED = {'Solo': 200, 'Duo': 100, 'Trio': 66, 'Squad': 50}
+    MODE_WORD = {'Solo': 'solos', 'Duo': 'duos', 'Trio': 'trios', 'Squad': 'squads'}
+    TEAM_SIZE = {'Duo': 2, 'Trio': 3}
+    SERVERS = ['Europe', 'NA East', 'NA Central', 'NA West', 'Brazil', 'Asia',
+               'Middle East', 'Oceania']
     average = lambda v: f'{v:.1f}'
 
-    def season_ranked(keep):
-        return sorted(((pg, NAME(pg), v) for pg, v in season_avg.items() if keep(pg)),
-                      key=lambda e: (e[2], e[1].lower()))
+    def fncs_server(t):
+        """A regional final's region, North America split the way the FNCS split
+        it: NA East and NA West until Major 1 of 2023, one North America final
+        from Major 2 that year through 2024 - NA Central, as the user names it -
+        then NA Central and NA West again from 2025."""
+        reg = region_of(t)
+        if reg == 'South America':
+            return 'Brazil'          # what the FNCS calls it
+        if reg != 'North America':
+            return reg
+        if re.search(r'NA East|North America East', t['name']):
+            return 'NA East'
+        if re.search(r'NA West|North America West', t['name']):
+            return 'NA West'
+        return 'NA Central'
 
-    region = lambda pg: player_of[pg].get('region') if pg in player_of else None
-    for bid, where, keep in [
-        ('Europe', ' — Europe', lambda pg: region(pg) == 'Europe'),
-        ('North America', ' — North America', lambda pg: region(pg) == 'North America'),
-        ('world', '', lambda pg: True),
-        ('rest', ' — outside EU and NA',
-         lambda pg: region(pg) not in (None, 'Europe', 'North America')),
-    ]:
-        board(f'season:{SEASON_YEAR}:{bid}', f'{SEASON_YEAR} season',
-              f'Top 10 players of {SEASON_YEAR}{where}', 'player', SEASON_TIE,
-              season_ranked(keep), average, lower=True)
+    def team_name(pages):
+        """'aqua & nyhrox', 'Japko, panzer & Setty' — the names, alphabetical."""
+        names = sorted((NAME(p) for p in pages), key=str.lower)
+        return names[0] if len(names) == 1 else ' & '.join([', '.join(names[:-1]), names[-1]])
 
-    together = {}
-    for pg, f in finish.items():
-        teams = {team_at[pg][slot] for slot in range(n_season) if slot in f}
-        if len(f) == n_season and len(teams) == 1 and len(next(iter(teams))) == 2:
-            together['|'.join(next(iter(teams)))] = season_avg[pg]
-    pair_label = lambda key: ' & '.join(sorted((NAME(pg) for pg in key.split('|')), key=str.lower))
-    board(f'season:{SEASON_YEAR}:duos', f'{SEASON_YEAR} season',
-          f'Top 10 duos of {SEASON_YEAR}', 'player',
-          f'Duos who played all {n_season} together. {SEASON_TIE} Both names fill one slot.',
-          sorted(((k, pair_label(k), v) for k, v in together.items()),
-                 key=lambda e: (e[2], e[1].lower())),
-          average, lower=True,
-          members_of=lambda key: [{'key': pg, 'label': NAME(pg)}
-                                  for pg in sorted(key.split('|'), key=lambda pg: NAME(pg).lower())])
+    # Every finish at those events, straight off `placements` like the
+    # tournament boards below: PLACED drops the players it cannot resolve, and
+    # a board with one of them in its top eleven has to see that and refuse,
+    # or 11th would be shown as 10th.
+    entrant = lambda name: resolve(name) or f'?{name}'
+    unnamed = lambda key: any(k.startswith('?') for k in (key if isinstance(key, tuple) else [key]))
+    AVERAGED = {n for wave in WAVES for _, n in wave} | LANS
+    finishes = defaultdict(list)        # event -> [(finish, sorted member keys)]
+    for row in placements:
+        n = row.get('tournament')
+        if n not in AVERAGED or did_not_play(row):
+            continue
+        r = rank_of(row.get('placement'))
+        names = [p.get('player') or '' for p in (row.get('participants') or [])]
+        if r is not None and names and all(names):
+            finishes[n].append((r, tuple(sorted(entrant(x) for x in names))))
+
+    # (year, mode, {server: [finals]}) for each round with results, oldest
+    # first. A round still to be played is not one anybody missed.
+    ROUNDS = []
+    for wave in WAVES:
+        played = [n for _, n in wave if finishes[n]]
+        if not played:
+            continue
+        servers = defaultdict(list)
+        for n in played:
+            servers[fncs_server(tour_of[n])].append(n)
+        modes = {tour_of[n].get('mode') for n in played}
+        ROUNDS.append((year_of(tour_of[played[0]]), modes.pop() if len(modes) == 1 else None,
+                       dict(servers)))
+    YEAR_LANS = defaultdict(list)
+    for n in sorted(LANS, key=lambda n: (day_of(tour_of[n]) or '', n)):
+        if finishes[n]:
+            YEAR_LANS[year_of(tour_of[n])].append(n)
+
+    def average_finish(slots, home, size=None, results=None, missed=None):
+        """Each entrant's average over `slots`, [(mode, events)]. A slot holds one
+        finish per entrant - the best, for a player Liquipedia lists twice, like
+        Astell in two duos at the 2026 Major 2 Asia final. Only entrants with a
+        finish at one of the `home` events are kept. With `size` an entrant is a
+        whole team of that many, with a finish only where exactly those players
+        played together. `results` and `missed` default to the majors' finishes
+        and MISSED; the Div Cups pass their own and a flat 100."""
+        results = finishes if results is None else results
+        miss = (lambda mode: MISSED[mode]) if missed is None else (lambda mode: missed)
+        best, kept = defaultdict(dict), set()
+        for i, (_mode, events) in enumerate(slots):
+            for n in events:
+                for r, members in results[n]:
+                    if size and len(members) != size:
+                        continue
+                    for key in ([members] if size else members):
+                        if r < best[key].get(i, r + 1):
+                            best[key][i] = r
+                        if n in home:
+                            kept.add(key)
+        return {key: sum(best[key].get(i, miss(mode)) for i, (mode, _) in enumerate(slots))
+                     / len(slots)
+                for key in kept}
+
+    def join(words):
+        return words[0] if len(words) == 1 else f"{', '.join(words[:-1])} and {words[-1]}"
+
+    def lan_label(n):
+        m = re.search(r'World Cup Finals - (\w+)', n)
+        if m:
+            return f'the World Cup {m.group(1).lower()} final'
+        for word, label in (('Global Championship', 'the Globals'), ('Summit', 'the Summit'),
+                            ('Invitational', 'the Invitational'), ('Reload Elite Series', 'EWC')):
+            if word in n:
+                return label
+        return n
+
+    def avg_tie(slots, lans, k, server, when, size):
+        if server:
+            finals = (f'the {server} FNCS grand final {when}' if k == 1 else
+                      f'the {k} {server} FNCS grand finals {when}')
+        else:
+            finals = (f'the {k} rounds of FNCS grand finals {when}, each player in their '
+                      f"own region's final")
+        out = (f'Average finish at {join([lan_label(n) for n in lans] + [finals])}.' if lans else
+               f'Average finish across {finals}.')
+        noun = 'event' if lans else 'final'
+        modes = sorted({mode for mode, _ in slots}, key=lambda m: -MISSED[m])
+        if len(modes) == 1:
+            out += f" A missed {noun} counts as {MISSED[modes[0]]}th, twice a full lobby's last place."
+        else:
+            out += (f" A missed {noun} counts as twice a full lobby's last place: "
+                    + join([f'{MISSED[m]}th in {MODE_WORD[m]}' for m in modes]) + '.')
+        if size:
+            word = 'duo' if size == 2 else 'trio'
+            out += (f' {word.title()}s are ranked as one team, so an {noun} they did not play '
+                    f'together is a miss. Each player counts once, with their best {word}, '
+                    f'and {"both" if size == 2 else "all three"} names fill one slot.')
+        return out
+
+    def team_members(key):
+        return [{'key': pg, 'label': NAME(pg)}
+                for pg in sorted(key.split('|'), key=lambda pg: NAME(pg).lower())]
+
+    AVG_UNNAMED = []     # left out: an entrant in the top eleven the roster cannot name
+
+    def avg_board(bid, group, title, tie, avgs, size=None):
+        """Level averages fall to career earnings - a team's added up - and only
+        then to a shared 10th: with two or three rounds in a year, three players
+        level at the cut is common, and those boards were being dropped."""
+        label = team_name if size else NAME
+        money_of = (lambda key: sum(career.get(pg, 0) for pg in key)) if size else \
+                   (lambda key: career.get(key, 0))
+        ranked = sorted(((key, label(key), v, money_of(key)) for key, v in avgs.items()),
+                        key=lambda e: (e[2], -e[3], e[1].lower()))
+        if size:
+            # One team per player, their best: with two of one player's duos
+            # in the eleven, naming them would answer two slots at once.
+            seen = set()
+            ranked = [e for e in ranked if not seen & set(e[0]) and not seen.update(e[0])]
+        if any(unnamed(e[0]) for e in ranked[:SLOTS + 1]):
+            AVG_UNNAMED.append(bid)
+            return
+        if size:
+            ranked = [('|'.join(key), name, v, money) for key, name, v, money in ranked]
+        tie += (' Level averages go to the bigger combined career earnings.' if size else
+                ' Level averages go to the bigger career earner.')
+        board(bid, group, title, 'player', tie, ranked, average, lower=True,
+              members_of=team_members if size else None)
+
+    def avg_scope(year, server, lans, mode=None):
+        """One board's slots - [(mode, events)] - the events that put an entrant
+        on it, and how many rounds of FNCS finals are among the slots."""
+        slots = []
+        for y, m, by_server in ROUNDS:
+            if year is not None and y != year:
+                continue
+            events = by_server.get(server, []) if server else [n for ns in by_server.values() for n in ns]
+            if events and (mode is None or m == mode):
+                slots.append((m, events))
+        k = len(slots)
+        home = {n for _, events in slots for n in events}
+        slots += [(tour_of[n].get('mode'), [n]) for n in lans
+                  if mode is None or tour_of[n].get('mode') == mode]
+        if not server:
+            home = {n for _, events in slots for n in events}
+        return slots, home, k
+
+    avg_built = Counter()
+    for year in sorted({y for y, _, _ in ROUNDS}, reverse=True):
+        group = f'{year} season'
+        round_modes = Counter(m for y, m, _ in ROUNDS if y == year)
+        team_mode = round_modes.most_common(1)[0][0] if year >= 2022 else None
+        for prefix, lans in (('season', YEAR_LANS[year]), ('fncs-avg', [])):
+            if prefix == 'season' and not lans:
+                continue
+            for size in [None] + ([TEAM_SIZE[team_mode]] if team_mode in TEAM_SIZE else []):
+                mode = team_mode if size else None
+                for server in [None] + SERVERS:
+                    slots, home, k = avg_scope(year, server, lans, mode)
+                    if not k:
+                        continue        # no final in this region that year
+                    if any(m not in MISSED for m, _ in slots):
+                        print(f'  averages: {year} {server or "world"} has a format with no '
+                              f'missed value: {sorted({m for m, _ in slots} - set(MISSED), key=str)}')
+                        continue
+                    who = MODE_WORD[mode] if size else 'players'
+                    title = (f'Top 10 {who} of {year}' if prefix == 'season' else
+                             f"Top 10 {'' if not size else who + ' '}by average FNCS finish in {year}")
+                    bid = ':'.join([prefix, str(year)] + ([who] if size else [])
+                                   + ([server] if server else [] if size else ['world']))
+                    before = len(boards)
+                    avg_board(bid, group, title + (f' — {server}' if server else ''),
+                              avg_tie(slots, lans, k, server, f'of {year}', size),
+                              average_finish(slots, home, size), size)
+                    avg_built[prefix] += len(boards) - before
+
+    # All time: every round of FNCS finals, misses counted from 2019 for
+    # everyone - nobody knows when a player started trying to qualify.
+    for server in [None] + SERVERS:
+        slots, home, k = avg_scope(None, server, [])
+        if not k:
+            continue
+        first = min(y for y, _, by_server in ROUNDS if not server or server in by_server)
+        before = len(boards)
+        avg_board(f"fncs-avg:all:{server or 'world'}", 'FNCS all time',
+                  'Top 10 by average FNCS finish, all time' + (f' — {server}' if server else ''),
+                  avg_tie(slots, [], k, server, f'since {first}', None),
+                  average_finish(slots, home))
+        avg_built['all time'] += len(boards) - before
+    print(f'averages: {len(ROUNDS)} rounds of FNCS finals, LANs by year '
+          f'{ {y: len(ns) for y, ns in sorted(YEAR_LANS.items())} }; boards {dict(avg_built)}')
+    # ----------------------------------------------- Div Cups and Evaluations --
+    # FNCS Divisional Cup finals, Chapter 6 on with C6S4's Practice Cups, and
+    # Fortnite Performance Evaluations (the user's spec, 1 Oct 2026). Every
+    # board is a world board plus one per region, and every region's final is
+    # its own event: a player in two regions in one week has two finals.
+    #
+    # Read by pagename, not by name: Liquipedia gave the C7S4 Div Cups the C7S3
+    # names, so "C7S3: FNCS Divisional Cup Finals Week 1: Europe" is two events,
+    # and a placement row only carries the name. A row goes to the event of
+    # that name that started nearest its own date.
+    def by_pagename(keep):
+        events = {t['pagename']: t for t in tournaments if keep(t)}
+        named = defaultdict(list)
+        for t in events.values():
+            named[t['name']].append(t)
+        rows = defaultdict(list)
+        for row in placements:
+            same = named.get(row.get('tournament'))
+            if not same or did_not_play(row):
+                continue
+            day = str(row.get('date') or '')[:10]
+            t = same[0]
+            if len(same) > 1 and re.match(r'^\d{4}-\d{2}-\d{2}$', day):
+                t = min(same, key=lambda t: abs(days_apart(day_of(t) or day, day)))
+            rows[t['pagename']].append(row)
+        return events, rows
+
+    # The pagename says the region where the name does not ("North America" in
+    # both NA finals' regions), and it is right about the season where the name
+    # is not.
+    PAGE_SERVER = [('North_America_Central', 'NA Central'), ('North_America_West', 'NA West'),
+                   ('North_America', 'NA Central'), ('Europe', 'Europe'), ('Brazil', 'Brazil'),
+                   ('Asia', 'Asia'), ('Middle_East', 'Middle East'), ('Oceania', 'Oceania')]
+    REGION_SERVER = {'North America': 'NA Central', 'South America': 'Brazil'}
+
+    def page_server(t):
+        """Older Evaluation pages carry no region in the pagename; theirs is the
+        event's own, and North America's only Evaluation region is NA Central."""
+        found = next((label for key, label in PAGE_SERVER if key in t['pagename']), None)
+        return found or REGION_SERVER.get(region_of(t), region_of(t))
+
+    def page_results(rows_of):
+        """pagename -> ranked finishes, everyone there (ranked or not), prize per entrant."""
+        ranked, there, prize = defaultdict(list), defaultdict(set), defaultdict(Counter)
+        for page, rows in rows_of.items():
+            for row in rows:
+                names = [p.get('player') for p in (row.get('participants') or []) if p.get('player')]
+                if not names:
+                    continue        # a session still to be played: places, nobody in them
+                members = tuple(sorted(entrant(x) for x in names))
+                r = rank_of(row.get('placement'))
+                if r is not None:
+                    ranked[page].append((r, members))
+                each = (float(row.get('individualprizemoney') or 0)
+                        or float(row.get('prizemoney') or 0) / len(names))
+                for k in members:
+                    there[page].add(k)
+                    prize[page][k] += each
+        return ranked, there, prize
+
+    DIV_MISSED = 100     # the user's number for a Div Cup week missed, duos or trios
+    DIV_SERVERS = ['Europe', 'NA Central', 'NA West', 'Brazil', 'Asia', 'Middle East', 'Oceania']
+    DIV, div_rows = by_pagename(lambda t: 'Divisional' in t['name'])
+    div_ranked, div_there, div_prize = page_results(div_rows)
+    season_tag = lambda t: 'C{}S{}'.format(*re.search(r'Chapter_(\d+)/Season_(\d+)', t['pagename']).groups())
+
+    # A week is every region's final of one Div Cup: (season, practice, number).
+    # Only weeks someone has played.
+    _weeks = defaultdict(list)
+    for page, t in DIV.items():
+        if div_there[page]:
+            m = re.search(r'Week_(\d+)', page)
+            _weeks[(season_tag(t), 'Practice' in page, int(m.group(1)) if m else 0)].append(page)
+    week_start = {w: min(day_of(DIV[p]) or '9999' for p in pages) for w, pages in _weeks.items()}
+    WEEKS = sorted(_weeks, key=week_start.get)
+    week_year = {w: int(week_start[w][:4]) for w in WEEKS}
+    week_mode = {w: Counter(DIV[p].get('mode') for p in _weeks[w]).most_common(1)[0][0] for w in WEEKS}
+    week_label = lambda w: f"{w[0]} {'Practice Cup' if w[1] else 'week'} {w[2]}"
+
+    def div_pages(weeks, server):
+        return [p for w in weeks for p in _weeks[w] if not server or page_server(DIV[p]) == server]
+
+    def div_average(weeks, server, size=None):
+        """Average finish over `weeks`, a week missed at 100th. On a world board
+        a player in two regions that week keeps the better finish."""
+        slots = [(week_mode[w], div_pages([w], server)) for w in weeks]
+        slots = [s for s in slots if s[1]]
+        home = {p for _, pages in slots for p in pages}
+        return average_finish(slots, home, size, div_ranked, DIV_MISSED) if slots else {}
+
+    def tally_board(bid, group, title, tie, counts, tiebreak, fmt):
+        """A count or a sum, level ones split by `tiebreak` - an average finish,
+        lower first, as the user asked for the Div Cups."""
+        ranked = sorted(((k, NAME(k), v, tiebreak.get(k, DIV_MISSED)) for k, v in counts.items() if v > 0),
+                        key=lambda e: (-e[2], e[3], e[1].lower()))
+        if any(unnamed(e[0]) for e in ranked[:SLOTS + 1]):
+            AVG_UNNAMED.append(bid)
+            return
+        board(bid, group, title, 'player', tie, ranked, fmt)
+
+    # The scopes. Counts are all time, by chapter and by year; averages by
+    # chapter, year and season (the user, 1 Oct 2026: a season's handful of
+    # weeks makes every count a tie). A year needs four weeks - December 2024
+    # had two, and they count in Chapter 6 and all time.
+    _chapters = sorted({w[0][:2] for w in WEEKS}, reverse=True)
+    _years = sorted((y for y, n in Counter(week_year.values()).items() if n >= 4), reverse=True)
+    _seasons = sorted({w[0] for w in WEEKS}, key=lambda s: (int(s[1]), int(s[3:])), reverse=True)
+    WHOLE = [('all', 'all time', ', all time', WEEKS)]
+    CHAPTERS = [(c, f'Chapter {c[1:]}', f' in Chapter {c[1:]}', [w for w in WEEKS if w[0][:2] == c])
+                for c in _chapters]
+    YEARS_DIV = [(str(y), str(y), f' in {y}', [w for w in WEEKS if week_year[w] == y]) for y in _years]
+    SEASONS = [(s, s, f' in {s}', [w for w in WEEKS if w[0] == s]) for s in _seasons]
+    where = lambda server: f' — {server}' if server else ''
+    the = lambda server: f'{server} ' if server else ''
+    count_fmt = lambda one: lambda v: f'{v:,.0f} {one}' + ('' if v == 1 else 's')
+    div_built = Counter()
+
+    def div_tie(lead, scope_text, server, note=''):
+        return (f'{lead}{scope_text}{note}. Level ones go to the better average {the(server)}Div Cup '
+                f'finish over the same weeks, a missed week counting as 100th.')
+
+    for key, label, scope_text, weeks in WHOLE + CHAPTERS + YEARS_DIV:
+        group = f'Div Cups — {label}'
+        for server in [None] + DIV_SERVERS:
+            pages = div_pages(weeks, server)
+            quals, wins, prize = Counter(), Counter(), Counter()
+            for p in pages:
+                quals.update(div_there[p])
+                wins.update(k for r, members in div_ranked[p] if r == 1 for k in members)
+                prize.update(div_prize[p])
+            avg = div_average(weeks, server)
+            bid = lambda metric: f"divcup:{metric}:{key}:{server or 'world'}"
+            before = len(boards)
+            tally_board(bid('finals'), group, f'Top 10 by Div Cup finals reached{scope_text}{where(server)}',
+                        div_tie(f'{the(server)}Div Cup finals reached', scope_text, server,
+                                '' if server else "; every region's final counts, so two regions in one week is two"),
+                        quals, avg, count_fmt('final'))
+            tally_board(bid('wins'), group, f'Top 10 by Div Cup wins{scope_text}{where(server)}',
+                        div_tie(f'{the(server)}Div Cup finals won', scope_text, server),
+                        wins, avg, count_fmt('win'))
+            tally_board(bid('earnings'), group, f'Top 10 by Div Cup earnings{scope_text}{where(server)}',
+                        div_tie(f'Prize money from {the(server)}Div Cup finals', scope_text, server),
+                        prize, avg, money)
+            div_built['counts'] += len(boards) - before
+
+    # Averages, players and teams. A team only has a finish in a week where
+    # exactly those players played together. Chapter 6's duo Div Cups (C6S4)
+    # are left out of the team boards - too many duos changed partners there,
+    # the user's call - so Chapter 6 and 2025 are trios, Chapter 7 and 2026
+    # duos, and C6S4 has no team board at all.
+    team_week = lambda w: not (w[0].startswith('C6') and week_mode[w] == 'Duo')
+    for key, label, scope_text, weeks in CHAPTERS + YEARS_DIV + SEASONS:
+        group = f'Div Cups — {label}'
+        n = len(weeks)
+        for server in [None] + DIV_SERVERS:
+            before = len(boards)
+            avg_board(f"divcup:average:{key}:{server or 'world'}", group,
+                      f'Top 10 by average Div Cup finish{scope_text}{where(server)}',
+                      f'Average finish across the {n} {the(server)}Div Cup weeks{scope_text}'
+                      + (', the better one for a player in two regions that week' if not server else '')
+                      + '. A missed week counts as 100th.',
+                      div_average(weeks, server))
+            div_built['averages'] += len(boards) - before
+        eligible = [w for w in weeks if team_week(w)]
+        if not eligible or (key in {s for s, *_ in SEASONS} and len(eligible) < n):
+            continue
+        mode = Counter(week_mode[w] for w in eligible).most_common(1)[0][0]
+        team_weeks = [w for w in eligible if week_mode[w] == mode]
+        size, word = TEAM_SIZE[mode], MODE_WORD[mode]
+        for server in [None] + DIV_SERVERS:
+            before = len(boards)
+            avg_board(f"divcup:average-{word}:{key}:{server or 'world'}", group,
+                      f'Top 10 {word} by average Div Cup finish{scope_text}{where(server)}',
+                      f'Average finish across the {len(team_weeks)} {the(server)}{mode.lower()} Div Cup '
+                      f'weeks{scope_text}'
+                      + (", Chapter 6's duo Div Cups left out" if len(team_weeks) < n else '')
+                      + f'. {word.title()} are ranked as one team, so a week they did not play together '
+                      f'is a miss, counting as 100th. Each player counts once, with their best '
+                      f'{word[:-1]}, and {"both" if size == 2 else "all three"} names fill one slot.',
+                      div_average(team_weeks, server, size), size)
+            div_built['team averages'] += len(boards) - before
+
+    # Performance Evaluations: money and lobbies reached, no averages (the
+    # user's call). Europe and NA Central are the only regions that hold them.
+    # 2023 had seven sessions paying $400 a head, so it counts in all time only.
+    FPE, fpe_rows = by_pagename(lambda t: 'Fortnite Performance Evaluation' in t['name'])
+    _fpe_ranked, fpe_there, fpe_prize = page_results(fpe_rows)
+    FPE_PLAYED = [p for p in sorted(FPE, key=lambda p: day_of(FPE[p]) or '') if fpe_there[p]]
+    FPE_SERVERS = [s for s in DIV_SERVERS if any(page_server(FPE[p]) == s for p in FPE_PLAYED)]
+    _fpe_years = sorted((y for y, n in Counter(year_of(FPE[p]) for p in FPE_PLAYED).items() if n >= 20),
+                        reverse=True)
+    TIE_FPE = 'Level ones go to the bigger career earner.'
+    for key, scope_text, pages in ([('all', ', all time', FPE_PLAYED)]
+                                   + [(str(y), f' in {y}', [p for p in FPE_PLAYED if year_of(FPE[p]) == y])
+                                      for y in _fpe_years]):
+        modes = sorted({FPE[p].get('mode') for p in pages} & set(MODE_WORD), key=lambda m: TEAM_SIZE.get(m, 9))
+        for server in [None] + FPE_SERVERS:
+            here = [p for p in pages if not server or page_server(FPE[p]) == server]
+            quals, prize = Counter(), Counter()
+            for p in here:
+                quals.update(fpe_there[p])
+                prize.update(fpe_prize[p])
+            fame = {k: -career.get(k, 0) for k in set(quals) | set(prize)}
+            before = len(boards)
+            tally_board(f"fpe:sessions:{key}:{server or 'world'}", 'Performance Evaluations',
+                        f'Top 10 by Performance Evaluations played{scope_text}{where(server)}',
+                        f'{the(server)}Performance Evaluation sessions played{scope_text}. {TIE_FPE}',
+                        quals, fame, count_fmt('session'))
+            tally_board(f"fpe:earnings:{key}:{server or 'world'}", 'Performance Evaluations',
+                        f'Top 10 by Performance Evaluation earnings{scope_text}{where(server)}',
+                        f'Prize money from {the(server)}Performance Evaluations{scope_text}. {TIE_FPE}',
+                        prize, fame, money)
+            # By format, where the scope had more than one - otherwise it is
+            # the board above again.
+            for mode in (modes if len(modes) > 1 else []):
+                prize = Counter()
+                for p in here:
+                    if FPE[p].get('mode') == mode:
+                        prize.update(fpe_prize[p])
+                tally_board(f"fpe:earnings-{MODE_WORD[mode]}:{key}:{server or 'world'}",
+                            'Performance Evaluations',
+                            f'Top 10 by {mode.lower()} Performance Evaluation earnings{scope_text}{where(server)}',
+                            f'Prize money from {the(server)}Performance Evaluations played in '
+                            f'{MODE_WORD[mode]}{scope_text}. {TIE_FPE}',
+                            prize, fame, money)
+            div_built['evaluations'] += len(boards) - before
+
+    # List's Div Cup and Evaluation lists, written into facts.json below. A
+    # threshold list takes the two highest steps that still name eight players,
+    # so the lists move with the data instead of going stale.
+    PLAYER_LISTS = []
+
+    def add_list(lid, title, subtitle, keys):
+        PLAYER_LISTS.append({'id': lid, 'title': title, 'subtitle': subtitle,
+                             'players': sorted(k for k in keys if not unnamed(k))})
+
+    def threshold_lists(lid, title, subtitle, counts, steps):
+        named_counts = [v for k, v in counts.items() if not unnamed(k)]
+        picked = [x for x in steps if sum(1 for v in named_counts if v >= x) >= 8][-2:]
+        for x in picked:
+            add_list(f'{lid}:{x}', title(x), subtitle, [k for k, v in counts.items() if v >= x])
+
+    for server in [None] + DIV_SERVERS:
+        pages = div_pages(WEEKS, server)
+        quals, wins = Counter(), Counter()
+        for p in pages:
+            quals.update(div_there[p])
+            wins.update(k for r, members in div_ranked[p] if r == 1 for k in members)
+        tag = f':{server}' if server else ''
+        threshold_lists(f'divcup-finals{tag}', lambda x: f'Players with {x}+ {the(server)}Div Cup finals',
+                        'Chapters 6 and 7, Practice Cups included' + (
+                            '' if server else "; every region's final counts, so two in one week is two"),
+                        quals, range(10, 200, 10))
+        if not server:
+            threshold_lists('divcup-wins', lambda x: f'Players with {x}+ Div Cup wins',
+                            'Div Cup finals won in any region, Chapters 6 and 7', wins, (2, 3, 5, 8, 12, 20, 30))
+            continue
+        add_list(f'divcup-won:{server}', f'Div Cup winners — {server}',
+                 'Won a Div Cup final in this region, duos or trios, Practice Cups included', set(wins))
+        for mode in ('Duo', 'Trio'):
+            add_list(f'divcup-won:{server}:{MODE_WORD[mode]}', f'{mode} Div Cup winners — {server}',
+                     f'Won a {mode.lower()} Div Cup final in this region',
+                     {k for p in pages if DIV[p].get('mode') == mode
+                      for r, members in div_ranked[p] if r == 1 for k in members})
+    for season in _seasons:
+        weeks = [w for w in WEEKS if w[0] == season]
+        at = [set().union(*(div_there[p] for p in _weeks[w])) for w in weeks]
+        practice = any(w[1] for w in weeks)
+        add_list(f'divcup-every:{season}', f'Players who played every Div Cup final of {season}',
+                 f'All {len(weeks)} weeks' + (', Practice Cups included' if practice else '')
+                 + ', in any region', set.intersection(*at))
+    for server in [None] + FPE_SERVERS:
+        quals = Counter()
+        for p in FPE_PLAYED:
+            if not server or page_server(FPE[p]) == server:
+                quals.update(fpe_there[p])
+        threshold_lists(f"fpe-sessions{f':{server}' if server else ''}",
+                        lambda x: f'Players with {x}+ {the(server)}Performance Evaluations',
+                        'Performance Evaluation sessions played since 2023', quals, range(20, 400, 20))
+
+    _repeat = sum(1 for p in DIV if len({r for r, _ in div_ranked[p]}) < len(div_ranked[p]))
+    print(f'Div Cups: {len(DIV)} finals in {len(WEEKS)} weeks, {_repeat} with a place given twice; '
+          f'Evaluations: {len(FPE_PLAYED)} sessions in {FPE_SERVERS}; boards {dict(div_built)}; '
+          f'{len(PLAYER_LISTS)} lists for List')
+    if AVG_UNNAMED:
+        print(f'  {len(AVG_UNNAMED)} left out, a top-11 entrant the roster cannot name:', AVG_UNNAMED)
 
     # ------------------------------------------------- player: region / country --
     region_of_page  = {p['pagename']: p.get('region') for p in PLAYABLE}
@@ -476,11 +976,7 @@ def build(BASE):
     # fourth-placed trio, the "no single right answer" guard fired and FNCS 2025
     # Global Championship shipped no board at all. By place there is no such tie,
     # and the trio is the answer rather than an accident of the alphabet.
-    def team_name(pages):
-        """'aqua & nyhrox', 'Japko, panzer & Setty' — the names, alphabetical."""
-        names = sorted((NAME(p) for p in pages), key=str.lower)
-        return names[0] if len(names) == 1 else ' & '.join([', '.join(names[:-1]), names[-1]])
-
+    # `team_name` is defined with the averages, above.
     def team_row(place, team):
         pages = sorted(team, key=lambda pg: NAME(pg).lower())
         return {'key': '|'.join(sorted(team)), 'label': team_name(team),
@@ -693,12 +1189,7 @@ def build(BASE):
         and "26 in a rows". These boards spell both forms out."""
         return lambda v: f'{v:,.0f} {one if v == 1 else many}'
 
-    def day_of(t):
-        d = str(t.get('startdate') or '')[:10]
-        return d if re.match(r'^\d{4}-\d{2}-\d{2}$', d) else None
-    def days_apart(a, b):
-        return (_date.fromisoformat(b) - _date.fromisoformat(a)).days
-
+    # `day_of` and `days_apart` come from cell 1, with the FNCS waves.
     # `rank_fame` comes from cell 2, where the count boards it was written for are.
 
     # ============================================================ player counts ==
@@ -750,23 +1241,8 @@ def build(BASE):
           rank(Counter({k: v for k, v in career.items() if not fncs_titles.get(k)}), NAME), money)
 
     # ============================================== FNCS waves: streaks, chapters ==
-    # A "wave" is one round of FNCS grand finals: every region's final inside a week
-    # of each other. Read off the dates rather than the names, because the naming
-    # changed four times (Season X, C2S1, FNCS 2023 - Major 1) and the dates did not.
-    # A cluster smaller than four regions is a one-off - a Global Championship, the
-    # 2022 Invitational, the 2026 Summit - and is left out, so missing an event
-    # nobody could qualify for does not break a streak.
-    _fncs_days = sorted((day_of(tour_of[n]), n) for n in FNCS if day_of(tour_of[n]))
-    _clusters, _cur = [], []
-    for _d, _n in _fncs_days:
-        if _cur and days_apart(_cur[-1][0], _d) > 7:
-            _clusters.append(_cur)
-            _cur = []
-        _cur.append((_d, _n))
-    if _cur:
-        _clusters.append(_cur)
-    WAVES = [c for c in _clusters if len(c) >= 4]
-    wave_of = {n: i for i, c in enumerate(WAVES) for _, n in c}
+    # The waves themselves - one round of FNCS grand finals each - are cell 1's
+    # WAVES and wave_of.
 
     # Chapters come out of the export's own names: thousands of community events are
     # called "C6S2" or "Chapter 5 Season 1", so the chapter of any date is whatever
@@ -1420,7 +1896,9 @@ def build(BASE):
         f"{len(SEASON_EVENTS)} events"
     )
 
-    payload = {"generated": TODAY, "events": events, "players": players_out, "season": season}
+    # `lists`: List's Div Cup and Evaluation lists, finished in cell 2.
+    payload = {"generated": TODAY, "events": events, "players": players_out, "season": season,
+               "lists": PLAYER_LISTS}
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, separators=(",", ":"))
 

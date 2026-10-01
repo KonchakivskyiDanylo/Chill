@@ -83,6 +83,8 @@ export class Majors {
   private readonly byPlayer = new Map<string, MajorResult[]>();
   /** "event|placement" -> everyone who finished exactly there. */
   private readonly byFinish = new Map<string, Set<string>>();
+  /** event name -> placement -> everyone who finished there. */
+  private readonly byEvent = new Map<string, Map<number, string[]>>();
 
   constructor(payload: RawPayload) {
     this.generated = payload.generated;
@@ -112,6 +114,10 @@ export class Majors {
         let set = this.byFinish.get(key);
         if (!set) this.byFinish.set(key, (set = new Set()));
         set.add(player.id);
+        const name = this.tournaments[index].name;
+        let places = this.byEvent.get(name);
+        if (!places) this.byEvent.set(name, (places = new Map()));
+        places.set(placement, [...(places.get(placement) ?? []), player.id]);
       }
     }
   }
@@ -126,6 +132,17 @@ export class Majors {
    */
   finishers(result: MajorResult): ReadonlySet<string> {
     return this.byFinish.get(finishKey(result.tournament.name, result.placement)) ?? new Set();
+  }
+
+  /**
+   * Every finish at one major, best first: the place and everyone who finished
+   * there — one player, or the whole duo or trio. Only players with a page in
+   * this file, so a team with a member Liquipedia has no page for comes back short.
+   */
+  fieldOf(eventName: string): { placement: number; players: string[] }[] {
+    return [...(this.byEvent.get(eventName) ?? [])]
+      .map(([placement, players]) => ({ placement, players }))
+      .sort((a, b) => a.placement - b.placement);
   }
 
   /** Every major this player reached, oldest first. Empty for anyone not in the file. */
