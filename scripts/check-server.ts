@@ -83,7 +83,7 @@ try {
   check((await post('/api/support', ticket)).status === 204, 'a valid support request was not accepted');
   check((await post('/api/support', { ...ticket, website: 'http://spam' })).status === 204, 'the honeypot did not answer like a success');
   check((await post('/api/support', { ...ticket, message: '   ' })).status === 400, 'an empty support message was accepted');
-  check((await post('/api/errors', { message: 'boom', page: '#/', app: 'check' })).status === 204, 'an error report was not accepted');
+  check((await post('/api/errors', { message: 'boom', page: '/', app: 'check' })).status === 204, 'an error report was not accepted');
 
   // ---- LiquipediaDB's webhook: the secret is the path, and only the Fortnite
   // wiki's main namespace is kept (a move out of it counts).

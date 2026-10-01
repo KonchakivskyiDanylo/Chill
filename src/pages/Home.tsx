@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ModePicker } from '@/components/EventMode';
 import { loadRoster } from '@/data/liquipedia/roster';
 import { VISIBLE_GAMES } from '@/games/registry';
+import { HOME_META, usePageMeta } from '@/lib/seo';
 
 const COUNT = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
 
@@ -28,6 +29,7 @@ function usePrefetchRoster() {
 
 export function Home() {
   usePrefetchRoster();
+  usePageMeta(HOME_META);
   return (
     <div className="page stack-lg">
       <section className="stack" style={{ paddingTop: 12 }}>

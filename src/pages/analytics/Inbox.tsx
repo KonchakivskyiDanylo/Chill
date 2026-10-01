@@ -18,7 +18,7 @@ const KIND_LABEL: Record<string, string> = {
   other: 'Other',
 };
 
-/** `#/analytics/support` — what people sent through the 💬 form, newest first. */
+/** `/analytics/support` — what people sent through the 💬 form, newest first. */
 export function Inbox({ tickets, onChange }: { tickets: StoredSupport[] | null; onChange: () => void }) {
   const [show, setShow] = useState<SupportStatus | 'all'>('all');
   const [text, setText] = useState('');
@@ -82,7 +82,7 @@ export function Inbox({ tickets, onChange }: { tickets: StoredSupport[] | null; 
   );
 }
 
-/** `#/analytics/errors` — uncaught browser errors, newest first. */
+/** `/analytics/errors` — uncaught browser errors, newest first. */
 export function Errors({ errors }: { errors: Stored<ClientError>[] | null }) {
   const [text, setText] = useState('');
   if (!errors) return <p className="muted">Loading…</p>;

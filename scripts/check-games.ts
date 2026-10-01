@@ -785,17 +785,6 @@ if (facts) {
     );
     notes.push(`list: ${winning.answers.length} countries with an FNCS winner`);
   }
-  // One "every FNCS grand final" list per year since 2019, and 2019's asks for
-  // the World Cup as well.
-  const everyFinal = criteria.filter((criterion) => criterion.id.startsWith('fncs-every:'));
-  check(everyFinal.length >= 8, `list: only ${everyFinal.length} years of "every FNCS grand final"`);
-  check(
-    Boolean(everyFinal.find((criterion) => criterion.id === 'fncs-every:2019')?.title.includes('World Cup')),
-    'list: 2019’s "every FNCS grand final" does not ask for the World Cup',
-  );
-  notes.push(
-    `list: every FNCS grand final — ${everyFinal.map((c) => `${c.id.split(':')[1]}: ${c.answers.length}`).join(', ')}`,
-  );
   // Div Cup and Evaluation lists come finished in facts.json: a winners list
   // for every region, and every season's "played them all".
   if (facts.lists.length === 0) {
@@ -805,7 +794,27 @@ if (facts) {
     for (const region of ['Europe', 'NA Central', 'NA West', 'Brazil', 'Asia', 'Middle East', 'Oceania']) {
       check(ids.has(`divcup-won:${region}`), `list: no Div Cup winners list for ${region}`);
     }
-    check(ids.has('divcup-every:C7S4') && ids.has('divcup-every:C7S3'), 'list: C7S3 and C7S4 are not two seasons');
+    check(
+      [...ids].some((id) => id.startsWith('divcup-every:C7S4')) && [...ids].some((id) => id.startsWith('divcup-every:C7S3')),
+      'list: C7S3 and C7S4 are not two seasons',
+    );
+    // "Played every one of them", split by region: every FNCS year has its
+    // lists, 2019's is the one with the World Cup, and none is a phone book.
+    const everyFinal = criteria.filter((criterion) => criterion.id.startsWith('fncs-every:'));
+    if (everyFinal.length === 0) {
+      skipped.push('list: "played every one" by region (facts.json is older — run build_data.py)');
+    } else {
+      const years = new Set(everyFinal.map((criterion) => criterion.id.split(':')[1]));
+      check(years.size >= 8, `list: "every FNCS grand final" covers only ${years.size} years`);
+      check(
+        Boolean(everyFinal.find((criterion) => criterion.id === 'fncs-every:2019')?.title.includes('World Cup')),
+        'list: 2019’s "every FNCS grand final" does not ask for the World Cup',
+      );
+      const every = criteria.filter((criterion) => /^(fncs|divcup)-every:/.test(criterion.id));
+      const biggest = every.reduce((a, b) => (b.answers.length > a.answers.length ? b : a));
+      check(biggest.answers.length <= 100, `list: "${biggest.title}" is ${biggest.answers.length} names`);
+      notes.push(`list: ${every.length} "played every one" lists, the biggest ${biggest.title} at ${biggest.answers.length}`);
+    }
     const weekly = criteria.filter((criterion) => /^(divcup|fpe)/.test(criterion.id));
     notes.push(
       `list: ${weekly.length} Div Cup and Evaluation lists, ${facts.lists.length - weekly.length} under 8 answers`,

@@ -1,0 +1,5 @@
+User-agent: *
+Disallow: /analytics
+Disallow: /api/
+
+Sitemap: https://offspawn.app/sitemap.xml

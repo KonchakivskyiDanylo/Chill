@@ -6,7 +6,7 @@ import { ago, gameTitle, GOOD_LABEL, OUTCOME_LABEL, pct, ROLE_LABEL } from './la
 import { Card, DataTable, matchesText, RowSearch } from './ui';
 
 /**
- * `#/analytics/players` — find a player. Everyone any stored round mentions,
+ * `/analytics/players` — find a player. Everyone any stored round mentions,
  * in any role, most seen first; the box narrows it by name and Enter opens
  * the best match.
  */
@@ -57,7 +57,7 @@ export function Players() {
 }
 
 /**
- * `#/analytics/players/<id>` — one player across every game: what they were
+ * `/analytics/players/<id>` — one player across every game: what they were
  * (the secret, a card, an answer…), how often, and how often whoever was
  * playing got them right.
  */

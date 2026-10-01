@@ -901,13 +901,62 @@ def build(BASE):
                      f'Won a {mode.lower()} Div Cup final in this region',
                      {k for p in pages if DIV[p].get('mode') == mode
                       for r, members in div_ranked[p] if r == 1 for k in members})
+    # "Played every one of them", split by region: year-wide, the FNCS lists
+    # ran to 367 names and the Div Cup ones to 384, too many for 90 seconds
+    # (the user, 1 Oct 2026). A player at every round, in whichever regions,
+    # is listed under the region where they played the most of them - in 2023
+    # that puts North America's regulars under NA Central, two of its three
+    # rounds - and one level between two regions is on both.
+    every_n = lambda n, word: f'Both {word}' if n == 2 else f'All {n} {word}'
+    # "Most of them" of two is one, for a player who split them.
+    most_in = lambda n, server: f'at least one in {server}' if n == 2 else f'most of them in {server}'
+
+    def every_by_region(lid, title, subtitle, rounds):
+        """`rounds` is [{region: everyone there}], one per round."""
+        everyone = set.intersection(*(set().union(*r.values()) for r in rounds))
+        played = defaultdict(Counter)
+        for r in rounds:
+            for server, there in r.items():
+                for k in there & everyone:
+                    played[k][server] += 1
+        listed = defaultdict(set)
+        for k, per_server in played.items():
+            most = max(per_server.values())
+            for server, n in per_server.items():
+                if n == most:
+                    listed[server].add(k)
+        for server in SERVERS:
+            if listed[server]:
+                add_list(f'{lid}:{server}', f'{title} — {server}', subtitle(server), listed[server])
+
     for season in _seasons:
         weeks = [w for w in WEEKS if w[0] == season]
-        at = [set().union(*(div_there[p] for p in _weeks[w])) for w in weeks]
-        practice = any(w[1] for w in weeks)
-        add_list(f'divcup-every:{season}', f'Players who played every Div Cup final of {season}',
-                 f'All {len(weeks)} weeks' + (', Practice Cups included' if practice else '')
-                 + ', in any region', set.intersection(*at))
+        practice = ', Practice Cups included' if any(w[1] for w in weeks) else ''
+        every_by_region(f'divcup-every:{season}', f'Players who played every Div Cup final of {season}',
+                        lambda server: f"{every_n(len(weeks), 'weeks')}{practice}, {most_in(len(weeks), server)}",
+                        [{page_server(DIV[p]): div_there[p] for p in _weeks[w]} for w in weeks])
+
+    # The FNCS by year, the same way. 2019 had two rounds, Season X and C2S1,
+    # so its list asks for the World Cup finals as well, solo or duos - and at
+    # 65 names it stays one list.
+    fncs_there = defaultdict(set)
+    for t, _r, _m, pages in PLACED:
+        if t['name'] in AVERAGED:
+            fncs_there[t['name']].update(pg for pg, _team in pages)
+    for year in sorted({y for y, _, _ in ROUNDS}):
+        rounds = [{server: set().union(*(fncs_there[n] for n in finals)) for server, finals in by_server.items()}
+                  for y, _m, by_server in ROUNDS if y == year]
+        cup = [n for n in YEAR_LANS[year] if 'World Cup Finals' in n]
+        if cup:
+            add_list(f'fncs-every:{year}',
+                     f'Players who played the World Cup and every FNCS grand final of {year}',
+                     f"{every_n(len(rounds), 'rounds')}, each in the player’s own region, and the World Cup "
+                     f'finals, solo or duos',
+                     set.intersection(*(set().union(*r.values()) for r in rounds))
+                     & set().union(*(fncs_there[n] for n in cup)))
+            continue
+        every_by_region(f'fncs-every:{year}', f'Players who played every FNCS grand final of {year}',
+                        lambda server: f"{every_n(len(rounds), 'rounds')}, {most_in(len(rounds), server)}", rounds)
     for server in [None] + FPE_SERVERS:
         quals = Counter()
         for p in FPE_PLAYED:

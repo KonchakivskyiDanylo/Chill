@@ -25,7 +25,7 @@ import { openStore, type PageChange } from './store';
  *   POST /api/errors    a browser error (anyone)
  *   POST /api/liquipedia/<secret>
  *                       LiquipediaDB's webhook: a wiki page changed (Liquipedia)
- *   /api/admin/*        the dashboard behind `#/analytics` (you): the dashboard,
+ *   /api/admin/*        the dashboard behind `/analytics` (you): the dashboard,
  *                       the player index and one player's view, all filtered
  *                       by the same query string; the inbox; the errors; and
  *                       the webhook's pings, for the data updater
@@ -345,16 +345,27 @@ function encodedBody(file: string, encoding: 'br' | 'gzip'): Promise<Buffer | nu
 }
 
 /**
- * Files from `dist/`, and `index.html` for anything else — the app routes on
- * the hash, so every real path is a file or the page itself. Hashed assets are
- * cached for a year; the page never, so a deploy is picked up on reload.
+ * Files from `dist/`, and pages for everything else. The app routes on real
+ * paths, and the build writes a page for each one a search engine should know
+ * (`scripts/prerender.ts`): `/game/tenaball` is `dist/game/tenaball/index.html`.
+ * Any other path gets the home page for the app to route — the dashboard at
+ * `/analytics` with a 200, anything else with a 404, so a mistyped or retired
+ * address is never indexed as a copy of the home page. Hashed assets are
+ * cached for a year; pages never, so a deploy is picked up on reload.
  */
 async function serveStatic(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
   const wanted = path.normalize(decodeURIComponent(url.pathname)).replace(/^([/\\])+/, '');
   let file = path.join(DIST, wanted);
   if (!file.startsWith(DIST)) return send(res, 403);
+  let status = 200;
   const found = await stat(file).catch(() => null);
-  if (!found?.isFile()) file = path.join(DIST, 'index.html');
+  const page = found?.isDirectory() ? await stat(path.join(file, 'index.html')).catch(() => null) : null;
+  if (page?.isFile()) {
+    file = path.join(file, 'index.html');
+  } else if (!found?.isFile()) {
+    file = path.join(DIST, 'index.html');
+    if (!/^\/analytics(\/|$)/.test(url.pathname)) status = 404;
+  }
   if (!(await stat(file).catch(() => null))) {
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('No build yet — run `npm run build`.');
     return;
@@ -373,12 +384,12 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse, url: URL):
       if (!new RegExp(`\\b${encoding}\\b`).test(accepts)) continue;
       const body = await encodedBody(file, encoding);
       if (!body) continue;
-      res.writeHead(200, { ...headers, 'content-encoding': encoding, 'content-length': String(body.length) }).end(body);
+      res.writeHead(status, { ...headers, 'content-encoding': encoding, 'content-length': String(body.length) }).end(body);
       return;
     }
   }
   const body = await readFile(file);
-  res.writeHead(200, { ...headers, 'content-length': String(body.length) }).end(body);
+  res.writeHead(status, { ...headers, 'content-length': String(body.length) }).end(body);
 }
 
 createServer(async (req, res) => {

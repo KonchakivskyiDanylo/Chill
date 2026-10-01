@@ -10,7 +10,7 @@
  * line with the one it came from, and stops both on Ctrl+C or as soon as
  * either of them exits, so a half-running site is never left behind.
  *
- * The API gets ADMIN_OPEN=1: the local-only switch that opens `#/analytics`
+ * The API gets ADMIN_OPEN=1: the local-only switch that opens `/analytics`
  * without a password. The server ignores it in production.
  *
  * The site gets VITE_RECORD=1, so rounds played here are recorded. A dev build

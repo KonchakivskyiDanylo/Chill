@@ -123,7 +123,7 @@ export function installErrorReporting(): void {
     const body: ClientError = {
       message: message.slice(0, 500),
       stack: stack?.slice(0, 4000),
-      page: location.hash || '/',
+      page: location.pathname + location.search,
       app: APP_BUILD,
     };
     void post('errors', body);

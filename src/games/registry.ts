@@ -19,6 +19,12 @@ export interface GameMeta {
   title: string;
   /** One-line pitch for the home page card. */
   tagline: string;
+  /**
+   * The game's own page in search results: a title that says what the game is
+   * to someone who has never heard of it, and the description under it. Without
+   * one the title and tagline stand in. See `lib/seo.ts`.
+   */
+  seo?: { title: string; description: string };
   icon: string;
   /**
    * Short bullets shown in the "How to play" card and modal. Optional: a game
@@ -74,6 +80,11 @@ export const GAMES: GameMeta[] = [
     slug: 'higher-lower',
     title: 'Higher or Lower',
     tagline: 'Is the next player above or below? Keep the streak alive.',
+    seo: {
+      title: 'Fortnite Higher or Lower: pro earnings, FNCS wins and age',
+      description:
+        'Is the next competitive Fortnite player higher or lower? Compare pros on career earnings, FNCS wins, FNCS finals and age, and keep your streak alive.',
+    },
     icon: '📈',
     intro: [
       'The goal is to decide whether the player on the right is higher or lower than the one on the left, on the category you picked.',
@@ -114,6 +125,11 @@ export const GAMES: GameMeta[] = [
     slug: 'fortnitedle',
     title: 'Fortnitedle',
     tagline: 'Guess the player’s name, letter by letter.',
+    seo: {
+      title: 'Fortnitedle: guess the competitive Fortnite player',
+      description:
+        'Wordle for competitive Fortnite: guess the pro player’s name in six tries, with the tiles showing how close each guess is.',
+    },
     icon: '🟩',
     intro: [
       'Guess the competitive Fortnite player in 6 tries. After each guess the colour of the tiles changes to show how close your guess was to the player’s name.',
@@ -142,6 +158,11 @@ export const GAMES: GameMeta[] = [
     slug: 'career-path',
     title: 'Career Path',
     tagline: 'Name the player from their major results alone.',
+    seo: {
+      title: 'Fortnite Career Path: name the pro from their results',
+      description:
+        'A competitive Fortnite player’s results — FNCS grand finals, the Globals, the World Cup — revealed one at a time. Name the pro from their career alone.',
+    },
     icon: '🗺️',
     intro: [
       'A secret player’s tournament results are revealed one at a time. Name them from the career alone.',
@@ -179,6 +200,11 @@ export const GAMES: GameMeta[] = [
     slug: 'who-are-ya',
     title: 'Who Are Ya?',
     tagline: 'Identify the player from the teammates they queue with.',
+    seo: {
+      title: 'Who Are Ya? Guess the Fortnite pro from their teammates',
+      description:
+        'The teammates a competitive Fortnite player has entered tournaments with are revealed one by one. Name the pro from the company they keep.',
+    },
     icon: '🤝',
     intro: [
       'A secret player is picked, and the people they have entered tournaments with are revealed one at a time. Name the player from the company they keep.',
@@ -209,6 +235,11 @@ export const GAMES: GameMeta[] = [
     slug: 'tenaball',
     title: 'Tenaball',
     tagline: 'Find all ten players in a top 10.',
+    seo: {
+      title: 'Tenaball: name the competitive Fortnite top 10',
+      description:
+        'One competitive Fortnite leaderboard, ten empty slots: top earners, FNCS and LAN results, Div Cups, countries and organisations. Name all ten.',
+    },
     icon: '🔟',
     intro: [
       'You get one leaderboard — "Top 10 by LAN earnings", "Top 10 countries by FNCS wins" — and ten empty slots. Name the ten.',
@@ -224,7 +255,7 @@ export const GAMES: GameMeta[] = [
       {
         title: 'Categories',
         items: [
-          'Nearly four hundred boards: players, regions, countries, tournaments, FNCS finals, organisations and paydays. Hit Random, or search for one.',
+          'About nine hundred boards: players, regions, countries, tournaments, FNCS finals, season averages, Div Cups, organisations and paydays. Hit Random, or search for one.',
           'Not every board wants a player. Some want an organisation, a country or a tournament — the input says which.',
         ],
       },
@@ -259,6 +290,11 @@ export const GAMES: GameMeta[] = [
     slug: 'list',
     title: 'List',
     tagline: 'Name as many players as you can before the clock runs out.',
+    seo: {
+      title: 'Fortnite List: name every pro before the clock runs out',
+      description:
+        'Ninety seconds to name as many competitive Fortnite players as you can: FNCS winners, Div Cup regulars, an organisation’s players, a country’s top earners.',
+    },
     icon: '⏱️',
     intro: [
       'One list, ninety seconds, and as many names as you can remember.',
@@ -276,7 +312,7 @@ export const GAMES: GameMeta[] = [
       {
         title: 'The lists',
         items: [
-          'Nearly two hundred: an organisation’s players, FNCS winners by region or year, earnings thresholds, countries, the top earners’ teammates, and who played two events.',
+          'Over three hundred: an organisation’s players, FNCS winners by region or year, Div Cups, earnings thresholds, countries, the top earners’ teammates, and who played two events.',
           '“What counts here” under each list explains its words — which events are LANs or majors, whose nationality a dual national counts for.',
         ],
       },
@@ -344,6 +380,11 @@ export const GAMES: GameMeta[] = [
     slug: 'tic-tac-toe',
     title: 'Tic Tac Toe',
     tagline: 'Fill the grid with players who match both conditions.',
+    seo: {
+      title: 'Fortnite Tic Tac Toe: pros who fit both categories',
+      description:
+        'Fill a 3×3 grid with competitive Fortnite players who fit both their row and their column: country, region, organisation, FNCS titles, LANs and earnings.',
+    },
     icon: '⭕',
     intro: [
       'A 3×3 grid has a category on every row and every column. Fill each cell with a player who fits both.',

@@ -30,7 +30,7 @@ Two folders keep old names: Fortnitedle lives in `wordle` and Griefer in `impost
 How it runs:
 
 - **Locally:** `npm run dev:all` starts the site on port 5173 and the API on port 3000. The analytics page opens without a password, and rounds you play are recorded to `server/.data` on your machine.
-- **In production:** Heroku, live since the end of September 2026. `npm start` serves the built site and the API from one Node process, stores records in Postgres, and puts `#/analytics` behind `ADMIN_PASSWORD`.
+- **In production:** Heroku, live since the end of September 2026. `npm start` serves the built site and the API from one Node process, stores records in Postgres, and puts `/analytics` behind `ADMIN_PASSWORD`.
 - **No accounts yet.** Best scores live in each browser's local storage.
 
 ## The data
@@ -404,7 +404,7 @@ You get one list and 90 seconds to name as many of it as you can. Every correct 
 - **Missed names.** When time runs out you see everyone you missed.
 - **The suggestion box** helps you spell a name you already thought of, and never says whether it is on the list.
 
-**The lists are hand-picked, not generated.** A recall game only works when you can picture the answer set, so there are 268 all-time lists with at least 8 answers each:
+**The lists are hand-picked, not generated.** A recall game only works when you can picture the answer set, so there are 355 all-time lists with at least 8 answers each:
 
 | Family | Lists | Example |
 | --- | --- | --- |
@@ -414,8 +414,8 @@ You get one list and 90 seconds to name as many of it as you can. Every correct 
 | Earnings | 20 | $1M+ career; $200K+ in 2021; $500K+ in a single year |
 | Teammates | 20 | 10+ tournaments with one of the 30 top earners |
 | FNCS | 17 | FNCS winners by region; 20+ grand finals; won back to back; won one before turning 15, or aged 20+ |
-| Year by year | 16 | won a major in 2023; played every FNCS grand final of 2024 (every year, 123–367 players; 2019's also asks for the World Cup, 65) |
-| Div Cups | 47 | winners by region, and duo and trio winners by region; 40+ and 50+ finals, 20+ and 30+ in one region; 5+ and 8+ wins; played every week of a season |
+| Year by year | 56 | won a major in 2023; played every FNCS grand final of 2024 — Europe (each year by region, the one they played most of the rounds in; 2019's asks for the World Cup too and stays one list, 65) |
+| Div Cups | 94 | winners by region, and duo and trio winners by region; 40+ and 50+ finals, 20+ and 30+ in one region; 5+ and 8+ wins; played every week of a season, by region |
 | Performance Evaluations | 6 | 40+ and 60+ sessions, by region too |
 | The 2026 season | 1 | played all five big events (the top 10s are Tenaball boards) |
 | Titles and fields | 2 | LAN winners; qualified for a field |
@@ -613,15 +613,15 @@ The site has its own small server (`server/index.ts`): plain Node HTTP with one 
 
 ### The dashboard
 
-`#/analytics` is linked from nowhere and computed live from the stored rounds on every load (`aggregate.ts`). It has a page per question (`src/pages/analytics/`):
+`/analytics` is linked from nowhere and computed live from the stored rounds on every load (`aggregate.ts`). It has a page per question (`src/pages/analytics/`):
 
 | Page | Shows |
 | --- | --- |
-| `#/analytics` | every game: rounds, won / lost / gave up, rounds per day, how rounds were set up, and a by-game table |
-| `#/analytics/game/<id>` | one game: the same numbers narrowed to it, then its own tables with a search box. Examples: which clue solved a Career Path, which Tenaball answers nobody finds, which Griefer cards get misread, which Tic Tac Toe cells stay empty, which Higher or Lower pairs trip people up |
-| `#/analytics/players` | a search over every player the rounds mention |
-| `#/analytics/players/<id>` | one player across every game: what they were (the secret, a card, an answer, a tile…), how often, how often people got them right, and their latest appearances |
-| `#/analytics/support`, `/errors` | the inbox, with status tabs and a search, and the error table |
+| `/analytics` | every game: rounds, won / lost / gave up, rounds per day, how rounds were set up, and a by-game table |
+| `/analytics/game/<id>` | one game: the same numbers narrowed to it, then its own tables with a search box. Examples: which clue solved a Career Path, which Tenaball answers nobody finds, which Griefer cards get misread, which Tic Tac Toe cells stay empty, which Higher or Lower pairs trip people up |
+| `/analytics/players` | a search over every player the rounds mention |
+| `/analytics/players/<id>` | one player across every game: what they were (the secret, a card, an answer, a tile…), how often, how often people got them right, and their latest appearances |
+| `/analytics/support`, `/errors` | the inbox, with status tabs and a search, and the error table |
 
 **How rounds were set up** splits the rounds four ways by where the players came from. Each breakdown under it counts only the rounds it applies to:
 
@@ -649,6 +649,8 @@ Locally, `npm run dev:all` sets `ADMIN_OPEN=1` for the API and `VITE_RECORD=1` f
 
 **Load speed.** The build writes a brotli and a gzip copy of every text file (`precompress` in `vite.config.ts`) and the server sends the brotli one to browsers that take it — about a third smaller than gzip. The home page fetches the players while you choose a game (`usePrefetchRoster` in `pages/Home.tsx`).
 
+**Search engines.** Since 1 Oct 2026 every page has a real address — `/game/tenaball`, `/credits`, `/analytics` — instead of a `#/` hash, which a search engine reads as the home page. Old hash links are rewritten on load (`src/main.tsx`). After `vite build`, `scripts/prerender.ts` writes `dist/game/<slug>/index.html` for every game the site shows, plus the home and credits pages: each with its own title, description, canonical link and share tags (`src/lib/seo.ts`, the `seo` field in the registry), and the game's pitch and rules as plain HTML that the app replaces on its first render. It also writes `dist/sitemap.xml`; `public/robots.txt` keeps crawlers off `/analytics` and `/api/`. The server answers any other path with the home page and a 404, so a stray address is never indexed as a copy of the home page. Hidden games get no page until they are unhidden.
+
 Three commands must pass before anything ships: `npm run typecheck`, `npm run check:games` and `npm run check:server`. `npm run build` runs the typecheck again and then builds the site. GitHub Actions runs all of them, the build and `scripts/check_liquipedia_api.py` on every push (`.github/workflows/checks.yml`); Heroku waits for it only with "Wait for CI to pass before deploy" ticked.
 
 The code is GNU AGPL-3.0 or later (`LICENSE`, since 30 Sep 2026; MIT before); the data is CC BY-SA 3.0.
@@ -658,7 +660,7 @@ The code is GNU AGPL-3.0 or later (`LICENSE`, since 30 Sep 2026; MIT before); th
 | `npm run dev:all` | the site (5173) and the API (3000) in one terminal; Ctrl+C stops both |
 | `npm run dev` | the site alone |
 | `npm run api` | the API alone, restarting on changes |
-| `npm run build` | typecheck and production build into `dist/` |
+| `npm run build` | typecheck, production build into `dist/`, then a page per game and the sitemap (`scripts/prerender.ts`) |
 | `npm start` | the production server: `dist/` plus the API (what Heroku will run) |
 | `npm run check:games` | plays all ten games to the end in Node and checks what each promises |
 | `npm run check:server` | starts the server on a spare port with a throwaway store and checks every endpoint |

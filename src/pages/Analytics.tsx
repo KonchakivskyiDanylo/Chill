@@ -4,6 +4,7 @@ import type { Dashboard } from '@/analytics/aggregate';
 import { GAME_IDS, type ClientError, type Stored, type StoredSupport } from '@/analytics/types';
 import { usePools } from '@/data/liquipedia/usePools';
 import { getGame } from '@/games/registry';
+import { HOME_META, SITE_NAME, usePageMeta } from '@/lib/seo';
 import { AdminContext, api, useAdminData, useScope } from './analytics/api';
 import { GamePage } from './analytics/GamePage';
 import { Errors, Inbox } from './analytics/Inbox';
@@ -14,7 +15,7 @@ import { FilterBar } from './analytics/ui';
 import './analytics.css';
 
 /**
- * `#/analytics` — the site owner's page.
+ * `/analytics` — the site owner's page.
  *
  * Password-protected by the server (`ADMIN_PASSWORD`), not linked from
  * anywhere, and lazy-loaded so none of it ships to players. Everything on it
@@ -35,7 +36,11 @@ import './analytics.css';
 
 type Session = 'checking' | 'out' | 'in' | 'off' | 'offline';
 
+/** Not for search engines — robots.txt keeps them out — so no canonical address. */
+const DASHBOARD_META = { title: `Dashboard | ${SITE_NAME}`, description: HOME_META.description, path: null };
+
 export default function Analytics() {
+  usePageMeta(DASHBOARD_META);
   const [session, setSession] = useState<Session>('checking');
 
   const check = useCallback(async () => {

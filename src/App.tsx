@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Link, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { getGame, OPEN_HIDDEN } from '@/games/registry';
+import { gameMeta, HOME_META, NOT_FOUND_META, usePageMeta } from '@/lib/seo';
 import { Credits } from '@/pages/Credits';
 import { Home } from '@/pages/Home';
 
@@ -20,10 +21,12 @@ const Analytics = lazy(() => import('@/pages/Analytics'));
  */
 function GamePage() {
   const { slug } = useParams<{ slug: string }>();
-  const game = slug ? getGame(slug) : undefined;
-
+  const found = slug ? getGame(slug) : undefined;
   // A hidden game is not on the live site at all, address included.
-  if (!game || (game.hidden && !OPEN_HIDDEN)) return <Navigate to="/" replace />;
+  const game = found && (!found.hidden || OPEN_HIDDEN) ? found : undefined;
+  usePageMeta(game ? gameMeta(game) : HOME_META);
+
+  if (!game) return <Navigate to="/" replace />;
 
   const { Component } = game;
   return (
@@ -34,6 +37,7 @@ function GamePage() {
 }
 
 function NotFound() {
+  usePageMeta(NOT_FOUND_META);
   return (
     <div className="page center stack">
       <h1>Page not found</h1>

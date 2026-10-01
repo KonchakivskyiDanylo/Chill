@@ -14,7 +14,7 @@ import { Modal, OptionCard, OptionGrid } from './ui';
  * attach it, which turns "this result looks wrong" into a report that already
  * says which board, which clue and which of two players with the same handle.
  *
- * Requests land in the inbox on `#/analytics`.
+ * Requests land in the inbox on `/analytics`.
  */
 
 const KINDS: { id: SupportKind; label: string; hint: string }[] = [

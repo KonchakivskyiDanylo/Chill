@@ -18,7 +18,7 @@ npm run dev:all      # the site on http://localhost:5173 and its API on :3000
 | Script | What it does |
 | --- | --- |
 | `npm run dev` | Vite dev server |
-| `npm run dev:all` | The site and the API together in one terminal, output tagged `site` / `api`, Ctrl+C stops both. The API runs with `ADMIN_OPEN=1`, so `#/analytics` opens without a password, and the site with `VITE_RECORD=1`, so rounds you play land on it (in `server/.data`, this machine only) |
+| `npm run dev:all` | The site and the API together in one terminal, output tagged `site` / `api`, Ctrl+C stops both. The API runs with `ADMIN_OPEN=1`, so `/analytics` opens without a password, and the site with `VITE_RECORD=1`, so rounds you play land on it (in `server/.data`, this machine only) |
 | `npm run build` | Typecheck + production build to `dist/` |
 | `npm run typecheck` | TypeScript only |
 | `npm run check:games` | Drives all ten games through a full round headlessly. Career Path and Who Are Ya report SKIPPED until their generated files exist |
@@ -293,7 +293,7 @@ The 💬 button in the header opens a support form (wrong data, bug, new
 category, suggestion) that can attach the round just played. Uncaught browser
 errors are reported the same way.
 
-Everything lands on **`#/analytics`**, a password-protected page linked from
+Everything lands on **`/analytics`**, a password-protected page linked from
 nowhere: rounds per game and per day, how each game was set up, and per game
 the numbers that matter for tuning it — which clue solved a Career Path, which
 Tenaball answers nobody finds, which Griefer cards get misread, which Tic Tac
@@ -306,7 +306,7 @@ stores to Postgres when `DATABASE_URL` is set and to `server/.data/` otherwise.
 | env | meaning |
 | --- | --- |
 | `DATABASE_URL` | Postgres. Heroku sets it when the add-on is attached |
-| `ADMIN_PASSWORD` | the `#/analytics` password. Without it the admin routes are off |
+| `ADMIN_PASSWORD` | the `/analytics` password. Without it the admin routes are off |
 | `SESSION_SECRET` | optional, signs the login cookie (defaults to the password) |
 | `ADMIN_OPEN=1` | local only: the dashboard with no password. Ignored when `NODE_ENV=production` |
 | `LIQUIPEDIA_WEBHOOK_SECRET` | the last part of the LiquipediaDB webhook URL, `/api/liquipedia/<secret>`. Without it the route is off |

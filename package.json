@@ -8,7 +8,7 @@
     "dev": "vite",
     "dev:all": "tsx scripts/dev-all.ts",
     "api": "tsx watch server/index.ts",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && tsx scripts/prerender.ts",
     "start": "tsx server/index.ts",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",

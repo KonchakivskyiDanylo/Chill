@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { SOURCE, WIKIPEDIA } from '@/data/liquipedia/roster';
+import { CREDITS_META, usePageMeta } from '@/lib/seo';
 
 /**
  * Attribution page.
@@ -20,6 +21,7 @@ const Ext = ({ href, children }: { href: string; children: ReactNode }) => (
 );
 
 export function Credits() {
+  usePageMeta(CREDITS_META);
   return (
     <div className="page page--narrow stack-lg">
       <div className="stack-sm">

@@ -7,7 +7,7 @@ import { categoryLabel, eventLabel, gameTitle, pct, regionLabel, words } from '.
 import { Card, countItems, DataTable, DayColumns, ShareBars, sourceItems } from './ui';
 
 /**
- * `#/analytics` — every game at once: how much is played, how it goes, and
+ * `/analytics` — every game at once: how much is played, how it goes, and
  * how people set their rounds up.
  */
 export function Overview({ data, pools }: { data: Dashboard | null; pools: Pools | null }) {

@@ -10,7 +10,7 @@ import { Headline, MixCard } from './Overview';
 import { Card, DataTable, DayColumns, matchesText, RowSearch } from './ui';
 
 /**
- * `#/analytics/game/<id>` — one game on its own: the same headline, chart and
+ * `/analytics/game/<id>` — one game on its own: the same headline, chart and
  * setup breakdown as the overview, narrowed to it, then the tables that are
  * about this game alone. A search box narrows those tables by name.
  */
