@@ -1,0 +1,213 @@
+/*
+ * Org Chart: the organisation at the top as a crest, its facts redacted until
+ * their clue, and the players hanging off a spine below it — two to a level,
+ * one branch each side. On a phone the spine moves to the left edge.
+ */
+
+.oc-board {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.oc-crest {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding-bottom: 22px;
+  position: relative;
+}
+/* The trunk from the crest down to the spine. */
+.oc-crest::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  height: 22px;
+  transform: translateX(-1px);
+  background: var(--border-strong);
+}
+
+.oc-crest__badge {
+  width: 68px;
+  height: 76px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  /* A shield. */
+  clip-path: polygon(50% 0, 100% 14%, 100% 58%, 50% 100%, 0 58%, 0 14%);
+  box-shadow: var(--shadow-sm);
+}
+.oc-crest__name {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.oc-facts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+}
+.oc-fact {
+  min-width: 104px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.oc-fact dt {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.oc-fact dd {
+  margin: 0;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.oc-redacted {
+  color: var(--text-faint);
+  letter-spacing: -1px;
+  opacity: 0.6;
+}
+.oc-fact--new {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+/* ---------------------------------------------------------------- the tree -- */
+
+.oc-tree {
+  --oc-branch: 22px;
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px calc(var(--oc-branch) * 2);
+  padding: 4px 0 14px;
+}
+/* The spine. */
+.oc-tree::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 14px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-1px);
+  background: var(--border-strong);
+}
+
+.oc-node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 58px;
+  justify-content: center;
+  padding: 9px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+}
+.oc-node:nth-child(odd) {
+  text-align: right;
+}
+/* The branch from the card to the spine. */
+.oc-node::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: var(--oc-branch);
+  height: 2px;
+  background: var(--border-strong);
+}
+.oc-node:nth-child(odd)::after {
+  left: 100%;
+}
+.oc-node:nth-child(even)::after {
+  right: 100%;
+}
+
+.oc-node__name {
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.oc-node__when {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.oc-node__when--now {
+  color: var(--success);
+}
+
+.oc-node--hidden {
+  border-style: dashed;
+  background: transparent;
+}
+.oc-node--hidden .oc-node__name {
+  color: var(--primary);
+  font-size: 1.2rem;
+}
+.oc-node--new {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+  animation: oc-in 0.3s ease-out;
+}
+.oc-node--late {
+  opacity: 0.45;
+}
+
+@keyframes oc-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .oc-node--new {
+    animation: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .oc-crest {
+    align-items: flex-start;
+    text-align: left;
+    padding-left: 4px;
+  }
+  .oc-crest::after,
+  .oc-tree::before {
+    left: 14px;
+  }
+  .oc-facts {
+    justify-content: flex-start;
+  }
+  .oc-tree {
+    grid-template-columns: 1fr;
+    padding-left: calc(14px + var(--oc-branch));
+  }
+  .oc-node:nth-child(odd) {
+    text-align: left;
+  }
+  .oc-node:nth-child(n)::after {
+    left: auto;
+    right: 100%;
+  }
+}

@@ -231,13 +231,75 @@ def finish_players(base_dir):
 MIN_PLAYERS = 4  # a criterion nobody can fill is not a criterion
 NOT_A_TEAM = {"free agent", "retired", "retirement", "inactive", "none", "unknown", ""}
 
+# Words an organisation's name gains and loses over the years. Transfers spell
+# an org the way it was written on the day: NRG's 2019 signings joined "NRG
+# Esports" and left "NRG", Team Falcons was "Falcons Esports". Without folding
+# these, one stint split into a join at one org and a leave at another.
+#
+# Only bios.json folds them (`loose`). orgs.json still matches display names
+# exactly, as it always has, so the live games' rules do not move: folding there
+# too gives NRG 18 former players instead of 12, which is right, but it changes
+# Tic Tac Toe's boards and is the user's call (2 Oct 2026).
+ORG_WORDS = {"team", "esports", "esport", "gaming", "clan", "gg"}
 
-def build_orgs(base_dir):
-    base_dir = Path(base_dir)
-    players_rows = json.loads((base_dir / "players.json").read_text(encoding="utf-8"))
-    teams_rows = json.loads((base_dir / "teams.json").read_text(encoding="utf-8"))
-    transfers = json.loads((base_dir / "transfers.json").read_text(encoding="utf-8"))
 
+def _alnum(s):
+    return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+
+
+def _core(s):
+    """'NRG Esports' -> 'nrg', 'Team_Falcons' -> 'falcons', 'Avery E-Sports' -> 'avery'."""
+    words = re.findall(r"[a-z0-9]+", (s or "").replace("_", " ").lower())
+    out, i = [], 0
+    while i < len(words):
+        if words[i] == "e" and i + 1 < len(words) and words[i + 1] in ("sports", "sport"):
+            i += 2
+            continue
+        if words[i] not in ORG_WORDS:
+            out.append(words[i])
+        i += 1
+    return "".join(out)
+
+
+def org_resolver(teams_rows, loose=False):
+    """A transfer's team name -> the org key orgs.json and bios.json use.
+
+    The team page's display name, or the raw string for an org with no page.
+    `loose` also tries the same letters as a display or page name, then the
+    name with the words in ORG_WORDS left out - but only when exactly one team
+    page has that core and the name carries no "(Oceanic team)"-style
+    parenthetical, which Liquipedia adds precisely because it is a different
+    team.
+    """
+    page_of = {t["name"]: t["pagename"] for t in teams_rows}
+    by_letters = {}
+    cores = defaultdict(set)
+    for t in teams_rows:
+        for spelling in (t["name"], t["pagename"]):
+            by_letters.setdefault(_alnum(spelling), t["pagename"])
+            if "(" not in spelling:
+                cores[_core(spelling)].add(t["pagename"])
+
+    def org_key(name):
+        if not name or name.strip().lower() in NOT_A_TEAM:
+            return None
+        if name in page_of:
+            return page_of[name]
+        if not loose:
+            return name
+        page = by_letters.get(_alnum(name))
+        if page:
+            return page
+        core = _core(name)
+        if "(" not in name and len(core) >= 3 and len(cores.get(core, ())) == 1:
+            return next(iter(cores[core]))
+        return name
+
+    return org_key
+
+
+def player_resolver(players_rows):
+    """A transfer's player name -> a playable players.json pagename, or None."""
     by_page = {p["pagename"].replace("_", " "): p["pagename"] for p in players_rows}
     by_id = {}
     for p in players_rows:
@@ -245,19 +307,27 @@ def build_orgs(base_dir):
     tier = {p["pagename"]: p["tier"] for p in players_rows}
 
     def resolve(name):
-        """A transfer's player name -> a playable players.json pagename, or None."""
         page = by_page.get(name) or by_id.get(name)
         return page if page and tier.get(page) != "unused" else None
 
-    page_of = {t["name"]: t["pagename"] for t in teams_rows}
-    team_meta = {t["pagename"]: t for t in teams_rows}
+    return resolve
 
-    def org_key(name):
-        """Transfers spell orgs by display name; teams.json and players.json by
-        page name. Falls back to the raw string for orgs with no team page."""
-        if not name or name.strip().lower() in NOT_A_TEAM:
-            return None
-        return page_of.get(name, name)
+
+def _day(value):
+    """'2010-05-30T00:00:00.000' -> '2010-05-30'; Liquipedia's '0000-01-01' -> None."""
+    day = str(value or "")[:10]
+    return day if day and not day.startswith("0000") else None
+
+
+def build_orgs(base_dir):
+    base_dir = Path(base_dir)
+    players_rows = json.loads((base_dir / "players.json").read_text(encoding="utf-8"))
+    teams_rows = json.loads((base_dir / "teams.json").read_text(encoding="utf-8"))
+    transfers = json.loads((base_dir / "transfers.json").read_text(encoding="utf-8"))
+
+    resolve = player_resolver(players_rows)
+    org_key = org_resolver(teams_rows)
+    team_meta = {t["pagename"]: t for t in teams_rows}
 
     ever = defaultdict(set)
     for row in transfers:
@@ -286,7 +356,7 @@ def build_orgs(base_dir):
         if len(members) < MIN_PLAYERS:
             continue
         meta = team_meta.get(key)
-        orgs.append({
+        org = {
             "id": key,
             "name": meta["name"] if meta else key,
             "hasPage": meta is not None,
@@ -295,7 +365,14 @@ def build_orgs(base_dir):
             "earnings": round(float((meta or {}).get("earnings") or 0)),
             "current": sorted(current.get(key, ())),
             "ever": sorted(members),
-        })
+        }
+        # The team page's dates for the organisation itself, not its Fortnite
+        # division: FaZe Clan reads 2010.
+        for field, column in (("founded", "createdate"), ("disbanded", "disbanddate")):
+            day = _day((meta or {}).get(column))
+            if day:
+                org[field] = day
+        orgs.append(org)
     orgs.sort(key=lambda o: (-o["earnings"], o["name"].lower()))  # richest first
 
     payload = {"generated": date.today().isoformat(), "minPlayers": MIN_PLAYERS, "orgs": orgs}
@@ -305,6 +382,74 @@ def build_orgs(base_dir):
           f"{sum(1 for o in orgs if o['hasPage'])} with a Liquipedia team page")
 
 
+# ------------------------------------------------------------------- bios --
+
+def build_bios(base_dir):
+    """bios.json: what the roster leaves out about a person.
+
+    - `names`: page name -> real name, for the players who publish one (about
+      2,000 of the 5,700; 110 of the 113 Easy players). roster.json leaves it
+      out because only IRL reads it.
+    - `stints`: page name -> [org, joined, left] oldest first, from the
+      transfers, for Org Chart, Transfer Window and Rewind. `joined` is null
+      when the export only has the player leaving; `left` is null for a stint
+      still open - the org they are at now (players.json's team), or one whose
+      leave was never recorded. Org keys are the ones orgs.json uses; an org
+      with fewer than four players has no row there and is shown by its key.
+    """
+    base_dir = Path(base_dir)
+    players_rows = json.loads((base_dir / "players.json").read_text(encoding="utf-8"))
+    teams_rows = json.loads((base_dir / "teams.json").read_text(encoding="utf-8"))
+    transfers = json.loads((base_dir / "transfers.json").read_text(encoding="utf-8"))
+
+    resolve = player_resolver(players_rows)
+    org_key = org_resolver(teams_rows, loose=True)
+    playable = [p for p in players_rows if p["tier"] != "unused"]
+
+    names = {}
+    for p in playable:
+        name = re.sub(r"\s+", " ", p.get("name") or "").strip()
+        # A "real name" that is only the handle again says nothing.
+        if name and _alnum(name) != _alnum(p.get("id")):
+            names[p["pagename"]] = name
+
+    moves = defaultdict(list)
+    for row in transfers:
+        page = resolve(row.get("player") or "")
+        if page:
+            moves[page].append(row)
+
+    stints = {}
+    for p in playable:
+        page = p["pagename"]
+        out, open_at = [], {}
+        for row in sorted(moves.get(page, ()), key=lambda r: str(r.get("date") or "")):
+            day = _day(row.get("date"))
+            left = org_key(row.get("fromteam")) if row.get("role_from") == "Player" else None
+            joined = org_key(row.get("toteam")) if row.get("role_to") == "Player" else None
+            # From a team to itself is a renamed org or a role change, not a move.
+            if left and left == joined:
+                continue
+            if left:
+                out.append([left, open_at.pop(left, None), day])
+            if joined and joined not in open_at:
+                open_at[joined] = day
+        out.extend([key, day, None] for key, day in open_at.items())
+        team = p.get("teampagename")
+        if team and not any(key == team and end is None for key, _, end in out):
+            out.append([team, None, None])
+        if out:
+            out.sort(key=lambda s: s[1] or s[2] or "9999")
+            stints[page] = out
+
+    payload = {"generated": date.today().isoformat(), "names": names, "stints": stints}
+    with open(base_dir / "bios.json", "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
+    print(f"  bios.json          {len(names):,} real names, "
+          f"{sum(len(s) for s in stints.values()):,} stints for {len(stints):,} players")
+
+
 def run(base_dir):
     finish_players(base_dir)
     build_orgs(base_dir)
+    build_bios(base_dir)

@@ -4,7 +4,7 @@ As of 26 September 2026: every game and how it chooses its players, the data, th
 
 ## What OffSpawn is
 
-OffSpawn is ten browser puzzle games about competitive Fortnite players. They are built on a Liquipedia export of 5,678 players, 14,645 tournaments and 442,736 placements.
+OffSpawn is nineteen browser puzzle games about competitive Fortnite players, seven of them on the live site. They are built on a Liquipedia export of 5,678 players, 14,645 tournaments and 442,736 placements.
 
 The site is React, Vite and TypeScript. Every game splits in two: a pure `engine.ts` with the rules and no React, and a component that draws it. That split is what lets a script play every game to the end in Node.
 
@@ -22,8 +22,15 @@ The site is React, Vite and TypeScript. Every game splits in two: a pure `engine
 | Guess the Player | Close in on a secret player attribute by attribute, eight guesses | `guess-the-player` |
 | Pyramid | Sort ten players into a 1-2-3-4 pyramid on one category, best at the top | `pyramid` |
 | Bingo | Players are dealt one by one; put each on a 4×4 card of categories or skip, and fill the whole card | `bingo` |
+| Curveball | Name the player from their prize money drawn as a curve, a year at a time | `curveball` |
+| Org Chart | Name the organisation from players who played for it, with dates, join dates or names only | `org-chart` |
+| Contextinho | Find the secret player; every guess is ranked by how alike the two are | `contextinho` |
+| Rewind | Put five to seven moments from competitive Fortnite in order | `rewind` |
+| IRL | Name the player behind a real name, their file filled in a line at a time | `irl` |
+| Transfer Window | Name the player from the organisations they have played for | `transfer-window` |
+| Which Lobby? | Name the tournament from its leaderboard, revealed from the bottom up | `which-lobby` |
 
-**Hidden for now: Guess the Player, Connections and Griefer (26 Sep 2026), Pyramid and Bingo (new, 30 Sep 2026).** A `hidden` flag in the registry takes a game off the home page and the side nav, and the live site sends its address home. A dev server still opens it by URL, and `check:games` still plays it. Guess the Player needs more than it has. Of the three rule-grid games only one is kept, Tic Tac Toe: every board builds at every level and none repeats over 200 deals. Its Easy level is the thin one, with 30 distinct rules, and "won the EU FNCS" and "$1M+ earner" each sit on 41% of Easy boards. Delete the flag to bring a game back.
+**Hidden for now: Guess the Player, Connections and Griefer (26 Sep 2026), Pyramid and Bingo (new, 30 Sep 2026), and the seven October games (new, 2 Oct 2026 — see their section).** A `hidden` flag in the registry takes a game off the home page and the side nav, and the live site sends its address home. A dev server still opens it by URL, and `check:games` still plays it. Guess the Player needs more than it has. Of the three rule-grid games only one is kept, Tic Tac Toe: every board builds at every level and none repeats over 200 deals. Its Easy level is the thin one, with 30 distinct rules, and "won the EU FNCS" and "$1M+ earner" each sit on 41% of Easy boards. Delete the flag to bring a game back.
 
 Two folders keep old names: Fortnitedle lives in `wordle` and Griefer in `impostor`. The ids stay unchanged because best scores are stored under them.
 
@@ -48,6 +55,7 @@ Every game reads one Liquipedia export in `liquipedia_data/clean_data/fortnite/`
 | `facts.json` | per player: tournaments played, LAN and FNCS appearances, wins by kind, which headline events they played; plus `season`, every team's finish at the year's big events | notebook appendix | the criteria games, List, Tenaball's field boards, FNCS Finals, the glossary |
 | `rankings.json` | 375 precomputed Tenaball boards (284 until cells 2–4 are re-run), plus the tournament names the paydays boards answer from | cells 2–4 | Tenaball |
 | `pools.json` | event fields; today one, the FNCS 2026 Globals with 103 players, where each finished and what each had earned before it | cell 5 | event mode |
+| `bios.json` | real names and every organisation stint with its dates, from the transfers | `enrich.py` | IRL, Org Chart, Transfer Window, Rewind (they fall back to `players.json` and `orgs.json` without it) |
 
 Three rules keep this safe:
 
@@ -231,9 +239,10 @@ They come out from guess 3, one per guess, all of them by guess 5. How much each
 | --- | --- |
 | Easy | the digit, in place under the grid, and its key turns green |
 | Medium | a # where it sits, not which digit; the keyboard stays as it was |
+| Random | that the name has at least one digit, after guess 3 — not how many, which or where |
 | Hard | nothing |
 
-It follows the difficulty chosen on Choose. Random, Choose → Any and event mode have no chosen difficulty, so they give nothing, like Hard. Before the first digit lands the strip is not shown at all, because a row of blanks would give away that the name has a digit.
+It follows the difficulty chosen on Choose. Random, Choose → Any and event mode have no chosen difficulty, so they get the Random line (2 Oct 2026: before it they gave nothing, like Hard, and a digit nobody thought to try made the round impossible). Before the first digit lands the strip is not shown at all, because a row of blanks would give away that the name has a digit.
 
 **The secret is dealt** from the no-repeat bag with the Random mix, or region by region in event mode.
 
@@ -569,6 +578,82 @@ A 4×4 card of categories and a deck of players dealt one at a time: tap a squar
 - **How a card is drawn:** weighted by kind like Tic Tac Toe, at most two of a kind, no two nearly the same, and no player fitting more than 5 squares (one name used to fit 7–10).
 - **Not possible from the export:** "is a controller player" (no input device in the data) and "was in a trio with X" (teammates are not split by mode).
 
+## The October games (hidden)
+
+Seven games added on 2 October 2026 from the user's roadmaps, all `hidden` in the registry. They share three pieces:
+
+- **One Easy / Medium / Hard** (`LevelSetup`), with pools that widen rather than slice (`games/shared/levels.ts`): Easy the Easy tier, Medium Easy + Medium, Hard everyone. The secret comes from a no-repeat bag per game and level (`dealFresh`).
+- **The clue loop** (`games/shared/clue-round.ts`) for the five that reveal clues: a wrong guess or a skip reveals the next, a wrong guess with everything showing ends the round, and a hand shorter than its `minGuesses` makes the difference up with guesses that reveal nothing. Career Path and Who Are Ya keep their own copies of the same loop.
+- **`bios.json`** (`build_bios` in `scripts/pipeline/enrich.py`): real names and dated organisation stints from `transfers.json`. Until it is built, `loadBios()` falls back to `players.json`'s names and `orgs.json`'s undated lists, and the modes that need dates are greyed out.
+
+| Game | What you do | Folder |
+| --- | --- | --- |
+| Curveball | Name the player from their prize money drawn as a curve, a year at a time | `curveball` |
+| Org Chart | Name the organisation from players who played for it | `org-chart` |
+| Contextinho | Find the secret player; every guess is ranked by how alike it is | `contextinho` |
+| Rewind | Put five to seven moments in order, oldest first | `rewind` |
+| IRL | Name the player behind a real name, their file filled in a line at a time | `irl` |
+| Transfer Window | Name the player from the organisations they have played for | `transfer-window` |
+| Which Lobby? | Name the tournament from its leaderboard, filled from the bottom up | `which-lobby` |
+
+### Curveball
+
+The curve runs from the first year with prize money to the last, empty years in between included (they sit on the floor). It needs three years with money: 108 Easy players, 962 up to Medium, 3,867 in all. A curve under five years still gets five guesses.
+
+- **One curve: earnings**, that year's prize money. The roadmap's "PR curve" is not possible — PR is Fortnite Tracker's power ranking and the export has none — and a world rank by prize money that stood in for it was dropped (the user, 2 Oct 2026).
+- **The axis is fixed** — $100 to $5M on a log scale — so its range never gives away how high the curve goes. The year labels are question marks until revealed, and the span only shows once the round is over.
+
+### Org Chart
+
+The pool is the organisations with a team page and five roster players, richest first: the top 25 on Easy, 75 on Medium, all 379 on Hard. Up to seven players are clues: the two best-known by career earnings (never in the first three clues), three of the next ten, and two from anyone. The org's region comes after the third player, the year it was founded after the fifth (`founded`, new in orgs.json), its prize money last.
+
+- **Clues**: Full dates (joined – left, "now" for a current player), Joined, Names only. Dates need `bios.json`.
+- The guess box offers every org with a team page, not just the level's.
+
+### Contextinho
+
+Every guess is ranked against the secret out of all 5,689 players, the secret #1. Similarity is a weighted sum of parts, each 0–1 (`rankAll`):
+
+| Part | Default weight | 1 means |
+| --- | --- | --- |
+| Played together | 4 | 40+ tournaments as teammates (log scale) |
+| Country | 2 | same first nationality |
+| Age | 1.5 | same birthday; two years apart scores about a third; unknown 0.3 |
+| Region | 1 | same region |
+| Shared teammates, same years, career earnings, same organisations, FNCS wins | 0 | off by default, for trying |
+
+Ties go to the bigger career earner. On Easy the secret's top teammate ranks #3.8 on average. A hint names a player halfway between your best rank and #1. **The similarity lab** (dev builds only) has a slider per part, Rank or 0–100 display, the parts on every row and a peek at the ten closest — the roadmap's V1 is about finding the right weights, so they are knobs rather than constants.
+
+### Rewind
+
+1,700 moments with a date and no year in their words (446 before `bios.json` and the founding dates are built): who won each LAN ("Cooper & Mero win the Global Championship"), an FNCS season's grand finals (seasons whose names carry no year), a player's first or later FNCS title, a signing at one of the 60 richest orgs (needs `bios.json`), an org founded since 2017.
+
+| Level | Moments | At least apart | From | Checks |
+| --- | --- | --- | --- | --- |
+| Easy | 5 | 150 days | Easy-tier players, LAN wins, top-20 orgs | unlimited |
+| Medium | 6 | 60 days | + Medium, FNCS seasons, later titles | 2 lives |
+| Hard | 7 | 21 days | everyone | 1 life |
+
+At most two of a kind (more when the pile has few kinds) and two about one player. The check is Pyramid's: right places lock green and show their date; tap two to swap, drag, or the arrows.
+
+### IRL
+
+The pool is everyone with a real name on their page: 109 Easy, 711 to Medium, 1,983 in all. The file: real name, nationality and region, birth year, past organisations, prize money, FNCS titles, best major result, most frequent teammate, current team, aliases, and last the handle with its letters blanked ("B _ _ _ _"). A line the data has nothing for is left out.
+
+### Transfer Window
+
+Players with three or more organisations: 81 Easy, 594 to Medium, 2,009 in all (79, 549 and 1,700 on `orgs.json`'s lists before `bios.json` is built). Up to eight org cards (a long career keeps the orgs with a team page, then the most recent), then the player's region, FNCS titles and prize money.
+
+- **Timeline** — every stint oldest first, with its dates, how long it lasted, and a 🏆 per regional FNCS title won during it. Needs `bios.json`.
+- **Shuffled** — one card per org, no dates, no order.
+
+### Which Lobby?
+
+186 majors, read as rounds and regions off their names (`games/shared/lobbies.ts`: "FNCS 2023 - Major 2: Europe - Grand Finals" is 2023's Major 2, Europe). The leaderboard reveals one finisher per band, bottom up — the back half, then closer each time, 2nd–3rd, the winner — six or seven per lobby, every finisher a whole team on the roster.
+
+- **Guessing** is three taps: year, round, region. A wrong guess says whether the lobby was earlier or later and whether the region was right.
+- **Levels**: Easy deals the LANs and the Europe and NA East / North America / NA Central finals (61), with the best-known finisher in each band; Medium adds NA West and Brazil (108); Hard everything (186), anyone in the results.
+
 ## Guess the Player
 
 You guess any player and get a row of comparisons against the secret one, then use them to close in. You have eight guesses.
@@ -651,7 +736,7 @@ Locally, `npm run dev:all` sets `ADMIN_OPEN=1` for the API and `VITE_RECORD=1` f
 
 **Search engines.** Since 1 Oct 2026 every page has a real address — `/game/tenaball`, `/credits`, `/analytics` — instead of a `#/` hash, which a search engine reads as the home page. Old hash links are rewritten on load (`src/main.tsx`). After `vite build`, `scripts/prerender.ts` writes `dist/game/<slug>/index.html` for every game the site shows, plus the home and credits pages: each with its own title, description, canonical link and share tags (`src/lib/seo.ts`, the `seo` field in the registry), and the game's pitch and rules as plain HTML that the app replaces on its first render. It also writes `dist/sitemap.xml`; `public/robots.txt` keeps crawlers off `/analytics` and `/api/`. The server answers any other path with the home page and a 404, so a stray address is never indexed as a copy of the home page. Hidden games get no page until they are unhidden.
 
-Three commands must pass before anything ships: `npm run typecheck`, `npm run check:games` and `npm run check:server`. `npm run build` runs the typecheck again and then builds the site. GitHub Actions runs all of them, the build and `scripts/check_liquipedia_api.py` on every push (`.github/workflows/checks.yml`); Heroku waits for it only with "Wait for CI to pass before deploy" ticked.
+Three commands must pass before anything ships: `npm run typecheck`, `npm run check:games` and `npm run check:server`. `npm run build` runs the typecheck again and then builds the site. GitHub Actions runs all of them, the build, `scripts/check_liquipedia_api.py` and `scripts/check_socials_api.py` on every push (`.github/workflows/checks.yml`); Heroku waits for it only with "Wait for CI to pass before deploy" ticked.
 
 The code is GNU AGPL-3.0 or later (`LICENSE`, since 30 Sep 2026; MIT before); the data is CC BY-SA 3.0.
 
@@ -713,7 +798,7 @@ Decided so far:
 
 - **Regions:** six, with North America as one.
 - **Nationality:** Scotland stays Scotland.
-- **Subscribers:** dropped until there is data.
+- **Subscribers:** dropped until there is data. There is a source now — `scripts/socials_api.py` writes YouTube subscribers and Twitch followers to `socials.json` (see DATA.md) — but no game reads it yet.
 - **Small regions:** in the one-player games, each small-region player is used once across the four games.
 
 ## Open decisions and what to do next
@@ -734,5 +819,5 @@ My recommendation: commit this week's work and get the site live before the Glob
 - **The Middle East in Higher or Lower pools.** Four players cannot fill five pools. Either one pool per category goes without, or one of them appears twice in a category.
 - **Griefer's griefers** are random players who don't fit. Near-misses would make boards sharper: a country's neighbours, an organisation's rivals, a winner's runner-up.
 - **Thin Connections pools.** Most single-region pools and South America Easy/Medium cannot build a board. Accept that, or add rule kinds that work inside one region.
-- **Data with no source yet:** creator subscribers, eliminations and damage, and who qualified from where. Each unlocks limited-mode categories if a source is found.
+- **Data with no source yet:** eliminations and damage, and who qualified from where. Each unlocks limited-mode categories if a source is found. Creator subscribers now have one (`socials.json`, YouTube and Twitch only — X needs a paid API, Instagram and TikTok have none for this); which games use them is open.
 - **Accounts.** Not started. The records are shaped so a user id can be attached later.

@@ -5,7 +5,7 @@ scripts/liquipedia_api.py:
     .venv/Scripts/python scripts/build_data.py
 
     --from players    start later: reuse the clean files already there
-    --from derived    (players = FNCS titles, tiers, orgs; derived = rankings,
+    --from derived    (players = FNCS titles, tiers, orgs, bios; derived = rankings,
                        pools, teammates, career path, facts)
     --skip-check      do not run `npm run check:games` on the result first
     --out DIR         build somewhere else and leave the real files alone
@@ -14,7 +14,8 @@ The steps, each in scripts/pipeline/:
 
     clean.py     raw -> players, teams, tournaments, transfers, placements
                  (the five cleaning notebooks)
-    enrich.py    FNCS titles, tiers, orgs.json (was players_optimize.ipynb)
+    enrich.py    FNCS titles, tiers, orgs.json, bios.json (real names and
+                 organisation stints; was players_optimize.ipynb)
     derived.py   rankings, pools, teammates, career_path, facts
                  (was the cells of notebook_cells.md)
     site.py      roster.json, the slim players file the site downloads
@@ -50,7 +51,7 @@ ROSTER_TS = ROOT / "src" / "data" / "liquipedia" / "roster.ts"
 
 CLEAN_FILES = ["players.json", "teams.json", "tournaments.json", "transfers.json", "placements.json"]
 OUTPUTS = CLEAN_FILES + ["orgs.json", "rankings.json", "pools.json", "teammates.json", "career_path.json", "facts.json",
-                         "roster.json"]
+                         "roster.json", "bios.json"]
 STEPS = ["clean", "players", "derived"]
 
 
@@ -64,6 +65,8 @@ def rows_in(path):
     for key in ("players", "boards", "pools", "orgs", "tournaments"):
         if isinstance(data.get(key), list):
             return len(data[key])
+    if isinstance(data.get("stints"), dict):  # bios.json: players with a stint
+        return len(data["stints"])
     return None
 
 
@@ -128,7 +131,7 @@ def main(argv=None):
         print("clean - raw rows into the clean files")
         clean.run(RAW, stage)
     if "players" in todo:
-        print("players - FNCS titles, tiers, organisations")
+        print("players - FNCS titles, tiers, organisations, bios")
         enrich.run(stage)
     if "derived" in todo:
         print("derived - rankings, pools, teammates, career path, facts")

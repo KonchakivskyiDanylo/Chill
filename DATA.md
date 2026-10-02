@@ -56,13 +56,27 @@ files the cleaning notebooks read. You run it; nothing else does.
 .venv/Scripts/python scripts/check_liquipedia_api.py                # its checks, against a fake API
 ```
 
+**Subscribers and followers** come from the platforms, not Liquipedia:
+`scripts/socials_api.py` reads the YouTube and Twitch links on each player's
+page in the raw dump and writes `clean_data/fortnite/socials.json` — page name
+to subscriber count, and to follower count, the bigger channel when a page
+links two. A channel that hides its count, or a link that leads nowhere, is
+left out. It remembers every link's channel ID in `raw_data/fortnite/socials_state.json`,
+so YouTube's first run costs 1,500–1,900 of the free 10,000 daily units and
+every run after it about 70; Twitch logs in once with a code (the token lives
+in `~/.offspawn/`, outside the repo). `scripts/check_socials_api.py` tests it
+against fake APIs. The file is not committed and no game reads it yet:
+YouTube's API terms want stored data refreshed within about 30 days, which
+old git history cannot do, so how it ships is a decision for when a game uses
+it. Setup and errors: [UPDATE_DATA.md](UPDATE_DATA.md).
+
 Then `scripts/build_data.py` turns the raw dump into every file the site
 reads, in three steps, each in `scripts/pipeline/`:
 
 | step | does | was |
 | --- | --- | --- |
 | `clean.py` | raw -> clean players, teams, tournaments, transfers, placements | the five cleaning notebooks |
-| `enrich.py` | FNCS titles, `tier`, `region_tier`, `orgs.json` | `players_optimize.ipynb` (deleted) |
+| `enrich.py` | FNCS titles, `tier`, `region_tier`, `orgs.json`, `bios.json` | `players_optimize.ipynb` (deleted) |
 | `derived.py` | rankings, pools, teammates, career path, facts | the cells of `notebook_cells.md` (deleted) |
 
 - **It builds in a staging folder**, runs `npm run check:games` on the result,
@@ -97,13 +111,21 @@ file and reload.
 | `players.json` | 5,678 playable rows in full: handle, aliases, country, birthday, earnings, status; `Roster` falls back to it when `roster.json` is missing | the pipeline |
 | `career_path.json` | 187 majors and every player's finishes in them (1,175 with five or more) | `Majors` |
 | `teammates.json` | each player's fifty most-played-with teammates | `Teammates` |
-| `orgs.json` | 979 organisations, with who has ever played for them | `Orgs` |
+| `orgs.json` | 984 organisations, with who has ever played for them and, for those with a team page, when they were founded and disbanded | `Orgs` |
+| `bios.json` | real names (~2,000 players) and every spell at an organisation with the day it started and ended (~14,500 stints), from `transfers.json` | `Bios` — IRL, Org Chart, Transfer Window, Rewind; without it they fall back to `players.json`'s names and `orgs.json`'s undated lists |
 | `facts.json` | per player: tournaments played, LAN and FNCS appearances, wins by kind, where and when they won, which headline events they played | `Facts` |
 | `rankings.json` | ~290 precomputed top-tens, answered in players, orgs, countries or tournaments | `Rankings` |
 | `pools.json` | the qualified field for one event — Globals 2026, EWC 2026 | `Pools` |
 
-All but `players.json` are **derived** from `tournaments.json` and
-`placements.json` by `scripts/pipeline/derived.py`. None carries a `tier`: difficulty is
+All but `players.json`, `orgs.json` and `bios.json` are **derived** from `tournaments.json` and
+`placements.json` by `scripts/pipeline/derived.py`; those two come from
+`transfers.json` and `teams.json` in `scripts/pipeline/enrich.py`. For
+`bios.json` an organisation's name is matched loosely — "NRG Esports" is NRG
+and "Falcons Esports" Team Falcons — because transfers spell an org the way it
+was named on the day (`org_resolver(loose=True)`). `orgs.json` still matches
+display names exactly, so its "has played for NRG" misses the six players who
+joined and left as NRG Esports; folding there too would fix that and shift
+Tic Tac Toe's boards. None carries a `tier`: difficulty is
 joined from `players.json` by page name, so there is still exactly one place
 difficulty is decided.
 

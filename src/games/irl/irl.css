@@ -1,0 +1,201 @@
+/*
+ * IRL: a player's file. The real name printed, everything else redacted with
+ * black bars until its line comes up, and a stamp across it at the end.
+ */
+
+.irl-play {
+  max-width: 640px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.irl-file {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background:
+    repeating-linear-gradient(0deg, transparent 0 27px, rgba(255, 255, 255, 0.025) 27px 28px),
+    var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+[data-theme='light'] .irl-file {
+  background:
+    repeating-linear-gradient(0deg, transparent 0 27px, rgba(16, 20, 31, 0.035) 27px 28px),
+    #fffdf7;
+}
+
+.irl-file__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 16px;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  border-bottom: 1px dashed var(--border-strong);
+}
+.irl-file__ref {
+  color: var(--danger);
+}
+.irl-file--won .irl-file__ref {
+  color: var(--success);
+}
+
+.irl-file__id {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 16px 16px;
+}
+.irl-file__photo {
+  flex: none;
+  width: 72px;
+  height: 88px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--text-faint);
+  border: 1px dashed var(--border-strong);
+  background:
+    radial-gradient(circle at 50% 36%, var(--surface-3) 0 17px, transparent 18px),
+    radial-gradient(ellipse at 50% 100%, var(--surface-3) 0 30px, transparent 31px),
+    var(--surface-2);
+}
+.irl-file__label {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.irl-file__name {
+  font-size: clamp(1.35rem, 4.4vw, 1.9rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.irl-file__handle {
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+
+.irl-file__lines {
+  margin: 0;
+  padding: 4px 16px 14px;
+}
+.irl-line {
+  display: grid;
+  grid-template-columns: minmax(96px, 30%) 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 7px 0;
+  border-top: 1px solid var(--border);
+}
+.irl-line dt {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.irl-line dd {
+  margin: 0;
+  font-weight: 700;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.irl-line__shape {
+  font-family: var(--mono);
+  font-size: 1.1rem;
+  letter-spacing: 0.04em;
+  color: var(--primary);
+}
+.irl-redacted {
+  display: block;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--text);
+  opacity: 0.85;
+}
+.irl-line--new dd {
+  animation: irl-ink 0.5s ease-out;
+}
+.irl-line--new dt {
+  color: var(--primary);
+}
+.irl-line--late {
+  opacity: 0.45;
+}
+
+@keyframes irl-ink {
+  from {
+    opacity: 0;
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+  }
+}
+
+.irl-stamp {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  padding: 4px 12px;
+  border: 3px solid var(--success);
+  border-radius: 6px;
+  color: var(--success);
+  font-family: var(--mono);
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  transform: rotate(-11deg);
+  opacity: 0.85;
+  animation: irl-stamp 0.35s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+.irl-file--lost .irl-stamp {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+@keyframes irl-stamp {
+  from {
+    transform: rotate(-11deg) scale(2.2);
+    opacity: 0;
+  }
+  to {
+    transform: rotate(-11deg) scale(1);
+    opacity: 0.85;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .irl-stamp,
+  .irl-line--new dd {
+    animation: none;
+  }
+}
+
+@media (max-width: 460px) {
+  .irl-line {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+  .irl-stamp {
+    top: auto;
+    bottom: 10px;
+    font-size: 0.9rem;
+  }
+}

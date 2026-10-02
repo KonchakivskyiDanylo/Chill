@@ -33,6 +33,13 @@ export const GAME_IDS = [
   'guess-the-player',
   'pyramid',
   'bingo',
+  'curveball',
+  'org-chart',
+  'contextinho',
+  'rewind',
+  'irl',
+  'transfer-window',
+  'which-lobby',
 ] as const;
 
 export type GameId = (typeof GAME_IDS)[number];
@@ -81,6 +88,17 @@ export interface Step {
   correct: boolean;
 }
 
+/**
+ * A round of clues revealed one at a time and guessed between: Career Path's
+ * and Who Are Ya's shape, and every newer game built the same way. `secret`
+ * is whatever is being named — a player, an organisation, a tournament.
+ */
+export interface ClueRoundPayload {
+  secret: Ref;
+  clues: Ref[];
+  steps: Step[];
+}
+
 export interface GamePayloads {
   wordle: { secret: Ref; guesses: number };
   'guess-the-player': { secret: Ref; guesses: Ref[] };
@@ -125,6 +143,18 @@ export interface GamePayloads {
     deck: number;
     lines: number;
   };
+  /** The clues are the years of the curve, as they were shown: "2019 — $3.1M". */
+  curveball: ClueRoundPayload;
+  /** The secret is an organisation; the clues its players and facts. */
+  'org-chart': ClueRoundPayload;
+  /** Every guess in order and how many hints were taken. */
+  contextinho: { secret: Ref; guesses: Ref[]; hints: number };
+  /** Pyramid's shape: the events, and whether each ended in its place. */
+  rewind: { puzzle: Ref; items: { id: string; name: string; placed: boolean }[]; checks: number };
+  irl: ClueRoundPayload;
+  'transfer-window': ClueRoundPayload;
+  /** The secret is a tournament; the clues are its finishers. */
+  'which-lobby': ClueRoundPayload;
 }
 
 export interface RoundRecord<G extends GameId = GameId> {

@@ -255,6 +255,16 @@ export interface Dashboard {
   pyramid: BoardRow[];
   /** One row: every square that has come up, and how often it was marked. */
   bingo: BoardRow[];
+  curveball: ClueRow[];
+  /** The secret is an organisation, so these rows are orgs, not players. */
+  orgChart: ClueRow[];
+  contextinho: SecretRow[];
+  /** Per deal: how often each event ended in its place. */
+  rewind: BoardRow[];
+  irl: ClueRow[];
+  transferWindow: ClueRow[];
+  /** The secret is a tournament, so these rows are events, not players. */
+  whichLobby: ClueRow[];
   griefer: { rules: RuleRow[]; misreads: Misread[] };
   ticTacToe: CellRow[];
   connections: { groups: GroupRow[]; misgrouped: Count[] };
@@ -344,9 +354,9 @@ function overview(rounds: Stored<RoundRecord>[]): GameOverview[] {
   });
 }
 
-/** Fortnitedle and Guess the Player. */
+/** Fortnitedle, Guess the Player and Contextinho. */
 function secrets(
-  rounds: Stored<RoundRecord<'wordle'>>[] | Stored<RoundRecord<'guess-the-player'>>[],
+  rounds: Stored<RoundRecord<'wordle' | 'guess-the-player' | 'contextinho'>>[],
 ): SecretRow[] {
   const rows = new Map<string, SecretRow & { guessTotal: number }>();
   each(rounds as Stored<RoundRecord>[], ({ body }) => {
@@ -372,10 +382,10 @@ function secrets(
     .sort((a, b) => b.plays - a.plays);
 }
 
-/** Career Path and Who Are Ya. */
-function clueGames(
-  rounds: Stored<RoundRecord<'career-path'>>[] | Stored<RoundRecord<'who-are-ya'>>[],
-): ClueRow[] {
+/** The games that reveal clues one at a time: Career Path, Who Are Ya and the ones built like them. */
+type ClueGame = 'career-path' | 'who-are-ya' | 'curveball' | 'org-chart' | 'irl' | 'transfer-window' | 'which-lobby';
+
+function clueGames(rounds: Stored<RoundRecord<ClueGame>>[]): ClueRow[] {
   type Acc = ClueRow & { guessTotal: number; clueTotal: number; clueMap: Map<string, ClueRow['clues'][number]>; wrongMap: Map<string, number> };
   const rows = new Map<string, Acc>();
   each(rounds as Stored<RoundRecord>[], ({ body }) => {
@@ -479,7 +489,7 @@ function tenaball(rounds: Stored<RoundRecord<'tenaball'>>[]): BoardRow[] {
  * Pyramid, read as boards: a category is a board and its items the answers,
  * "found" when they ended in their place — so the Tenaball table shows it.
  */
-function pyramid(rounds: Stored<RoundRecord<'pyramid'>>[]): BoardRow[] {
+function pyramid(rounds: Stored<RoundRecord<'pyramid' | 'rewind'>>[]): BoardRow[] {
   return tenaball(
     rounds.map((round) => ({
       ...round,
@@ -758,6 +768,13 @@ export function aggregate(
     list: list(of(valid, 'list')),
     pyramid: pyramid(of(valid, 'pyramid')),
     bingo: bingo(of(valid, 'bingo')),
+    curveball: clueGames(of(valid, 'curveball')),
+    orgChart: clueGames(of(valid, 'org-chart')),
+    contextinho: secrets(of(valid, 'contextinho')),
+    rewind: pyramid(of(valid, 'rewind')),
+    irl: clueGames(of(valid, 'irl')),
+    transferWindow: clueGames(of(valid, 'transfer-window')),
+    whichLobby: clueGames(of(valid, 'which-lobby')),
     griefer: griefer(of(valid, 'impostor')),
     ticTacToe: ticTacToe(of(valid, 'tic-tac-toe')),
     connections: connections(of(valid, 'connections')),
@@ -770,9 +787,10 @@ export function aggregate(
 /**
  * What a player was in one round.
  *
- *   secret     the answer — Fortnitedle, Guess the Player, Career Path, Who Are Ya
- *   guessed    typed as a guess in Guess the Player
- *   mistaken   a wrong guess in Career Path or Who Are Ya
+ *   secret     the answer — Fortnitedle, Guess the Player, Career Path, Who Are Ya,
+ *              Curveball, Contextinho, IRL, Transfer Window
+ *   guessed    typed as a guess in Guess the Player or Contextinho
+ *   mistaken   a wrong guess in Career Path, Who Are Ya and the games built like them
  *   clue       one of Who Are Ya's teammate clues, shown before the round ended
  *   answer     an answer on a Tenaball board or a List
  *   fits       a Griefer card that fitted the rule
@@ -822,6 +840,17 @@ function mentions(body: RoundRecord): Mention[] {
       for (const guess of r.guesses) if (guess.id !== r.secret.id) push('guessed', guess);
       break;
     }
+    case 'contextinho': {
+      const r = body.r as GamePayloads['contextinho'];
+      push('secret', r.secret, won);
+      for (const guess of r.guesses) if (guess.id !== r.secret.id) push('guessed', guess);
+      break;
+    }
+    // Org Chart's and Which Lobby's secrets are an org and a tournament, and
+    // their clues are not all players either: nothing there is a player to index.
+    case 'curveball':
+    case 'irl':
+    case 'transfer-window':
     case 'career-path':
     case 'who-are-ya': {
       const r = body.r as GamePayloads['career-path'];

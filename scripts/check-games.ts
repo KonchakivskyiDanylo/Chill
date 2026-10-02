@@ -60,6 +60,23 @@ import * as connections from '@/games/connections/engine';
 import * as gtp from '@/games/guess-the-player/engine';
 import * as pyramid from '@/games/pyramid/engine';
 import * as bingo from '@/games/bingo/engine';
+import * as curveball from '@/games/curveball/engine';
+import * as orgChart from '@/games/org-chart/engine';
+import * as contextinho from '@/games/contextinho/engine';
+import * as irl from '@/games/irl/engine';
+import * as transferWindow from '@/games/transfer-window/engine';
+import * as whichLobby from '@/games/which-lobby/engine';
+import * as rewind from '@/games/rewind/engine';
+import { loadBios } from '@/data/liquipedia/bios';
+import {
+  giveUp as clueGiveUp,
+  guess as clueGuess,
+  skip as clueSkip,
+  type ClueRound,
+  type Named,
+} from '@/games/shared/clue-round';
+import { LEVEL_IDS, levelPlayers, type Level } from '@/games/shared/levels';
+import { lobbiesOf, parseLobby, roundLabel } from '@/games/shared/lobbies';
 
 const problems: string[] = [];
 const notes: string[] = [];
@@ -343,23 +360,37 @@ for (const category of hlCategories) checkHigherLower(contenders, category);
 
   // The digit help per difficulty, three guesses into a round on a digit
   // answer: Easy hands over the digit and greens its key, Medium a # and no
-  // key, Hard nothing at all.
+  // key, Random (no level) only that there is a digit, Hard nothing at all.
   const digital = pool.find((p) => wordle.revealSchedule(wordle.gameFor(p).answer).size > 0);
   if (digital) {
-    const help = (level: 'easy' | 'medium' | 'hard') => {
+    const help = (level: 'easy' | 'medium' | 'hard' | null, guesses = 3) => {
       let state = wordle.gameFor(digital, level);
-      const filler = ['Q', 'X', 'Z'].map((c) => c.repeat(state.answer.length));
+      const filler = ['Q', 'X', 'Z', 'J', 'V'].slice(0, guesses).map((c) => c.repeat(state.answer.length));
       for (const guess of filler) {
         const next = wordle.submitGuess(state, guess);
         if (next.ok) state = next.state;
       }
       const shown = [...wordle.revealedDigits(state).values()];
       const keyed = [...wordle.keyboardState(state)].filter(([key, s]) => /\d/.test(key) && s === 'correct');
-      return { shown, keyed: keyed.length };
+      return { shown, keyed: keyed.length, announced: wordle.digitAnnounced(state) };
     };
     const easy = help('easy');
     const medium = help('medium');
     const hard = help('hard');
+    const random = help(null);
+    check(
+      random.shown.length === 0 && random.keyed === 0 && random.announced,
+      `fortnitedle random: ${digital.name} — digit announced ${random.announced}, ${random.shown.length} shown, ${random.keyed} keys`,
+    );
+    check(!help(null, 2).announced, `fortnitedle random: ${digital.name}'s digit was announced before guess 3`);
+    check(!easy.announced && !medium.announced && !hard.announced, 'fortnitedle: a chosen level got the Random digit line');
+    const letters = pool.find((p) => wordle.revealSchedule(wordle.gameFor(p).answer).size === 0)!;
+    let plain = wordle.gameFor(letters, null);
+    for (const guess of ['Q', 'X', 'Z'].map((c) => c.repeat(plain.answer.length))) {
+      const next = wordle.submitGuess(plain, guess);
+      if (next.ok) plain = next.state;
+    }
+    check(!wordle.digitAnnounced(plain), `fortnitedle random: ${letters.name}, all letters, was said to have a digit`);
     check(easy.shown.length === 1 && /\d/.test(easy.shown[0]) && easy.keyed === 1, `fortnitedle easy: ${digital.name} digit not handed over`);
     check(medium.shown.join() === wordle.HIDDEN_DIGIT && medium.keyed === 0, `fortnitedle medium: ${digital.name} showed ${medium.shown.join()} with ${medium.keyed} keys`);
     check(hard.shown.length === 0 && hard.keyed === 0, `fortnitedle hard: ${digital.name} gave a digit away`);
@@ -1508,6 +1539,259 @@ if (facts && orgs) {
   check(bingo.outcomeOf(skipped) === 'lost', `bingo: skipping the whole deck read ${bingo.outcomeOf(skipped)}`);
 }
 
+// ------------------------------------------------------- the October games
+// Seven games from the user's 2 Oct 2026 roadmaps, all hidden. Each is dealt
+// many times at every level and played through its own engine.
+const bios = await loadBios();
+notes.push(
+  bios.dated
+    ? `bios: bios.json — ${roster.players.filter((p) => bios.realName(p.id)).length} real names, stints for ${roster.players.filter((p) => bios.stintsOf(p.id).length).length} players`
+    : 'bios: no bios.json yet — names from players.json, undated stints from orgs.json',
+);
+if (bios.dated) {
+  for (const player of roster.players.slice(0, 2000)) {
+    const days = bios.stintsOf(player.id).map((stint) => stint.from ?? stint.to ?? '9999');
+    check(days.every((day, i) => i === 0 || days[i - 1] <= day), `bios: ${player.name}'s stints are not oldest first`);
+  }
+} else {
+  skipped.push('bios.json (IRL, Org Chart and Transfer Window play on the fallback; run scripts/build_data.py)');
+}
+
+/** A wrong guess for a clue round: anyone but the answer, never the same one twice. */
+const wrongs = (secretId: string) => roster.players.filter((p) => p.id !== secretId);
+
+/** Plays a clue round out wrong, and checks it lasts exactly its clues plus spares. */
+function checkClueRound<R extends ClueRound<Named, unknown>>(round: R, tag: string, others: Named[]) {
+  const expected = Math.max(round.clues.length, round.minGuesses);
+  let state = round;
+  let made = 0;
+  while (state.status === 'playing' && made < expected + 3) state = clueGuess(state, others[made++]);
+  check(state.status === 'lost' && made === expected, `${tag}: lost after ${made} wrong guesses, expected ${expected}`);
+  const won = clueGuess(clueSkip(round), round.secret);
+  check(won.status === 'won' && won.earned === Math.min(2, round.clues.length), `${tag}: the right guess on clue 2 did not win there`);
+}
+
+// Curveball: every curve is a run of years, first and last with prize money.
+{
+  for (const level of LEVEL_IDS) {
+    const pool = levelPlayers(roster, level, curveball.eligible);
+    check(pool.length >= 50, `curveball ${level}: only ${pool.length} players to deal`);
+    const rng = makeRng(`curve-${level}`);
+    let years = 0;
+    for (let i = 0; i < 40; i++) {
+      const secret = pool[Math.floor(rng() * pool.length)];
+      const game = curveball.createGame(secret);
+      const points = game.clues;
+      years += points.length;
+      const tag = `curveball ${level} ${secret.name}`;
+      check(points.length >= curveball.MIN_YEARS, `${tag}: a curve of ${points.length} years`);
+      check(points[0].earnings > 0 && points[points.length - 1].earnings > 0, `${tag}: the curve starts or ends on an empty year`);
+      check(points.every((p, j) => j === 0 || p.year === points[j - 1].year + 1), `${tag}: the years are not consecutive`);
+      check(
+        points.every((p) => p.earnings === (secret.earningsByYear[p.year] ?? 0)),
+        `${tag}: a year's prize money is not the roster's`,
+      );
+      if (i < 3) checkClueRound(game, tag, wrongs(secret.id));
+    }
+    notes.push(`curveball ${level}: ${pool.length} players, curves of ${(years / 40).toFixed(1)} years on average`);
+  }
+}
+
+// Org Chart: famous players never open a round, and the facts sit where promised.
+if (orgs) {
+  const sizes: string[] = [];
+  for (const level of LEVEL_IDS) {
+    const pool = orgChart.orgPool(orgs, roster, level);
+    check(pool.length >= Math.min(orgChart.LEVELS[level].top, 100), `org-chart ${level}: only ${pool.length} orgs`);
+    sizes.push(`${level} ${pool.length}`);
+    for (let i = 0; i < 30; i++) {
+      const org = pool[i % pool.length];
+      for (const style of ['dates', 'joined', 'names'] as const) {
+        const game = orgChart.createGame(org, roster, bios, style, `oc-${level}-${i}`);
+        const tag = `org-chart ${level} ${org.name}`;
+        const players = game.clues.flatMap((c) => (c.kind === 'player' ? [c.player] : []));
+        check(players.length >= orgChart.MIN_MEMBERS, `${tag}: only ${players.length} player clues`);
+        check(new Set(players.map((p) => p.id)).size === players.length, `${tag}: a player twice`);
+        const famous = [...players].sort((a, b) => b.earnings - a.earnings).slice(0, orgChart.HELD_BACK);
+        const firstThree = game.clues.slice(0, orgChart.OPENING);
+        // The org's two best-known players overall are the ones held back.
+        check(
+          !firstThree.some((c) => c.kind === 'player' && famous.includes(c.player) && players.length > orgChart.OPENING + orgChart.HELD_BACK),
+          `${tag}: a famous player in the first three clues`,
+        );
+        check(game.clues[0].kind === 'player', `${tag}: opens on a fact`);
+        check(bios.dated || game.style === 'names', `${tag}: dates without dated stints`);
+        if (i === 0 && style === 'dates') checkClueRound(game, tag, orgs.orgs.filter((o) => o.id !== org.id));
+      }
+    }
+  }
+  notes.push(`org-chart: orgs per level — ${sizes.join(', ')}`);
+}
+
+// Contextinho: the secret is #1, the ranks are a permutation, and a hint halves your best.
+if (teammates) {
+  const context = { teammates, orgs };
+  const pool = levelPlayers(roster, 'easy', contextinho.eligible(teammates));
+  check(pool.length >= 50, `contextinho easy: only ${pool.length} players`);
+  let mateRank = 0;
+  let tried = 0;
+  for (const secret of pool.slice(0, 12)) {
+    const ranking = contextinho.rankAll(secret, roster.players, contextinho.DEFAULT_WEIGHTS, context);
+    const ranks = [...ranking.values()].map((s) => s.rank).sort((a, b) => a - b);
+    check(ranking.get(secret.id)?.rank === 1, `contextinho: ${secret.name} is not #1 against themselves`);
+    check(ranks.every((r, i) => r === i + 1), `contextinho: ${secret.name}'s ranks are not 1..${ranks.length}`);
+    const [mate] = teammates.matesOf(secret.id).filter(([id]) => ranking.has(id));
+    if (mate) {
+      mateRank += ranking.get(mate[0])!.rank;
+      tried++;
+    }
+    let game = contextinho.createGame(secret);
+    game = contextinho.submitGuess(game, pool.find((p) => p.id !== secret.id && p.region !== secret.region) ?? roster.players[0]);
+    const before = Math.min(...game.guesses.map((g) => ranking.get(g.player.id)!.rank));
+    const hint = contextinho.hintFor(game, ranking, ranking.size);
+    if (hint && before > 2) {
+      const after = ranking.get(hint.id)!.rank;
+      check(after < before && after >= Math.floor(before / 2), `contextinho: a hint from #${before} gave #${after}`);
+    }
+    game = contextinho.submitGuess(game, secret);
+    check(game.status === 'won', `contextinho: guessing ${secret.name} did not win`);
+  }
+  // The weights matter: with only country on, everyone from the secret's country outranks everyone else.
+  const secret = pool[0];
+  const countryOnly = { ...contextinho.DEFAULT_WEIGHTS, teammates: 0, age: 0, region: 0, country: 1 };
+  const byCountry = contextinho.rankAll(secret, roster.players, countryOnly, context);
+  const compatriots = roster.players.filter((p) => p.id !== secret.id && p.country === secret.country).length;
+  const worstCompatriot = Math.max(...roster.players.filter((p) => p.id !== secret.id && p.country === secret.country).map((p) => byCountry.get(p.id)!.rank));
+  check(worstCompatriot === compatriots + 1, `contextinho: with country alone, a compatriot of ${secret.name} ranks ${worstCompatriot}`);
+  notes.push(`contextinho: ${pool.length} Easy secrets; their top teammate ranks #${(mateRank / Math.max(1, tried)).toFixed(1)} on average`);
+}
+
+// IRL: a file opens on the real name and ends on the handle's shape.
+{
+  for (const level of LEVEL_IDS) {
+    const pool = levelPlayers(roster, level, irl.eligible(bios));
+    check(pool.length >= (level === 'easy' ? 80 : 300), `irl ${level}: only ${pool.length} players with a real name`);
+    const byId = new Map(roster.players.map((p) => [p.id, p]));
+    for (const secret of pool.slice(0, 30)) {
+      const game = irl.createGame(secret, bios, { orgs, teammates, majors }, byId);
+      const tag = `irl ${level} ${secret.name}`;
+      check(game.clues[0].id === 'name' && game.clues[0].value === bios.realName(secret.id), `${tag}: does not open on the real name`);
+      const last = game.clues[game.clues.length - 1];
+      check(last.id === 'handle', `${tag}: does not end on the handle`);
+      check(
+        last.value.split(' ').filter((c) => c === '_').length === [...secret.name].slice(1).filter((c) => /[\p{L}\p{N}]/u.test(c)).length,
+        `${tag}: the handle shape "${last.value}" has the wrong number of blanks`,
+      );
+      const key = (text: string) => text.toLowerCase().replace(/[^a-z0-9]/g, '');
+      check(key(game.clues[0].value) !== key(secret.name), `${tag}: the real name is the handle`);
+    }
+    notes.push(`irl ${level}: ${pool.length} players with a real name`);
+  }
+  check(irl.handleShape('Bugha') === 'B _ _ _ _', `irl: Bugha's shape reads "${irl.handleShape('Bugha')}"`);
+}
+
+// Transfer Window: three orgs or more, oldest first in Timeline.
+{
+  for (const level of LEVEL_IDS) {
+    const pool = levelPlayers(roster, level, transferWindow.eligible(bios));
+    check(pool.length >= 40, `transfer-window ${level}: only ${pool.length} players`);
+    for (const secret of pool.slice(0, 30)) {
+      for (const mode of ['timeline', 'shuffled'] as const) {
+        const game = transferWindow.createGame(secret, bios, orgs, facts, mode, `tw-${secret.id}`);
+        const cards = game.clues.flatMap((c) => (c.kind === 'org' ? [c.card] : []));
+        const tag = `transfer-window ${level}/${mode} ${secret.name}`;
+        check(cards.length >= transferWindow.MIN_ORGS && cards.length <= transferWindow.MAX_CARDS, `${tag}: ${cards.length} cards`);
+        check(game.clues[0].kind === 'org', `${tag}: opens on a fact`);
+        if (game.mode === 'timeline') {
+          const days = cards.map((c) => c.from ?? c.to ?? '9999');
+          check(days.every((d, i) => i === 0 || days[i - 1] <= d), `${tag}: the timeline is not oldest first`);
+        } else {
+          check(new Set(cards.map((c) => c.org)).size === cards.length, `${tag}: an org twice in Shuffled`);
+          check(cards.every((c) => !c.from && !c.to), `${tag}: dates in Shuffled`);
+        }
+      }
+    }
+    notes.push(`transfer-window ${level}: ${pool.length} players with ${transferWindow.MIN_ORGS}+ orgs`);
+  }
+  check(transferWindow.duration('2019-03-25', '2022-12-28') === '3y 9m', `transfer-window: Bugha's Sentinels stint reads ${transferWindow.duration('2019-03-25', '2022-12-28')}`);
+}
+
+// Which Lobby?: the leaderboard climbs to the winner, every finisher typable.
+if (majors) {
+  const lobbies = lobbiesOf(majors);
+  check(lobbies.every((l) => l.round && l.label), 'which-lobby: a lobby with no round');
+  const keys = new Set(lobbies.map((l) => `${l.year}|${l.round}|${l.variant}`));
+  check(keys.size === lobbies.length, `which-lobby: ${lobbies.length - keys.size} lobbies share a round and region`);
+  check(parseLobby('FNCS 2023 - Major 2:  Europe - Grand Finals').round === 'FNCS 2023 - Major 2', 'which-lobby: Major 2 parses wrong');
+  check(roundLabel('C2S1: FNCS') === 'C2S1' && roundLabel('FNCS: Chapter 2 Season 2') === 'C2S2', 'which-lobby: round labels wrong');
+  const byId = new Map(roster.players.map((p) => [p.id, p]));
+  for (const level of LEVEL_IDS) {
+    const pool = whichLobby.lobbiesFor(majors, level);
+    check(pool.length >= (level === 'easy' ? 60 : 100), `which-lobby ${level}: only ${pool.length} lobbies`);
+    let clues = 0;
+    for (const [i, lobby] of pool.entries()) {
+      const game = whichLobby.createGame(lobby, majors, byId, level, `wl-${i}`);
+      const places = game.clues.map((f) => f.placement);
+      const tag = `which-lobby ${level} ${lobby.name}`;
+      clues += places.length;
+      check(places.length >= 4, `${tag}: only ${places.length} finishers`);
+      check(places.every((p, j) => j === 0 || p < places[j - 1]), `${tag}: the finishers do not climb (${places.join(', ')})`);
+      check(places[places.length - 1] === 1 || !majors.fieldOf(lobby.name).some((f) => f.placement === 1 && f.players.every((id) => byId.has(id))), `${tag}: the winner is not the last clue`);
+      if (i === 0) checkClueRound(game, tag, pool.filter((l) => l.name !== lobby.name).map(whichLobby.asNamed));
+    }
+    notes.push(`which-lobby ${level}: ${pool.length} lobbies, ${(clues / pool.length).toFixed(1)} finishers each`);
+  }
+  const [a, b] = [lobbies[2], lobbies[lobbies.length - 1]];
+  check(whichLobby.compare(b, a).when === 'earlier' && whichLobby.compare(a, b).when === 'later', 'which-lobby: earlier and later are the wrong way round');
+}
+
+// Rewind: deals of the right size, far enough apart, with no year in the words.
+if (facts) {
+  const moments = rewind.allMoments({ roster, facts, bios, orgs });
+  const kinds = new Map<string, number>();
+  for (const m of moments) kinds.set(m.kind, (kinds.get(m.kind) ?? 0) + 1);
+  for (const level of LEVEL_IDS) {
+    const config = rewind.LEVELS[level];
+    let built = 0;
+    for (let seed = 0; seed < 40; seed++) {
+      const hand = rewind.deal(moments, level, makeRng(`rw-${level}-${seed}`));
+      if (!hand) continue;
+      built++;
+      const tag = `rewind ${level} deal ${seed}`;
+      check(hand.length === config.size, `${tag}: ${hand.length} moments`);
+      check(
+        hand.every((m, i) => i === 0 || Date.parse(m.date) - Date.parse(hand[i - 1].date) >= config.gapDays * 86_400_000),
+        `${tag}: two moments closer than ${config.gapDays} days`,
+      );
+      check(hand.every((m) => !/\b(19|20)\d\d\b/.test(m.text)), `${tag}: a moment gives its year away — "${hand.find((m) => /\b(19|20)\d\d\b/.test(m.text))?.text}"`);
+      check(hand.every((m) => config.tiers.includes(m.tier) && config.kinds.includes(m.kind)), `${tag}: a moment from outside the level`);
+      let game = rewind.createGame(hand, level, `rw-${seed}`);
+      check(rewind.inPlace(game) <= 1, `${tag}: starts with ${rewind.inPlace(game)} in place`);
+      // Solve by swapping each place's right moment in.
+      for (let i = 0; i < hand.length; i++) {
+        const j = game.order.findIndex((m) => m.id === hand[i].id);
+        game = rewind.swap(game, i, j);
+      }
+      check(rewind.check(game).status === 'won', `${tag}: the right order did not win`);
+    }
+    check(built >= 36, `rewind ${level}: only ${built} of 40 deals`);
+    notes.push(`rewind ${level}: ${built}/40 deals of ${config.size}`);
+  }
+  notes.push(`rewind: ${moments.length} moments — ${[...kinds].map(([k, n]) => `${k} ${n}`).join(', ')}`);
+  // Lives: Hard ends on one imperfect check, Medium on two, a locked moment stays put.
+  const hand = rewind.deal(moments, 'medium', makeRng('rw-lives'))!;
+  const unsorted = (level: Level) => {
+    let game = rewind.createGame(hand, level, 'lives');
+    if (rewind.inPlace(game) === hand.length) game = rewind.swap(game, 0, 1);
+    return game;
+  };
+  check(rewind.check(unsorted('hard')).status === 'lost', 'rewind: hard survived an imperfect check');
+  const medium = rewind.check(unsorted('medium'));
+  check(medium.status === 'playing' && medium.lives === 1, 'rewind: medium lost on the first imperfect check');
+  const lockedAt = medium.order.findIndex((m) => medium.locked.has(m.id));
+  if (lockedAt >= 0) check(rewind.swap(medium, lockedAt, (lockedAt + 1) % hand.length) === medium, 'rewind: a locked moment moved');
+}
+
 // --------------------------------------------------------- 13. analytics records
 // One real round per game through its own engine, recorded the way the game
 // records it, then aggregated — so a record that stops matching what the
@@ -1692,6 +1976,73 @@ if (facts && orgs) {
     keep('bingo', made, { level: 'easy' });
   }
 
+  // The October games: one round each, through their own engines.
+  const stepsOf = (steps: { guess: unknown; correct: boolean }[]) =>
+    steps.map((s) => (s.guess ? (s.correct ? 'right' : 'wrong') : 'skip')).join();
+  {
+    const who = levelPlayers(roster, 'easy', curveball.eligible)[0];
+    let game = curveball.createGame(who);
+    game = clueGuess(clueSkip(game), who.id === other.id ? secret : other);
+    game = clueGuess(game, who);
+    const made = curveball.record(game);
+    check(made.outcome === 'won' && stepsOf(made.r.steps) === 'skip,wrong,right', `analytics: curveball recorded ${made.outcome}, ${stepsOf(made.r.steps)}`);
+    check(made.r.clues.every((c) => /^\d{4} — /.test(c.name)), 'analytics: a curveball clue is not "year — value"');
+    keep('curveball', made, { level: 'easy' });
+  }
+  {
+    const who = levelPlayers(roster, 'easy', irl.eligible(bios))[0];
+    const made = irl.record(clueGiveUp(irl.createGame(who, bios, { orgs, teammates, majors }, new Map(roster.players.map((p) => [p.id, p])))));
+    check(made.outcome === 'gave-up' && made.r.clues[0].id === 'name', `analytics: irl recorded ${made.outcome}`);
+    keep('irl', made, { level: 'easy' });
+  }
+  {
+    const who = levelPlayers(roster, 'easy', transferWindow.eligible(bios))[0];
+    let game = transferWindow.createGame(who, bios, orgs, facts, 'timeline', 'analytics');
+    for (const wrong of roster.players.filter((p) => p.id !== who.id)) {
+      if (game.status !== 'playing') break;
+      game = clueGuess(game, wrong);
+    }
+    const made = transferWindow.record(game);
+    check(made.outcome === 'lost', `analytics: transfer-window running out recorded as ${made.outcome}`);
+    keep('transfer-window', made, { level: 'easy', mode: game.mode });
+  }
+  if (orgs) {
+    const org = orgChart.orgPool(orgs, roster, 'easy')[0];
+    const made = orgChart.record(clueGuess(orgChart.createGame(org, roster, bios, 'names', 'analytics'), org));
+    check(made.outcome === 'won' && made.r.secret.id === org.id, `analytics: org-chart recorded ${made.outcome}`);
+    keep('org-chart', made, { level: 'easy', mode: 'names' });
+  }
+  if (majors) {
+    const lobby = whichLobby.lobbiesFor(majors, 'easy')[0];
+    const made = whichLobby.record(
+      clueGiveUp(whichLobby.createGame(lobby, majors, new Map(roster.players.map((p) => [p.id, p])), 'easy', 'analytics')),
+    );
+    check(made.outcome === 'gave-up' && made.r.secret.id === lobby.name, `analytics: which-lobby recorded ${made.outcome}`);
+    check(!('lobby' in made.r.secret), 'analytics: which-lobby sent the whole lobby as the secret');
+    keep('which-lobby', made, { level: 'easy' });
+  }
+  if (teammates) {
+    const who = levelPlayers(roster, 'easy', contextinho.eligible(teammates))[0];
+    const ranking = contextinho.rankAll(who, roster.players, contextinho.DEFAULT_WEIGHTS, { teammates, orgs });
+    let game = contextinho.submitGuess(contextinho.createGame(who), who.id === other.id ? secret : other);
+    const hint = contextinho.hintFor(game, ranking, ranking.size);
+    if (hint) game = contextinho.submitGuess(game, hint, true);
+    game = contextinho.submitGuess(game, who);
+    const made = contextinho.record(game);
+    check(made.outcome === 'won' && made.r.guesses[made.r.guesses.length - 1].id === who.id, `analytics: contextinho recorded ${made.outcome}`);
+    check(made.r.hints === (hint ? 1 : 0), `analytics: contextinho recorded ${made.r.hints} hints`);
+    keep('contextinho', made, { level: 'easy' });
+  }
+  if (facts) {
+    const hand = rewind.deal(rewind.allMoments({ roster, facts, bios, orgs }), 'easy', makeRng('analytics'))!;
+    const made = rewind.record(rewind.giveUp(rewind.check(rewind.createGame(hand, 'easy', 'analytics'))));
+    check(
+      made.outcome === 'gave-up' && made.r.items.length === hand.length && made.r.checks === 1,
+      `analytics: rewind recorded ${made.outcome}, ${made.r.items.length} items`,
+    );
+    keep('rewind', made, { level: 'easy' });
+  }
+
   // A malformed row must cost itself, not the dashboard.
   stored.push({ id: 999, at: new Date().toISOString(), body: { game: 'tenaball', r: null } as unknown as RoundRecord });
 
@@ -1733,6 +2084,17 @@ if (facts && orgs) {
     check(dash.connections.misgrouped.length === 4, 'analytics: connections misgrouped players not counted');
   }
   check(dash.higherLower.pairs.length === 2, 'analytics: higher-lower pairs not counted');
+  check(dash.curveball[0]?.solved === 1 && dash.curveball[0]?.avgClues === 3, 'analytics: curveball row is wrong');
+  check(dash.irl.length === 1 && dash.transferWindow.length === 1, 'analytics: irl or transfer-window not counted');
+  if (orgs) check(dash.orgChart[0]?.solved === 1, 'analytics: org-chart not counted as solved');
+  if (majors) check(dash.whichLobby.length === 1, 'analytics: which-lobby not counted');
+  if (teammates) check(dash.contextinho[0]?.solved === 1, 'analytics: contextinho not counted as solved');
+  if (facts) check((dash.rewind[0]?.answers.length ?? 0) >= rewind.LEVELS.easy.size, 'analytics: rewind moments not counted');
+  // An org and a tournament are secrets, not players: neither may reach the player search.
+  check(
+    !index.some((entry) => entry.id.includes(' - ') || orgs?.get(entry.id)),
+    'analytics: an org or a tournament leaked into the player index',
+  );
   notes.push(`analytics: ${stored.length} records across ${dash.games.filter((g) => g.rounds).length} games aggregate cleanly`);
 }
 

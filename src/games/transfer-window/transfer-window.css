@@ -1,0 +1,164 @@
+/*
+ * Transfer Window: a player's organisations as a row of crests joined by
+ * arrows — the transfer graphic a club posts — and three facts underneath.
+ */
+
+.tw-path {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px 26px;
+}
+
+.tw-step {
+  position: relative;
+  display: flex;
+}
+
+.tw-arrow {
+  position: absolute;
+  right: -20px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-weight: 800;
+  color: var(--text-faint);
+}
+
+.tw-card {
+  flex: 1;
+  min-height: 132px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px 8px;
+  text-align: center;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+}
+.tw-card--hidden {
+  border-style: dashed;
+  background: transparent;
+}
+.tw-card--new {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+  animation: tw-in 0.35s ease-out;
+}
+.tw-card--now {
+  border-color: rgba(34, 197, 94, 0.45);
+}
+.tw-card--late {
+  opacity: 0.45;
+}
+
+.tw-crest {
+  width: 42px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 800;
+  clip-path: polygon(50% 0, 100% 14%, 100% 58%, 50% 100%, 0 58%, 0 14%);
+}
+.tw-crest--hidden {
+  background: var(--surface-3);
+  color: var(--primary);
+  font-size: 1.2rem;
+}
+
+.tw-card__name {
+  font-weight: 800;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.tw-card__when {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.tw-card__meta {
+  display: flex;
+  gap: 8px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-faint);
+}
+.tw-card__titles {
+  color: var(--warning);
+}
+.tw-card__now {
+  color: var(--success);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.tw-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+}
+.tw-fact {
+  flex: 1 1 120px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.tw-fact dt {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.tw-fact dd {
+  margin: 0;
+  font-weight: 800;
+}
+.tw-fact--new {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+@keyframes tw-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tw-card--new {
+    animation: none;
+  }
+}
+
+/* A phone: one card per line, the arrows turned to point down. */
+@media (max-width: 460px) {
+  .tw-path {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+  .tw-card {
+    min-height: 0;
+    flex-direction: row;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    text-align: left;
+    gap: 4px 10px;
+  }
+  .tw-arrow {
+    right: auto;
+    left: 50%;
+    top: auto;
+    bottom: -20px;
+    transform: translateX(-50%) rotate(90deg);
+  }
+}

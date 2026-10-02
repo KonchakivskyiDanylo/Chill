@@ -68,6 +68,11 @@ export class Teammates {
     return out;
   }
 
+  /** A player's teammates as page names with their counts, most shared first. */
+  matesOf(playerId: string): readonly [string, number][] {
+    return this.byPlayer.get(playerId) ?? [];
+  }
+
   /**
    * Tournaments two players entered as teammates, or 0.
    *

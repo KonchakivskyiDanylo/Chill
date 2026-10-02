@@ -19,8 +19,10 @@ import { playerMoney, plural } from '@/lib/format';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { getGame } from '@/games/registry';
 import {
+  digitAnnounced,
   digitHelp,
   eligible,
+  FIRST_REVEAL,
   gameFor,
   giveUp,
   hasDigits,
@@ -282,6 +284,8 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
           />
         ) : null}
 
+        {!finished && digitAnnounced(game) ? <DigitNotice justNow={game.guesses.length === FIRST_REVEAL} /> : null}
+
         {message ? <p className="center small" style={{ color: 'var(--warning)' }}>{message}</p> : null}
 
         {finished ? (
@@ -341,6 +345,27 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
         ) : null}
       </div>
     </GameShell>
+  );
+}
+
+/**
+ * Random's digit help: that the name has at least one digit, and nothing more.
+ * Announced on the guess it arrives, like a reveal, then kept as a line.
+ */
+function DigitNotice({ justNow }: { justNow: boolean }) {
+  const text = 'This name has at least one digit in it';
+  return (
+    <div className="wordle-hint">
+      {justNow ? (
+        <p className="wordle-hint__pop" role="status">
+          🔢 {text} — 0–9 are on the keyboard
+        </p>
+      ) : (
+        <p className="tiny faint center" style={{ margin: 0 }}>
+          🔢 {text}.
+        </p>
+      )}
+    </div>
   );
 }
 

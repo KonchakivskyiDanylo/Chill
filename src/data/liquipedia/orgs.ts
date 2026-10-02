@@ -28,6 +28,13 @@ export interface Org {
   current: string[];
   /** Page names who were ever there, `current` included. */
   ever: string[];
+  /**
+   * The team page's creation and disbanding dates, ISO. The organisation's own,
+   * not its Fortnite division's: FaZe Clan reads 2010. Absent from an orgs.json
+   * written before the build carried them, and for orgs with no team page.
+   */
+  founded?: string;
+  disbanded?: string;
 }
 
 interface RawPayload {
@@ -66,6 +73,15 @@ export class Orgs {
   notable(minEarnings = 100_000): Org[] {
     return this.orgs.filter((org) => org.hasPage && org.earnings >= minEarnings);
   }
+}
+
+/**
+ * An org's name for display. A stint can name an org with fewer than four
+ * players, which has no row in `orgs.json`; its key is then the team page
+ * (`Some_Team`) or the name as the transfer wrote it, either readable enough.
+ */
+export function orgName(id: string, orgs: Orgs | null): string {
+  return orgs?.get(id)?.name ?? id.replace(/_\((.*)\)$/, ' ($1)').replace(/_/g, ' ');
 }
 
 let cached: Promise<Orgs> | null = null;

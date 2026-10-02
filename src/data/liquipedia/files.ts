@@ -1,7 +1,7 @@
 /**
  * One place that knows how to read the export's JSON files.
  *
- * Three of them (`facts`, `rankings`, `pools`) are written by
+ * Four of them (`facts`, `rankings`, `pools`, `bios`) are written by
  * `scripts/build_data.py` and legitimately do not exist on a fresh clone. A plain
  * `import('@data/pools.json')` cannot express that: Vite resolves it while
  * transforming the module, so a missing file is a *build* error and the
@@ -27,7 +27,8 @@ export type DataFile =
   | 'orgs'
   | 'facts'
   | 'rankings'
-  | 'pools';
+  | 'pools'
+  | 'bios';
 
 type Loader = () => Promise<{ default: unknown }>;
 
@@ -42,7 +43,7 @@ type Loader = () => Promise<{ default: unknown }>;
 let FILES: Record<string, Loader> = {};
 try {
   FILES = import.meta.glob<{ default: unknown }>(
-    '../../../liquipedia_data/clean_data/fortnite/{roster,players,career_path,teammates,orgs,facts,rankings,pools}.json',
+    '../../../liquipedia_data/clean_data/fortnite/{roster,players,career_path,teammates,orgs,facts,rankings,pools,bios}.json',
   );
 } catch {
   /* not running under Vite — `readFromDisk` below takes over */

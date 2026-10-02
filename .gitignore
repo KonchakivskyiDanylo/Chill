@@ -26,6 +26,7 @@ liquipedia_data/clean_data/fortnite/*
 !liquipedia_data/clean_data/fortnite/facts.json
 !liquipedia_data/clean_data/fortnite/rankings.json
 !liquipedia_data/clean_data/fortnite/pools.json
+!liquipedia_data/clean_data/fortnite/bios.json
 
 # Python bytecode from scripts/
 __pycache__/

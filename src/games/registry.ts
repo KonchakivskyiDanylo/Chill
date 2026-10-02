@@ -145,7 +145,7 @@ export const GAMES: GameMeta[] = [
         title: 'Names with numbers in them',
         items: [
           'Digits are given away, never before your third guess and all of them by guess 5.',
-          'Easy 🟢 shows the digit itself, Medium 🟡 only a # where it sits. Hard 🔴 and Random 🎲 show nothing at all.',
+          'Easy 🟢 shows the digit itself, Medium 🟡 a # where it sits, Random 🎲 only that the name has one. Hard 🔴 shows nothing at all.',
         ],
       },
       POOL_SECTION,
@@ -540,6 +540,208 @@ export const GAMES: GameMeta[] = [
     // New 30 Sep 2026, not hosted yet.
     hidden: true,
     Component: lazy(() => import('./bingo/BingoGame')),
+  },
+  // The seven below were added on 2 Oct 2026 from the user's roadmaps, hidden
+  // until they say otherwise. They open on `LevelSetup`, with the pools in
+  // `games/shared/levels.ts`.
+  {
+    id: 'curveball',
+    slug: 'curveball',
+    title: 'Curveball',
+    tagline: 'A career’s prize money drawn as a curve, one year at a time. Whose is it?',
+    icon: '📉',
+    intro: [
+      'A secret player’s prize money is drawn year by year. Name the player.',
+      'A wrong guess, or a skip, draws the next year. Run out of years and the round is lost.',
+    ],
+    rules: [
+      'The curve runs from the first year the player won prize money to the last, empty years included.',
+      'A curve shorter than five years still gets five guesses.',
+    ],
+    sections: [
+      {
+        title: 'Difficulty',
+        items: [
+          'Easy 🟢 — the names everyone knows.',
+          'Medium 🟡 — the regulars of the scene too.',
+          'Hard 🔴 — anyone with three years of prize money.',
+        ],
+      },
+    ],
+    terms: ['earnings'],
+    hidden: true,
+    Component: lazy(() => import('./curveball/CurveballGame')),
+  },
+  {
+    id: 'org-chart',
+    slug: 'org-chart',
+    title: 'Org Chart',
+    tagline: 'Name the organisation from the players who wore its jersey.',
+    icon: '🏢',
+    intro: [
+      'A secret organisation’s players are revealed one at a time. Name the org.',
+      'A wrong guess, or a skip, reveals the next clue. Run out and the round is lost.',
+    ],
+    rules: [
+      'Its best-known players are never in the first three.',
+      'Every few players, a clue about the org itself: its region, when it was founded, its prize money.',
+    ],
+    sections: [
+      {
+        title: 'Clues',
+        items: [
+          'Full dates — when each player joined and left.',
+          'Joined — only when they joined.',
+          'Names only — just the players.',
+        ],
+      },
+      {
+        title: 'Difficulty',
+        items: [
+          'Easy 🟢 — the 25 richest organisations.',
+          'Medium 🟡 — the top 75.',
+          'Hard 🔴 — any org with a Liquipedia page and five players.',
+        ],
+      },
+    ],
+    terms: ['org', 'region', 'earnings'],
+    hidden: true,
+    Component: lazy(() => import('./org-chart/OrgChartGame')),
+  },
+  {
+    id: 'contextinho',
+    slug: 'contextinho',
+    title: 'Contextinho',
+    tagline: 'Every guess gets a rank. How close are you to the secret player?',
+    icon: '🌡️',
+    intro: [
+      'Find the secret player. Every guess gets a rank: how close that player is to the secret one, out of everyone on record. #1 is the answer.',
+      'Close means alike: age, country, region, and how often the two played together.',
+    ],
+    rules: ['Guesses are unlimited.', 'A hint names a player halfway between your best guess and #1.'],
+    sections: [
+      {
+        title: 'Difficulty',
+        items: [
+          'Easy 🟢 — the secret is a name everyone knows.',
+          'Medium 🟡 — a regular of the scene.',
+          'Hard 🔴 — anyone who has played with a teammate.',
+        ],
+      },
+    ],
+    terms: ['nationality', 'region', 'age', 'teammates'],
+    hidden: true,
+    Component: lazy(() => import('./contextinho/ContextinhoGame')),
+  },
+  {
+    id: 'rewind',
+    slug: 'rewind',
+    title: 'Rewind',
+    tagline: 'Put competitive Fortnite history back in order.',
+    icon: '⏪',
+    intro: [
+      'Moments from competitive Fortnite — a World Cup, a first FNCS title, a signing. Put them in order, oldest at the top, then check.',
+      'Every moment in the right place turns green, locks and shows its date.',
+    ],
+    rules: ['Drag a card, or tap it and then tap where it goes.', 'Moments on the same day can go either way round.'],
+    sections: [
+      {
+        title: 'Difficulty',
+        items: [
+          'Easy 🟢 — 5 moments about famous names, far apart. Check as often as you like.',
+          'Medium 🟡 — 6 moments, closer together. 2 lives.',
+          'Hard 🔴 — 7 moments, anyone. 1 life.',
+        ],
+      },
+    ],
+    terms: ['fncs-title', 'global', 'lan', 'org'],
+    hidden: true,
+    Component: lazy(() => import('./rewind/RewindGame')),
+  },
+  {
+    id: 'irl',
+    slug: 'irl',
+    title: 'IRL',
+    tagline: 'A real name. Which player is behind it?',
+    icon: '🪪',
+    intro: [
+      'You get a real name. Name the player behind it.',
+      'A wrong guess, or a skip, fills in the next line of their file: nationality, age, organisations, titles — and last, the shape of their handle.',
+    ],
+    rules: ['The real name is the one on the player’s Liquipedia page.'],
+    sections: [
+      {
+        title: 'Difficulty',
+        items: [
+          'Easy 🟢 — the names everyone knows.',
+          'Medium 🟡 — the regulars of the scene too.',
+          'Hard 🔴 — anyone with a published real name.',
+        ],
+      },
+    ],
+    terms: ['nationality', 'org', 'fncs-title', 'earnings', 'teammates', 'major'],
+    hidden: true,
+    Component: lazy(() => import('./irl/IrlGame')),
+  },
+  {
+    id: 'transfer-window',
+    slug: 'transfer-window',
+    title: 'Transfer Window',
+    tagline: 'Every org a player signed for. Who made the moves?',
+    icon: '🔁',
+    intro: [
+      'A secret player’s organisations are revealed one at a time. Name the player.',
+      'A wrong guess, or a skip, reveals the next. Run out and the round is lost.',
+    ],
+    rules: [
+      'Only players with three or more organisations on record come up.',
+      'After the organisations: their FNCS titles, then their prize money.',
+    ],
+    sections: [
+      {
+        title: 'Modes',
+        items: [
+          'Timeline — oldest first, with the dates and the FNCS titles won at each.',
+          'Shuffled — no order and no dates.',
+        ],
+      },
+      {
+        title: 'Difficulty',
+        items: [
+          'Easy 🟢 — the names everyone knows.',
+          'Medium 🟡 — the regulars of the scene too.',
+          'Hard 🔴 — anyone.',
+        ],
+      },
+    ],
+    terms: ['org', 'fncs-title', 'earnings'],
+    hidden: true,
+    Component: lazy(() => import('./transfer-window/TransferWindowGame')),
+  },
+  {
+    id: 'which-lobby',
+    slug: 'which-lobby',
+    title: 'Which Lobby?',
+    tagline: 'The leaderboard fills from the bottom up. Name the tournament.',
+    icon: '🏟️',
+    intro: [
+      'A tournament’s finishers are revealed from the bottom of the leaderboard up, the winner last. Name the tournament.',
+      'A wrong guess reveals the next finisher, and says whether the lobby was earlier or later and whether you had its region.',
+    ],
+    rules: ['Pick the round, then the region.', 'On a duos or trios event a finisher is the whole team.'],
+    sections: [
+      {
+        title: 'Difficulty',
+        items: [
+          'Easy 🟢 — the LANs and the Europe and North America finals, famous finishers.',
+          'Medium 🟡 — Brazil too.',
+          'Hard 🔴 — every region, anyone in the results.',
+        ],
+      },
+    ],
+    terms: ['major', 'lan', 'global'],
+    hidden: true,
+    Component: lazy(() => import('./which-lobby/WhichLobbyGame')),
   },
 ];
 

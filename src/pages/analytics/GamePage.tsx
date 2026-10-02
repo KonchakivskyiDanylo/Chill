@@ -74,6 +74,20 @@ function Detail({ game, data, text }: { game: GameId; data: Dashboard; text: str
       return <Boards rows={data.bingo.filter((row) => has(row.name, ...row.answers.map((a) => a.name)))} />;
     case 'pyramid':
       return <Boards rows={data.pyramid.filter((row) => has(row.name, ...row.answers.map((a) => a.name)))} />;
+    case 'rewind':
+      return <Boards rows={data.rewind.filter((row) => has(row.name, ...row.answers.map((a) => a.name)))} />;
+    case 'contextinho':
+      return <Secrets rows={data.contextinho.filter((row) => has(row.name))} />;
+    case 'curveball':
+      return <Clues rows={data.curveball.filter((row) => has(row.name, ...row.clues.map((c) => c.name)))} />;
+    case 'irl':
+      return <Clues rows={data.irl.filter((row) => has(row.name, ...row.clues.map((c) => c.name)))} />;
+    case 'transfer-window':
+      return <Clues rows={data.transferWindow.filter((row) => has(row.name, ...row.clues.map((c) => c.name)))} />;
+    case 'org-chart':
+      return <Clues rows={data.orgChart.filter((row) => has(row.name, ...row.clues.map((c) => c.name)))} noLink />;
+    case 'which-lobby':
+      return <Clues rows={data.whichLobby.filter((row) => has(row.name, ...row.clues.map((c) => c.name)))} noLink />;
     case 'impostor':
       return <Griefer data={data} has={has} />;
     case 'tic-tac-toe':
@@ -112,17 +126,18 @@ function Secrets({ rows }: { rows: SecretRow[] }) {
   );
 }
 
-function Clues({ rows }: { rows: ClueRow[] }) {
+/** `noLink` for the games whose secret is not a player: Org Chart's org, Which Lobby's tournament. */
+function Clues({ rows, noLink }: { rows: ClueRow[]; noLink?: boolean }) {
   const [open, setOpen] = useState<string | null>(null);
   return (
     <DataTable
       columns={[
         {
-          head: 'Player',
+          head: noLink ? 'Answer' : 'Player',
           cell: (row) => (
             <div className="stack-sm">
               <span>
-                <PlayerLink id={row.id} name={row.name} />{' '}
+                {noLink ? row.name : <PlayerLink id={row.id} name={row.name} />}{' '}
                 <button type="button" className="link-btn tiny" onClick={() => setOpen(open === row.id ? null : row.id)}>
                   {open === row.id ? 'hide clues' : 'clues'}
                 </button>

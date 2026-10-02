@@ -41,7 +41,7 @@ To bring it up to date: [UPDATE_DATA.md](UPDATE_DATA.md).**
 | Game | Modes | Notes |
 | --- | --- | --- |
 | Higher or Lower | Age / Career earnings / FNCS wins / FNCS finals (+ Placement in event mode) × Easy / Medium / Hard | Endless, one mistake ends the run, best score in `localStorage`. Round one is two of the top 20 earners; each round widens that window (to 250 / 1,000 / everyone) and narrows the gap on a four-rounds-a-step schedule. The answer is drawn before the player, so it cannot be read off the last one. Only Hard deals ties, and has the Equal button |
-| Fortnitedle | — | 6 guesses, digits are playable characters. Nothing is given away before guess 3; then one digit per guess, the rest by 5. Easy shows the digit and greens its key, Medium only a # where it sits, Hard and Random nothing |
+| Fortnitedle | — | 6 guesses, digits are playable characters. Nothing is given away before guess 3; then one digit per guess, the rest by 5. Easy shows the digit and greens its key, Medium only a # where it sits, Random only that there is at least one, Hard nothing |
 | Career Path | Order / Random | 10 clues, picked for a mix of finishes on recognisable stages, spread across the career, never opening on a famous player's signature result, and describing exactly one player wherever the career allows it (a duo partner is ruled out). Order reads them by date, Random in no order |
 | Who Are Ya? | Counts shown / hidden / Random order | Ten clues drawn across up to fifty teammates, number one always among them, revealed fewest-shared first. Needs 3+ teammates and 5+ tournaments on record |
 | Tenaball | ~290 categories × Easy / Hard | Boards answer in players, organisations, countries *or* tournaments. Each states its own tie rule. A tournament board is ten placements, so a duos slot wants both names |
@@ -122,7 +122,8 @@ All ten games read the **Liquipedia export** in
 | `players.json` | 5,678 playable | every game — identity, earnings, tier, FNCS wins |
 | `career_path.json` | 187 majors; every player with one (1,175 with five or more) | Career Path |
 | `teammates.json` | 39,038 pairs, 5,490 players, 50 kept each | Who Are Ya, List |
-| `orgs.json` | 979 orgs | Griefer, Tic Tac Toe, Connections, Tenaball |
+| `orgs.json` | 984 orgs | Griefer, Tic Tac Toe, Connections, Tenaball, Org Chart |
+| `bios.json` | real names and dated organisation stints | IRL, Org Chart, Transfer Window, Rewind (hidden games) |
 | `facts.json` | per-player career facts | Griefer, Tic Tac Toe, Connections, List, Who Are Ya |
 | `rankings.json` | ~290 precomputed leaderboards, plus the event names the paydays boards are answered from | Tenaball |
 | `pools.json` | event-qualified fields | every game's setup step |

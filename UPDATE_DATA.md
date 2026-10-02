@@ -1,7 +1,8 @@
 # Updating the data
 
-Do this once a week, or the day after a big event. It takes about five minutes,
-and you can run it any time — a longer gap just means a few more requests.
+Do this once a week, or the day after a big event. It takes about five to ten
+minutes, and you can run it any time — a longer gap just means a few more
+requests.
 
 Everything below runs in a terminal (PowerShell) in the Chill folder.
 
@@ -9,9 +10,13 @@ Everything below runs in a terminal (PowerShell) in the Chill folder.
 
 ## First time only
 
-Save your Liquipedia API key and a way to contact you. `setx` keeps them for
-good, so **open a new terminal afterwards** — the one you ran it in does not
-see them yet.
+`setx` keeps a setting for good, so **open a new terminal after the last one**
+— the terminal you ran it in does not see it yet. Never put a key in a file in
+this repo, or in a commit.
+
+### Liquipedia
+
+Your Liquipedia API key and a way to contact you:
 
 ```powershell
 setx LIQUIPEDIA_API_KEY "paste-your-key-here"
@@ -21,7 +26,38 @@ setx LIQUIPEDIA_API_KEY "paste-your-key-here"
 setx LIQUIPEDIA_USER_AGENT "OffSpawn/1.0 (your-email@example.com)"
 ```
 
-Never put the key in a file in this repo, or in a commit.
+### YouTube (for subscriber counts)
+
+1. Open https://console.cloud.google.com and sign in with a Google account.
+2. Create a project (top bar → the project picker → **New project**, any name).
+3. **APIs & Services → Library**, search **YouTube Data API v3**, open it, **Enable**.
+4. **APIs & Services → Credentials → Create credentials → API key**. Copy it.
+   Under **Edit API key → API restrictions**, restrict it to YouTube Data API v3.
+5. Save it:
+
+```powershell
+setx YOUTUBE_API_KEY "paste-the-key-here"
+```
+
+It is free: 10,000 units a day. The first run spends about 1,500–1,900, every
+run after it about 70.
+
+### Twitch (for follower counts)
+
+1. Turn on two-factor authentication on your Twitch account (Twitch asks for it
+   before you can register an app).
+2. Open https://dev.twitch.tv/console → **Register Your Application**:
+   - Name: anything, e.g. `OffSpawn stats`
+   - OAuth Redirect URLs: `https://localhost` (required and must be https, but never used — the login is a code you type in)
+   - Category: **Analytics Tool**
+   - Client Type: **Public**
+3. **Create**, then **Manage** on the new app. Copy the **Client ID** and save it:
+
+```powershell
+setx TWITCH_CLIENT_ID "paste-the-client-id-here"
+```
+
+The first time the counts run, it asks you to log in once (see step 2 below).
 
 ---
 
@@ -42,18 +78,54 @@ placement: 443,400 -> 445,012 rows (12 removed)
 done - 19 requests this run
 ```
 
-### 2. Build the site's data
+### 2. YouTube subscribers and Twitch followers
+
+```powershell
+.venv\Scripts\python scripts\socials_api.py
+```
+
+It reads the YouTube and Twitch links on every player's Liquipedia page (from
+step 1) and asks each platform for the numbers. About five minutes, most of it
+Twitch. It prints, for example:
+
+```
+youtube: 3,396 players link 3,395 channels
+youtube: 2,950 players with a count, 310 links found no channel, 71 units
+twitch: 3,585 players link 3,580 channels
+twitch: 3,402 players with a count, 178 logins not found
+```
+
+**The first time only**, Twitch asks you to log in:
+
+```
+twitch: log in - open https://www.twitch.tv/activate and enter the code ABCD-EFGH
+```
+
+Open that page, enter the code, click **Authorize**. The script carries on by
+itself. After that it stays logged in (the login is kept in
+`C:\Users\<you>\.offspawn\twitch_token.json`, outside the repo) — unless you
+skip it for more than 30 days, when it simply asks again.
+
+The numbers go to `liquipedia_data/clean_data/fortnite/socials.json`. No game
+reads them yet, so this step can be skipped until one does; the file stays on
+your machine (it is not committed).
+
+Only one platform: `socials_api.py youtube` or `socials_api.py twitch`. A
+player with two channels on one platform gets the bigger one; a channel that
+hides its count is left out.
+
+### 3. Build the site's data
 
 ```powershell
 .venv\Scripts\python scripts\build_data.py
 ```
 
 About a minute and a half. It cleans the raw data, adds FNCS titles and tiers,
-builds the rankings, pools and the rest, runs every game's checks on the
-result, and only then replaces the files. It ends with a before/after table
-and `Done`.
+builds the organisations, the bios (real names and organisation history), the
+rankings, pools and the rest, runs every game's checks on the result, and only
+then replaces the files. It ends with a before/after table and `Done`.
 
-### 3. Look at the site (optional)
+### 4. Look at the site (optional)
 
 ```powershell
 npm run dev
@@ -61,7 +133,7 @@ npm run dev
 
 Every game's "How to play" shows the new date as *last update*.
 
-### 4. Commit and push
+### 5. Commit and push
 
 ```powershell
 git add -A
@@ -77,9 +149,9 @@ git push
 
 Only the files the site reads are committed (`roster.json`, `players.json`,
 `career_path.json`, `teammates.json`, `orgs.json`, `facts.json`,
-`rankings.json`, `pools.json`) plus the date in `src/data/liquipedia/roster.ts`.
-The raw dump and the large in-between files stay on your machine — `.gitignore`
-handles that.
+`rankings.json`, `pools.json`, `bios.json`) plus the date in `src/data/liquipedia/roster.ts`.
+The raw dump, the large in-between files and `socials.json` stay on your
+machine — `.gitignore` handles that.
 
 ---
 
@@ -91,7 +163,12 @@ handles that.
 | `rate limited (429) - waiting …` | Liquipedia asked it to wait | nothing, leave it running |
 | you pressed Ctrl+C | — | run the same command again; it carries on where it stopped |
 | `Set LIQUIPEDIA_API_KEY first` | the key is not set in this terminal | do "First time only", then open a new terminal |
-| `… - not overwriting` | Liquipedia sent back far fewer rows than we hold | nothing was changed; try again later, and if it repeats send the output |
+| `youtube: YOUTUBE_API_KEY is not set - skipped` (or `TWITCH_CLIENT_ID`) | that platform's key is not set in this terminal | do "First time only" for it, then open a new terminal |
+| `YouTube's daily quota is used up` | 10,000 units spent today | run step 2 again tomorrow; it keeps what it found and carries on |
+| `YouTube … HTTP 403 … API key not valid` / `has not been used in project` | the key is wrong, or the YouTube API is not enabled for its project | redo "YouTube" steps 3–4 |
+| `twitch: … the code expired before it was entered` | the login code was not entered within 30 minutes | run step 2 again and enter the new code |
+| `Twitch login: HTTP 400 …` | the Client ID is wrong, or the app is not **Public** | check the app at dev.twitch.tv/console |
+| `… - not overwriting` | Liquipedia, YouTube or Twitch sent back far fewer rows than we hold | nothing was changed; try again later, and if it repeats send the output |
 | `The game checks failed, so nothing was replaced` | the new data breaks a game check | the site's data is unchanged; send the output |
 
 ---
@@ -108,7 +185,18 @@ makes to something older is only picked up by reading it all again:
 
 Tournaments and transfers take about an hour of the key's allowance;
 placements about eight hours, so start it in the evening. It waits for the
-limit by itself. Then do steps 2–4.
+limit by itself. Then do steps 2–5.
+
+A YouTube or Twitch link that found nothing is asked about again after 30
+days. To ask now — say a player fixed their link on Liquipedia:
+
+```powershell
+.venv\Scripts\python scripts\socials_api.py --recheck
+```
+
+`--search 40` also lets YouTube search by name for up to 40 links nothing else
+finds (100 units each). A search returns the closest channel, which is not
+always the right one, so it is off unless you ask.
 
 ---
 
@@ -139,7 +227,7 @@ Step 1 of every update then also re-reads the pages Liquipedia said changed.
 
 The build is `scripts/build_data.py`, and each step is a file in
 `scripts/pipeline/`: `clean.py` (raw -> clean tables), `enrich.py` (FNCS
-titles, tiers, organisations), `derived.py` (rankings, pools, teammates,
+titles, tiers, organisations, bios), `derived.py` (rankings, pools, teammates,
 career path, facts). [DATA.md](DATA.md) explains what each file holds and why.
 
 After changing one, you do not need Liquipedia again:
@@ -148,8 +236,9 @@ After changing one, you do not need Liquipedia again:
 .venv\Scripts\python scripts\build_data.py --from derived
 ```
 
-`--from players` redoes titles and tiers too; `--out somewhere` builds into
-another folder so you can compare before touching the real files.
+`--from players` redoes titles, tiers, organisations and bios too; `--out
+somewhere` builds into another folder so you can compare before touching the
+real files.
 
 **A new season.** Tenaball's average-finish boards find each year's events on
 their own: the rounds of FNCS grand finals by date, and Epic's LANs. List's
@@ -157,8 +246,14 @@ their own: the rounds of FNCS grand finals by date, and Epic's LANs. List's
 and `SEASON_EVENTS` in `derived.py`. Change those when the year's big events
 change, then run `--from derived`.
 
+**Testing the scripts.** `scripts/check_liquipedia_api.py` and
+`scripts/check_socials_api.py` run the two download scripts against fake
+APIs — no keys, no network, nothing written to your data. GitHub runs both on
+every push.
+
 ---
 
 The data is from [Liquipedia](https://liquipedia.net/fortnite) (CC-BY-SA 3.0)
 and FNCS titles from Wikipedia (CC-BY-SA 4.0). The committed files are shared
-under the same licence — see [CREDITS.md](CREDITS.md).
+under the same licence — see [CREDITS.md](CREDITS.md). Subscriber and follower
+counts come from the YouTube Data API and the Twitch API, under their terms.

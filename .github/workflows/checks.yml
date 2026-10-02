@@ -1,5 +1,5 @@
 # Every push and pull request: the typecheck, the game and server checks, a
-# production build, and the Liquipedia sync's own test against its fake API.
+# production build, and the Liquipedia and socials syncs' own tests against their fake APIs.
 # Heroku only waits for this if "Wait for CI to pass before deploy" is ticked
 # under Deploy → Automatic deploys.
 name: Checks
@@ -32,3 +32,4 @@ jobs:
           python-version: '3.12'
       - run: pip install requests
       - run: python scripts/check_liquipedia_api.py
+      - run: python scripts/check_socials_api.py

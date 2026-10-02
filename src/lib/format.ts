@@ -74,6 +74,18 @@ export function playerMoneyShort(player: { earnings: number; earningsKnown: bool
   return player.earningsKnown ? moneyShort(player.earnings) : '—';
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "2019-03-25" -> "Mar 2019". */
+export function monthYear(iso: string): string {
+  return `${MONTHS[Number(iso.slice(5, 7)) - 1] ?? ''} ${iso.slice(0, 4)}`.trim();
+}
+
+/** "2019-03-25" -> "25 Mar 2019". */
+export function dayMonthYear(iso: string): string {
+  return `${Number(iso.slice(8, 10))} ${monthYear(iso)}`;
+}
+
 /** "2026-09-28" -> "28/09/2026". */
 export function formatDate(iso: string): string {
   const [year, month, day] = iso.split('-');
