@@ -4,7 +4,10 @@ import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PlayerSearch } from '@/components/PlayerSearch';
+import { DailyEnd, DailyPending } from '@/components/DailyEnd';
 import { Banner, Hearts, OptionCard, OptionGrid, Stat, StatusDot, StatusLegend } from '@/components/ui';
+import { useDailyRound, usePlayMode } from '@/daily/useDailyRound';
+import { restoreDaily, result as dailyResult, shareGrid, snapshot } from './daily';
 import { WhatCounts } from '@/components/Glossary';
 import type { Board } from '@/data/liquipedia/rankings';
 import { loadFacts, type Facts } from '@/data/liquipedia/facts';
@@ -36,6 +39,8 @@ import {
   record as roundRecord,
 } from './engine';
 import { derivedBoards } from './derived-boards';
+import { socialBoards } from './social-boards';
+import { useSocials } from '@/data/useSocials';
 import { poolRankings } from './pool-boards';
 import './tenaball.css';
 
@@ -76,14 +81,28 @@ function Game({
   pools: Pools | null;
 }) {
   const [difficulty, setDifficulty] = useState<Difficulty>('easy');
-  const [game, setGame] = useState<GameState | null>(null);
+  /** Follower counts: a daily may be a follower board, so the daily waits for them. */
+  const socials = useSocials();
+  const [dailyOn, setDailyOn] = usePlayMode();
+  const daily = useDailyRound('tenaball', {
+    on: dailyOn,
+    ready: socials !== null,
+    restore: (puzzle, saved) => restoreDaily(puzzle, rankings, roster, socials, saved),
+    snapshot,
+    finished: (state) => state.status !== 'playing',
+    result: dailyResult,
+  });
+  const [practice, setPractice] = useState<GameState | null>(null);
+  const game = dailyOn ? daily.state : practice;
+  const setGame = (next: GameState | null) => (dailyOn ? next && daily.setState(next) : setPractice(next));
 
-  useRoundRecorder('tenaball', game !== null && game.status !== 'playing', () => ({
+  useRoundRecorder('tenaball', dailyOn ? daily.endedHere : game !== null && game.status !== 'playing', () => ({
     title: `Tenaball — ${game!.board.title}`,
     data: rankings.generated,
-    setup: { event, level: game!.difficulty },
+    setup: dailyOn ? { daily: daily.day, level: game!.difficulty } : { event, level: game!.difficulty },
     ...roundRecord(game!),
   }));
+  const shell = { game: meta, dataNote: <RosterNote />, daily: { on: dailyOn, number: daily.number, setOn: setDailyOn } };
   // Green, yellow or red in the picker: completed, tried, not played.
   const { statusOf, mark } = useProgress('tenaball');
   useEffect(() => {
@@ -151,10 +170,10 @@ function Game({
       new Rankings({
         generated: rankings.generated,
         slots: rankings.slots,
-        boards: [...rankings.boards, ...derivedBoards(roster.players)],
+        boards: [...rankings.boards, ...derivedBoards(roster.players), ...socialBoards(roster, socials)],
         tournaments: rankings.tournaments,
       }),
-    [rankings, roster],
+    [rankings, roster, socials],
   );
 
   const active = derived ?? allTime;
@@ -163,13 +182,13 @@ function Game({
 
   // A board id is a score key, and the field boards carry their own prefix, so
   // a best score never leaks between the field and the all-time set.
-  useEffect(() => setGame(null), [event]);
+  useEffect(() => setPractice(null), [event]);
 
   const start = useCallback(
     (board: Board | null) => {
       if (!board) return;
       setFeedback(null);
-      setGame(createGame(board, difficulty));
+      setPractice(createGame(board, difficulty));
     },
     [difficulty],
   );
@@ -225,9 +244,17 @@ function Game({
   const scoreKey = game ? `tenaball:${game.board.id}:${game.difficulty}` : 'tenaball:none';
   const { best, submit: submitScore } = useBestScore(scoreKey);
 
+  if (!game && dailyOn) {
+    return (
+      <GameShell {...shell}>
+        <DailyPending status={daily.status} error={daily.error} />
+      </GameShell>
+    );
+  }
+
   if (!game) {
     return (
-      <GameShell game={meta} dataNote={<RosterNote />}>
+      <GameShell {...shell}>
         <div className="stack">
           <section className="card stack">
             <div className="card__title">Difficulty</div>
@@ -343,12 +370,13 @@ function Game({
 
   return (
     <GameShell
-      game={meta}
-      dataNote={<RosterNote />}
+      {...shell}
       toolbar={
-        <button type="button" className="icon-btn" onClick={() => setGame(null)}>
-          ↺ New category
-        </button>
+        dailyOn ? null : (
+          <button type="button" className="icon-btn" onClick={() => setPractice(null)}>
+            ↺ New category
+          </button>
+        )
       }
     >
       {/* `tb-play` is what makes the round fit a laptop screen without
@@ -385,7 +413,9 @@ function Game({
                   missed ? ' tb-slot--missed' : ''
                 }${!complete && !finished && named.size > 0 ? ' tb-slot--partial' : ''}`}
               >
-                <span className="tb-slot__rank">{slot.rank}</span>
+                <span className={`tb-slot__rank${slot.rank <= 3 ? ` tb-slot__rank--${['gold', 'silver', 'bronze'][slot.rank - 1]}` : ''}`}>
+                  {slot.rank}
+                </span>
                 <span className="tb-slot__name">
                   {slot.members.map((member) =>
                     named.has(member.key) ? (
@@ -430,13 +460,23 @@ function Game({
                 ? `Every slot filled${game.wrong.length ? ` with ${game.wrong.length} wrong ${game.wrong.length === 1 ? 'answer' : 'answers'}` : ''}.`
                 : `You found ${game.found.size} of ${slots.length}. The rest are revealed above.`}
             </Banner>
-            <button
-              type="button"
-              className="btn btn--primary btn--lg btn--block"
-              onClick={() => setGame(null)}
-            >
-              New category
-            </button>
+            {dailyOn ? (
+              <DailyEnd
+                game="tenaball"
+                number={daily.number}
+                day={daily.day}
+                result={dailyResult(game)}
+                grid={shareGrid(game)}
+              />
+            ) : (
+              <button
+                type="button"
+                className="btn btn--primary btn--lg btn--block"
+                onClick={() => setPractice(null)}
+              >
+                New category
+              </button>
+            )}
           </div>
         ) : (
           <div className="stack-sm">

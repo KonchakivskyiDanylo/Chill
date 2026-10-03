@@ -65,10 +65,12 @@ left out. It remembers every link's channel ID in `raw_data/fortnite/socials_sta
 so YouTube's first run costs 1,500–1,900 of the free 10,000 daily units and
 every run after it about 70; Twitch logs in once with a code (the token lives
 in `~/.offspawn/`, outside the repo). `scripts/check_socials_api.py` tests it
-against fake APIs. The file is not committed and no game reads it yet:
-YouTube's API terms want stored data refreshed within about 30 days, which
-old git history cannot do, so how it ships is a decision for when a game uses
-it. Setup and errors: [UPDATE_DATA.md](UPDATE_DATA.md).
+against fake APIs. The file is never committed: YouTube keeps its numbers
+fresh for 30 days and Twitch for 24 hours, which old git history cannot do.
+The live server fetches its own copy daily from the links in `links.json`
+(`scripts/pipeline/site.py` writes it from the raw dump; `server/socials.ts`
+fetches) and serves only fresh counts at `/api/socials` (decided 3 Oct 2026). This
+local file is what a dev server and `check:games` use. Setup: [UPDATE_DATA.md](UPDATE_DATA.md).
 
 Then `scripts/build_data.py` turns the raw dump into every file the site
 reads, in three steps, each in `scripts/pipeline/`:
@@ -119,13 +121,12 @@ file and reload.
 
 All but `players.json`, `orgs.json` and `bios.json` are **derived** from `tournaments.json` and
 `placements.json` by `scripts/pipeline/derived.py`; those two come from
-`transfers.json` and `teams.json` in `scripts/pipeline/enrich.py`. For
-`bios.json` an organisation's name is matched loosely — "NRG Esports" is NRG
-and "Falcons Esports" Team Falcons — because transfers spell an org the way it
-was named on the day (`org_resolver(loose=True)`). `orgs.json` still matches
-display names exactly, so its "has played for NRG" misses the six players who
-joined and left as NRG Esports; folding there too would fix that and shift
-Tic Tac Toe's boards. None carries a `tier`: difficulty is
+`transfers.json` and `teams.json` in `scripts/pipeline/enrich.py`. In both
+`orgs.json` and `bios.json` an organisation's name is matched loosely — "NRG
+Esports" is NRG and "Falcons Esports" Team Falcons — because transfers spell an
+org the way it was named on the day (`org_resolver(loose=True)`). `orgs.json`
+matched display names exactly until 3 Oct 2026, so "has played for NRG" missed
+the six players who joined and left as NRG Esports (12 then, 18 now). None carries a `tier`: difficulty is
 joined from `players.json` by page name, so there is still exactly one place
 difficulty is decided.
 

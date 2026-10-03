@@ -82,6 +82,8 @@ const GROUP_KINDS = new Set<CriterionKind>([
   'lan-winner',
   'tournament-winner',
   'earnings',
+  // A follower line, when the server has fresh counts — the streamers are a group of their own.
+  'socials',
 ]);
 
 /**

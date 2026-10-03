@@ -1,9 +1,13 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { puzzleLabel } from '@/daily/day';
+import { DAILY_ONLY } from '@/daily/useDailyRound';
 import { readLocal, writeLocal } from '@/lib/storage';
-import type { GameMeta } from '@/games/registry';
+import { rulesFor, type GameMeta } from '@/games/registry';
+import './daily.css';
 import { Glossary } from './Glossary';
 import { RosterNote } from './LiquipediaGate';
+import { SocialsNote } from './SocialsNote';
 import { Modal } from './ui';
 
 /**
@@ -15,9 +19,15 @@ export function GameShell({
   toolbar,
   dataNote,
   examples,
+  daily,
   children,
 }: {
   game: GameMeta;
+  /**
+   * The game's daily state: on with today's number, or off (practice, on a dev
+   * server only). Absent for a game with no daily puzzle — Higher or Lower.
+   */
+  daily?: { on: boolean; number: number; setOn: (on: boolean) => void };
   /** Optional controls rendered on the right of the title row (e.g. New game). */
   toolbar?: ReactNode;
   /**
@@ -58,13 +68,28 @@ export function GameShell({
               <span aria-hidden="true" style={{ marginRight: 10 }}>
                 {game.icon}
               </span>
-              {game.title}
+              {game.title}{' '}
+              {daily ? (
+                <span className={`daily-chip${daily.on ? '' : ' daily-chip--practice'}`}>
+                  {daily.on ? `Daily ${puzzleLabel(daily.number)}` : 'Practice'}
+                </span>
+              ) : null}
             </h1>
             <p className="muted small" style={{ marginTop: 4 }}>
               {game.tagline}
             </p>
           </div>
           <div className="row">
+            {daily && !DAILY_ONLY ? (
+              <button
+                type="button"
+                className="icon-btn"
+                title="Dev servers only: the live site is daily puzzles only"
+                onClick={() => daily.setOn(!daily.on)}
+              >
+                {daily.on ? '🛠 Practice' : '📅 Daily'}
+              </button>
+            ) : null}
             {toolbar}
             <button type="button" className="icon-btn" onClick={() => setShowRules(true)}>
               ? How to play
@@ -75,10 +100,10 @@ export function GameShell({
 
       {children}
 
-      <RulesCard game={game} dataNote={dataNote} examples={examples} />
+      <RulesCard game={game} daily={daily?.on ?? false} dataNote={dataNote} examples={examples} />
 
       <Modal open={showRules} title={`How to play ${game.title}`} onClose={dismiss}>
-        <Rules game={game} dataNote={dataNote} examples={examples} />
+        <Rules game={game} daily={daily?.on ?? false} dataNote={dataNote} examples={examples} />
         <button type="button" className="btn btn--primary btn--block" onClick={dismiss}>
           Got it
         </button>
@@ -109,18 +134,21 @@ function RulesList({ rules }: { rules: string[] }) {
  */
 function Rules({
   game,
+  daily,
   dataNote,
   examples,
 }: {
   game: GameMeta;
+  daily: boolean;
   dataNote?: ReactNode;
   examples?: ReactNode;
 }) {
+  const { intro, rules, sections } = rulesFor(game, daily);
   return (
     <div className="stack">
-      {game.intro?.length ? (
+      {intro.length ? (
         <div className="stack-sm">
-          {game.intro.map((line) => (
+          {intro.map((line) => (
             <p key={line} className="small muted">
               {line}
             </p>
@@ -130,11 +158,12 @@ function Rules({
 
       {examples}
 
-      {game.rules?.length ? <RulesList rules={game.rules} /> : null}
+      {rules.length ? <RulesList rules={rules} /> : null}
 
       {dataNote ?? <RosterNote />}
+      {game.socials ? <SocialsNote /> : null}
 
-      {game.sections?.map((section) => (
+      {sections.map((section) => (
         <div key={section.title} className="stack-sm">
           <h3>{section.title}</h3>
           <RulesList rules={section.items} />
@@ -153,17 +182,19 @@ function Rules({
 
 export function RulesCard({
   game,
+  daily = false,
   dataNote,
   examples,
 }: {
   game: GameMeta;
+  daily?: boolean;
   dataNote?: ReactNode;
   examples?: ReactNode;
 }) {
   return (
     <section className="card stack">
       <div className="card__title">How to play</div>
-      <Rules game={game} dataNote={dataNote} examples={examples} />
+      <Rules game={game} daily={daily} dataNote={dataNote} examples={examples} />
     </section>
   );
 }

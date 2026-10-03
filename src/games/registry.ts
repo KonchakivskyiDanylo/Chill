@@ -6,6 +6,11 @@ import { SHOW_STATUS } from './shared/pool';
 export interface RuleSection {
   title: string;
   items: string[];
+  /**
+   * About a setup choice — a mode, a level, who the pool is — and so left out
+   * of the daily puzzle's rules, where there is nothing to choose.
+   */
+  practiceOnly?: boolean;
 }
 
 export interface GameMeta {
@@ -44,6 +49,14 @@ export interface GameMeta {
    */
   terms?: TermId[];
   /**
+   * The rules of the daily puzzle, where they differ: the bullets that name a
+   * level ("Easy: unlimited guesses") give way to the one level the daily is
+   * played at. Sections marked `practiceOnly` are dropped there too.
+   */
+  daily?: { rules: string[] };
+  /** Shows YouTube or Twitch counts somewhere, so its rules carry their source line (`SocialsNote`). */
+  socials?: true;
+  /**
    * Not ready to host: left off the home page and the side nav, and a
    * production build sends its address back home. A dev server still opens it
    * by URL, so it can be worked on; `check:games` still plays it. Delete the
@@ -63,6 +76,7 @@ export interface GameMeta {
  */
 const POOL_SECTION: RuleSection = {
   title: 'Who you get asked about',
+  practiceOnly: true,
   items: [
     'Random 🎲 — anyone can come up, but it leans towards names you know: half the rounds are Easy-band players, a third Medium, the rest Hard. This is the default, and Start works without touching anything.',
     SHOW_STATUS
@@ -77,6 +91,7 @@ const POOL_SECTION: RuleSection = {
 export const GAMES: GameMeta[] = [
   {
     id: 'higher-lower',
+    socials: true,
     slug: 'higher-lower',
     title: 'Higher or Lower',
     tagline: 'Is the next player above or below? Keep the streak alive.',
@@ -98,6 +113,7 @@ export const GAMES: GameMeta[] = [
           'Career Earnings — every dollar of tournament prize money on record.',
           'FNCS Wins — FNCS grand finals won, across every season and region. Players with none are included.',
           'FNCS Finals — FNCS grand finals reached, the Globals and the other FNCS LANs included.',
+          'Twitch Followers, YouTube Subscribers — the counts as each platform gives them, refreshed every day. YouTube rounds to three figures.',
         ],
       },
       {
@@ -140,9 +156,18 @@ export const GAMES: GameMeta[] = [
       'Any combination of letters and digits is allowed — it does not have to be a real player.',
       'Every player in the pool comes up once before any of them comes round again.',
     ],
+    daily: {
+      rules: [
+        'Spaces and punctuation are removed, capitalisation does not matter.',
+        'Digits 0–9 count as characters and are on the keyboard.',
+        'Any combination of letters and digits is allowed — it does not have to be a real player.',
+        'From guess 3, a # shows where a digit sits — which digit is for you to find.',
+      ],
+    },
     sections: [
       {
         title: 'Names with numbers in them',
+        practiceOnly: true,
         items: [
           'Digits are given away, never before your third guess and all of them by guess 5.',
           'Easy 🟢 shows the digit itself, Medium 🟡 a # where it sits, Random 🎲 only that the name has one. Hard 🔴 shows nothing at all.',
@@ -177,6 +202,7 @@ export const GAMES: GameMeta[] = [
     sections: [
       {
         title: 'Game modes',
+        practiceOnly: true,
         items: [
           'Order — ten results spread across the career, oldest first.',
           'Random — the same kind of ten, in no order.',
@@ -215,9 +241,18 @@ export const GAMES: GameMeta[] = [
       'A clue is a teammate who entered at least three tournaments with the answer. Only players with three such teammates and five majors can be the answer.',
       'When the round ends, the rest of the list turns face up with the counts.',
     ],
+    daily: {
+      rules: [
+        'Teammates are ranked by how many tournaments the pair entered together, across every tournament on record.',
+        'They come weakest first, each with that count. Teammates on the same count can come in either order.',
+        'A clue is a teammate who entered at least three tournaments with the answer. Only players with three such teammates and five majors can be the answer.',
+        'When the round ends, the rest of the list turns face up.',
+      ],
+    },
     sections: [
       {
         title: 'Clue order',
+        practiceOnly: true,
         items: [
           'Counts shown — fewest → most shared tournaments, with the number on each teammate.',
           'Counts hidden — the same order, without the numbers.',
@@ -232,6 +267,7 @@ export const GAMES: GameMeta[] = [
   },
   {
     id: 'tenaball',
+    socials: true,
     slug: 'tenaball',
     title: 'Tenaball',
     tagline: 'Find all ten players in a top 10.',
@@ -251,9 +287,17 @@ export const GAMES: GameMeta[] = [
       'On a duos or trios board a slot is a whole team, and it locks once you have named everyone on it.',
       '“What counts here” under each board explains its words — which events are majors or LANs, whose nationality a dual national counts for.',
     ],
+    daily: {
+      rules: [
+        '3 lives: every wrong guess costs one.',
+        'On a duos or trios board a slot is a whole team, and it locks once you have named everyone on it.',
+        '“What counts here” under the board explains its words — which events are majors or LANs, whose nationality a dual national counts for.',
+      ],
+    },
     sections: [
       {
         title: 'Categories',
+        practiceOnly: true,
         items: [
           'About nine hundred boards: players, regions, countries, tournaments, FNCS finals, season averages, Div Cups, organisations and paydays. Hit Random, or search for one.',
           'Not every board wants a player. Some want an organisation, a country or a tournament — the input says which.',
@@ -287,6 +331,7 @@ export const GAMES: GameMeta[] = [
   },
   {
     id: 'list',
+    socials: true,
     slug: 'list',
     title: 'List',
     tagline: 'Name as many players as you can before the clock runs out.',
@@ -308,9 +353,20 @@ export const GAMES: GameMeta[] = [
       'When time runs out you see everyone you missed.',
       'The suggestion box helps you spell a name you already thought of — it never tells you whether that name is on the list.',
     ],
+    daily: {
+      rules: [
+        'Repeating a name you already found does not count again.',
+        'Every wrong answer takes 3 seconds off the clock.',
+        'Name everyone on the list and you win straight away.',
+        'When time runs out you see everyone you missed.',
+        'The suggestion box helps you spell a name you already thought of — it never tells you whether that name is on the list.',
+        '“What counts here” under the list explains its words.',
+      ],
+    },
     sections: [
       {
         title: 'The lists',
+        practiceOnly: true,
         items: [
           'Over three hundred: an organisation’s players, FNCS winners by region or year, Div Cups, earnings thresholds, countries, the top earners’ teammates, and who played two events.',
           '“What counts here” under each list explains its words — which events are LANs or majors, whose nationality a dual national counts for.',
@@ -334,6 +390,7 @@ export const GAMES: GameMeta[] = [
   },
   {
     id: 'impostor',
+    socials: true,
     slug: 'griefer',
     title: 'Griefer',
     tagline: 'Spot the players who actually belong.',
@@ -346,6 +403,7 @@ export const GAMES: GameMeta[] = [
       'Cards show the player’s handle and nothing else: no flag, no org, no earnings.',
       'That is deliberate. A card carrying a Brazilian flag answers "competes in Brazil" for you, which made the old version a reading exercise rather than a knowledge one.',
       'Between four and six of the ten fit the rule, and the board never tells you how many. A stated count makes the last pick arithmetic instead of knowledge.',
+      'Most griefers nearly fit: one title short, just under the money, the next country over.',
     ],
     sections: [
       {
@@ -371,12 +429,13 @@ export const GAMES: GameMeta[] = [
     ],
     terms: ['org', 'fncs-title', 'lan', 'global', 'earnings', 'nationality', 'region'],
     // Hidden 26 Sep 2026: one of Griefer, Connections and Tic Tac Toe for now, and
-    // Tic Tac Toe is the one kept. Griefer's griefers are random outsiders.
+    // Tic Tac Toe is the one kept. Its griefers are near misses since 3 Oct 2026.
     hidden: true,
     Component: lazy(() => import('./impostor/ImpostorGame')),
   },
   {
     id: 'tic-tac-toe',
+    socials: true,
     slug: 'tic-tac-toe',
     title: 'Tic Tac Toe',
     tagline: 'Fill the grid with players who match both conditions.',
@@ -396,9 +455,18 @@ export const GAMES: GameMeta[] = [
       'No player fits the whole grid: at most 4 cells on Easy, 3 on Medium, 2 on Hard.',
       'The grid never offers a cell that would leave another with nobody left to fill it.',
     ],
+    daily: {
+      rules: [
+        '3 lives: a player who fits no open cell costs one.',
+        'Each player can be used once.',
+        'Every cell has at least two of the scene’s regulars, and no player fits more than 3 cells.',
+        'The grid never offers a cell that would leave another with nobody left to fill it.',
+      ],
+    },
     sections: [
       {
         title: 'Difficulty',
+        practiceOnly: true,
         items: [
           'Easy 🟢 — every cell has at least three names everyone knows. 3 lives.',
           'Medium 🟡 — every cell has at least two of the scene’s regulars. 3 lives.',
@@ -422,6 +490,7 @@ export const GAMES: GameMeta[] = [
   },
   {
     id: 'connections',
+    socials: true,
     slug: 'connections',
     title: 'Connections',
     tagline: 'Sort 16 players into the 4 groups they belong to.',
@@ -444,6 +513,7 @@ export const GAMES: GameMeta[] = [
   },
   {
     id: 'guess-the-player',
+    socials: true,
     slug: 'guess-the-player',
     title: 'Guess the Player',
     tagline: 'Narrow down the secret player attribute by attribute.',
@@ -454,7 +524,7 @@ export const GAMES: GameMeta[] = [
     ],
     rules: [
       'Green means a match, red means not. There is no in-between colour — the arrows already say which way to go.',
-      'Columns: region, country, status, age, career earnings, FNCS wins, FNCS finals played, and whether your guess has played with the secret player.',
+      'Columns: region, country, status, age, career earnings, FNCS wins, FNCS finals played, whether your guess has played with the secret player, and Twitch followers.',
       'Together is green when the two have entered 10 or more tournaments as teammates. A red cell still shows how many they did play, if any.',
       'Career earnings always show a direction, because exact-matching a six-figure number would never land.',
       'You can guess anyone, not just players from the pool the secret was drawn from. A guess with no published birthday shows — for age.',
@@ -484,6 +554,7 @@ export const GAMES: GameMeta[] = [
   },
   {
     id: 'pyramid',
+    socials: true,
     slug: 'pyramid',
     title: 'Pyramid',
     tagline: 'Sort ten players into order, best at the top.',
@@ -513,6 +584,7 @@ export const GAMES: GameMeta[] = [
   },
   {
     id: 'bingo',
+    socials: true,
     slug: 'bingo',
     title: 'Bingo',
     tagline: 'Players are dealt one by one — fill all 16 squares before the deck runs out.',
@@ -660,6 +732,7 @@ export const GAMES: GameMeta[] = [
   },
   {
     id: 'irl',
+    socials: true,
     slug: 'irl',
     title: 'IRL',
     tagline: 'A real name. Which player is behind it?',
@@ -754,6 +827,27 @@ export const GAMES: GameMeta[] = [
  * router always resolves to the game whose URL was actually requested, and a
  * link to a game's old slug — which is still its id — keeps working.
  */
+/** The line every daily puzzle's rules open with. */
+export const DAILY_LINE =
+  'One puzzle a day, the same for everyone. A new one at midnight, Central European time.';
+
+/**
+ * The rules as one mode shows them: the daily puzzle's own bullets and none of
+ * the setup sections, or everything as written for practice.
+ */
+export function rulesFor(
+  game: GameMeta,
+  daily: boolean,
+): { intro: string[]; rules: string[]; sections: RuleSection[] } {
+  const sections = game.sections ?? [];
+  if (!daily) return { intro: game.intro ?? [], rules: game.rules ?? [], sections };
+  return {
+    intro: [...(game.intro ?? []), DAILY_LINE],
+    rules: game.daily?.rules ?? game.rules ?? [],
+    sections: sections.filter((section) => !section.practiceOnly),
+  };
+}
+
 /** The games players see — everything not `hidden`. */
 export const VISIBLE_GAMES: GameMeta[] = GAMES.filter((game) => !game.hidden);
 

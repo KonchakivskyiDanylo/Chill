@@ -4,7 +4,15 @@ import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PlayerSearch } from '@/components/PlayerSearch';
+import { DailyEnd, DailyPending } from '@/components/DailyEnd';
+import { useSocials } from '@/data/useSocials';
 import { Banner, OptionCard, OptionGrid, Stat, StatusDot, StatusLegend } from '@/components/ui';
+import { useDailySet } from '@/daily/client';
+import { puzzleNumber } from '@/daily/day';
+import { logResult, savedRound, saveRound } from '@/daily/progress';
+import { useToday } from '@/daily/useDay';
+import { usePlayMode } from '@/daily/useDailyRound';
+import { DAILY_LEVEL, FRESH, result as dailyResult, shareGrid, type Snapshot } from './daily';
 import { WhatCounts } from '@/components/Glossary';
 import type { Facts } from '@/data/liquipedia/facts';
 import { loadOrgs, type Orgs } from '@/data/liquipedia/orgs';
@@ -47,6 +55,7 @@ export default function ListGame() {
 
 function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: Pools | null }) {
   const [event] = useEventMode();
+  const socials = useSocials();
   const pool = activePool(pools, event);
 
   /**
@@ -66,19 +75,22 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
    * categories appear when the files land, and a missing file costs those
    * categories rather than the game.
    */
-  const [extra, setExtra] = useState<{ orgs: Orgs | null; teammates: Teammates | null }>({
+  const [extra, setExtra] = useState<{ orgs: Orgs | null; teammates: Teammates | null; settled: number }>({
     orgs: null,
     teammates: null,
+    settled: 0,
   });
   useEffect(() => {
     let cancelled = false;
+    const settle = (patch: Partial<typeof extra>) =>
+      !cancelled && setExtra((was) => ({ ...was, ...patch, settled: was.settled + 1 }));
     loadOrgs().then(
-      (orgs) => !cancelled && setExtra((was) => ({ ...was, orgs })),
-      () => {},
+      (orgs) => settle({ orgs }),
+      () => settle({}),
     );
     loadTeammates().then(
-      (teammates) => !cancelled && setExtra((was) => ({ ...was, teammates })),
-      () => {},
+      (teammates) => settle({ teammates }),
+      () => settle({}),
     );
     return () => {
       cancelled = true;
@@ -96,8 +108,8 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
       );
       if (scoped.length > 0) return scoped;
     }
-    return buildCriteria(roster, facts, pools, extra.orgs, extra.teammates);
-  }, [pool, roster, facts, pools, event, extra]);
+    return buildCriteria(roster, facts, pools, extra.orgs, extra.teammates, socials);
+  }, [pool, roster, facts, pools, event, extra, socials]);
 
   const [difficulty, setDifficulty] = useState<Difficulty>('easy');
   const [criterion, setCriterion] = useState<Criterion | null>(null);
@@ -109,12 +121,74 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
   const [gaveUp, setGaveUp] = useState(false);
   const [found, setFound] = useState<Searchable[]>([]);
 
-  useRoundRecorder('list', finished && criterion !== null, () => {
+  /*
+   * The daily list. Not `useDailyRound` like the other games: a List run is a
+   * clock as much as a state, so the run is saved as when it started and how
+   * far the bonuses and penalties moved it (`daily.ts`), and a reload works
+   * out the real time left from that.
+   */
+  const [dailyOn, setDailyOn] = usePlayMode();
+  const today = useToday();
+  const { set, error: dailyError } = useDailySet(dailyOn ? today : null);
+  // The day's list may be a follower list, so the daily waits for the counts too.
+  const listsReady = extra.settled >= 2 && socials !== null;
+  const dailyList = useMemo(
+    () => (dailyOn && set && listsReady ? (criteria.find((list) => list.id === set.puzzles.list?.list) ?? null) : null),
+    [dailyOn, set, listsReady, criteria],
+  );
+  const run = useRef<Snapshot>(FRESH);
+  /** A run that was already over when the page loaded — recorded the first time, not again. */
+  const [restoredOver, setRestoredOver] = useState(false);
+
+  const persist = (patch: Partial<Snapshot>) => {
+    run.current = { ...run.current, ...patch };
+    if (!dailyOn || !dailyList) return;
+    saveRound('list', today, set?.puzzles.list, run.current);
+    if (run.current.ended) logResult('list', today, dailyResult(run.current, dailyList.answers.length));
+  };
+
+  useEffect(() => {
+    if (!dailyList) return;
+    const saved = savedRound<Snapshot>('list', today, set?.puzzles.list) ?? FRESH;
+    run.current = saved;
+    setCriterion(dailyList);
+    setDifficulty(DAILY_LEVEL);
+    setFound(saved.found);
+    setGaveUp(saved.ended === 'gave-up');
+    setFeedback(null);
+    setRestoredOver(saved.ended !== null);
+    const deadline = saved.started === null ? 0 : saved.started + (START_SECONDS + saved.shift) * 1000;
+    if (saved.ended) {
+      setRunning(false);
+      setFinished(true);
+      setTimeLeft(Math.max(0, (deadline - Date.now()) / 1000));
+    } else if (saved.started !== null && deadline <= Date.now()) {
+      // Left open, or closed, past the end of the clock: the run is over.
+      run.current = { ...saved, ended: 'time' };
+      saveRound('list', today, set?.puzzles.list, run.current);
+      logResult('list', today, dailyResult(run.current, dailyList.answers.length));
+      setRestoredOver(true);
+      setRunning(false);
+      setFinished(true);
+      setTimeLeft(0);
+    } else if (saved.started !== null) {
+      deadlineRef.current = deadline;
+      setTimeLeft((deadline - Date.now()) / 1000);
+      setFinished(false);
+      setRunning(true);
+    } else {
+      setRunning(false);
+      setFinished(false);
+      setTimeLeft(START_SECONDS);
+    }
+  }, [dailyList, today]);
+
+  useRoundRecorder('list', finished && criterion !== null && !(dailyOn && restoredOver), () => {
     const list = criterion!;
     return {
       title: `List — ${list.title}`,
       data: facts.generated,
-      setup: { event, level: difficulty },
+      setup: dailyOn ? { daily: today, level: difficulty } : { event, level: difficulty },
       outcome: gaveUp ? 'gave-up' : found.length >= list.answers.length ? 'won' : 'lost',
       r: {
         list: { id: list.id, name: list.title },
@@ -129,6 +203,9 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
   const [timeLeft, setTimeLeft] = useState(START_SECONDS);
   const [feedback, setFeedback] = useState<{ tone: string; message: string } | null>(null);
   const deadlineRef = useRef<number>(0);
+  /** The timer's way to `persist` — its interval outlives the render that made it. */
+  const persistRef = useRef(persist);
+  persistRef.current = persist;
 
   const { best, submit: submitBest } = useBestScore(`list:${criterion?.id ?? 'none'}:${difficulty}`);
 
@@ -142,6 +219,7 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
         setTimeLeft(0);
         setRunning(false);
         setFinished(true);
+        persistRef.current({ ended: 'time' });
       } else {
         setTimeLeft(remaining);
       }
@@ -162,18 +240,21 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
 
   const start = useCallback(() => {
     if (!criterion) return;
+    const now = Date.now();
     setFound([]);
     setFeedback(null);
     setFinished(false);
     setGaveUp(false);
     setTimeLeft(START_SECONDS);
-    deadlineRef.current = Date.now() + START_SECONDS * 1000;
+    deadlineRef.current = now + START_SECONDS * 1000;
     setRunning(true);
+    persistRef.current({ ...FRESH, started: now });
   }, [criterion]);
 
   const adjustTime = (seconds: number) => {
     deadlineRef.current += seconds * 1000;
     setTimeLeft(Math.max(0, (deadlineRef.current - Date.now()) / 1000));
+    persist({ shift: run.current.shift + seconds });
   };
 
   const guess = (player: Searchable) => {
@@ -184,6 +265,7 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
       return;
     }
     if (!criterion.answers.some((answer) => answer.id === player.id)) {
+      persist({ wrong: run.current.wrong + 1 });
       if (difficulty === 'hard') adjustTime(-PENALTY_SECONDS);
       setFeedback({
         tone: 'var(--danger)',
@@ -205,10 +287,12 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
      * and it should be the thing that stops it.
      */
     const complete = found.length + 1 >= criterion.answers.length;
+    persist({ found: [{ id: player.id, name: player.name }, ...run.current.found] });
     if (complete) {
       setRunning(false);
       setFinished(true);
       setFeedback(null);
+      persist({ ended: 'cleared' });
     } else {
       adjustTime(BONUS_SECONDS);
       setFeedback({ tone: 'var(--success)', message: `${player.name} +${BONUS_SECONDS}s` });
@@ -226,10 +310,34 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
     );
   }
 
+  const shell = {
+    game: meta,
+    dataNote: <RosterNote />,
+    daily: {
+      on: dailyOn,
+      number: puzzleNumber(today),
+      setOn: (on: boolean) => {
+        setDailyOn(on);
+        setCriterion(null);
+        setRunning(false);
+        setFinished(false);
+      },
+    },
+  };
+
+  if (dailyOn && (!criterion || criterion.id !== dailyList?.id)) {
+    const status = dailyError ? 'error' : set && listsReady && !dailyList ? 'missing' : 'loading';
+    return (
+      <GameShell {...shell}>
+        <DailyPending status={status} error={dailyError} />
+      </GameShell>
+    );
+  }
+
   // ------------------------------------------------------------- setup --
   if (!criterion) {
     return (
-      <GameShell game={meta} dataNote={<RosterNote />}>
+      <GameShell {...shell}>
         <div className="stack">
           <section className="card stack">
             <div className="card__title">Difficulty</div>
@@ -290,12 +398,13 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
 
   return (
     <GameShell
-      game={meta}
-      dataNote={<RosterNote />}
+      {...shell}
       toolbar={
-        <button type="button" className="icon-btn" onClick={() => setCriterion(null)}>
-          ↺ New list
-        </button>
+        dailyOn ? null : (
+          <button type="button" className="icon-btn" onClick={() => setCriterion(null)}>
+            ↺ New list
+          </button>
+        )
       }
     >
       <div className="stack">
@@ -312,13 +421,26 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
           />
         </div>
 
-        <section className="card stack">
+        <section className="card stack list-head">
           <div className="card__title">Your list</div>
           <h2>{criterion.title}</h2>
           {criterion.subtitle ? <p className="small muted">{criterion.subtitle}</p> : null}
-          <p className="tiny faint">
-            {criterion.answers.length} {noun} fit.
-          </p>
+          <div className="list-meter" aria-label={`${found.length} of ${criterion.answers.length} found`}>
+            <div className="list-meter__bar">
+              <span style={{ width: `${(found.length / Math.max(1, criterion.answers.length)) * 100}%` }} />
+            </div>
+            <span className="list-meter__count">
+              {found.length} / {criterion.answers.length} {noun}
+            </span>
+          </div>
+          {running ? (
+            <div className="list-timer" aria-hidden="true">
+              <span
+                className={timeLeft <= 10 ? 'is-low' : ''}
+                style={{ width: `${Math.min(100, (timeLeft / START_SECONDS) * 100)}%` }}
+              />
+            </div>
+          ) : null}
           <WhatCounts terms={termsIn(`${criterion.title} ${criterion.subtitle ?? ''}`, criterion.id)} />
         </section>
 
@@ -356,6 +478,7 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
                   setGaveUp(true);
                   setTimeLeft(0);
                   setFeedback(null);
+                  persist({ ended: 'gave-up' });
                 }}
               />
             </div>
@@ -366,8 +489,8 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
           <section className="card stack-sm">
             <div className="card__title">Found ({found.length})</div>
             <div className="list-grid">
-              {found.map((player) => (
-                <div key={player.id} className="list-chip list-chip--found">
+              {found.map((player, index) => (
+                <div key={player.id} className={`list-chip list-chip--found${index === 0 && running ? ' list-chip--new' : ''}`}>
                   {player.name}
                 </div>
               ))}
@@ -403,19 +526,29 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
               </section>
             ) : null}
 
-            <div className="row">
-              <button type="button" className="btn btn--primary btn--lg" style={{ flex: 1 }} onClick={start}>
-                Play again
-              </button>
-              <button
-                type="button"
-                className="btn btn--lg"
-                style={{ flex: 1 }}
-                onClick={() => setCriterion(null)}
-              >
-                New list
-              </button>
-            </div>
+            {dailyOn ? (
+              <DailyEnd
+                game="list"
+                number={puzzleNumber(today)}
+                day={today}
+                result={dailyResult(run.current, criterion.answers.length)}
+                grid={shareGrid(run.current, criterion.answers.length)}
+              />
+            ) : (
+              <div className="row">
+                <button type="button" className="btn btn--primary btn--lg" style={{ flex: 1 }} onClick={start}>
+                  Play again
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--lg"
+                  style={{ flex: 1 }}
+                  onClick={() => setCriterion(null)}
+                >
+                  New list
+                </button>
+              </div>
+            )}
           </div>
         ) : null}
       </div>

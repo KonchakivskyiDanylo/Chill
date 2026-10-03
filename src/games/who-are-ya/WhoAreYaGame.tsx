@@ -7,7 +7,11 @@ import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { PlayerSearch } from '@/components/PlayerSearch';
 import { PoolSetup } from '@/components/PoolSetup';
-import { Banner, OptionCard, OptionGrid, PlayerLine, Stat } from '@/components/ui';
+import { DailyEnd, DailyPending } from '@/components/DailyEnd';
+import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
+import { clueGrid, clueResult, snapClues } from '@/daily/clue-round';
+import { useDailyRound, usePlayMode } from '@/daily/useDailyRound';
+import { restoreDaily } from './daily';
 import type { Facts } from '@/data/liquipedia/facts';
 import type { Pools } from '@/data/liquipedia/pools';
 import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
@@ -89,17 +93,28 @@ function Game({
   const [choice, setChoice] = usePoolChoice();
   const [event] = useEventMode();
   const [mode, setMode] = useState<Mode>('easy');
-  const [game, setGame] = useState<GameState | null>(null);
+  const byId = useMemo(() => new Map(roster.players.map((player) => [player.id, player])), [roster]);
+  const [dailyOn, setDailyOn] = usePlayMode();
+  const daily = useDailyRound('who-are-ya', {
+    on: dailyOn,
+    ready: true,
+    restore: (puzzle, saved) => restoreDaily(puzzle, teammates, byId, saved),
+    snapshot: snapClues,
+    finished: (state) => state.status !== 'playing',
+    result: clueResult,
+  });
+  const [practice, setPractice] = useState<GameState | null>(null);
+  const game = dailyOn ? daily.state : practice;
+  const setGame = (next: GameState) => (dailyOn ? daily.setState(next) : setPractice(next));
 
-  useRoundRecorder('who-are-ya', game !== null && game.status !== 'playing', () => ({
+  useRoundRecorder('who-are-ya', dailyOn ? daily.endedHere : game !== null && game.status !== 'playing', () => ({
     title: `Who Are Ya? — ${game!.secret.name}`,
     data: teammates.generated,
-    setup: poolSetup(event, choice, game!.mode),
+    setup: dailyOn ? { daily: daily.day, mode: game!.mode } : poolSetup(event, choice, game!.mode),
     ...roundRecord(game!),
   }));
   const [error, setError] = useState<string | null>(null);
-
-  const byId = useMemo(() => new Map(roster.players.map((player) => [player.id, player])), [roster]);
+  const shell = { game: meta, dataNote: <RosterNote />, daily: { on: dailyOn, number: daily.number, setOn: setDailyOn } };
   const cluesFor = useCallback(
     // Only teammates worth a clue (`MIN_SHARED`), so every count below is a count of real hands.
     (playerId: string) => usableClues(teammates.cluesFor(playerId, byId)),
@@ -155,14 +170,20 @@ function Game({
     }
     writeLocal(key, drawn.seen);
     setError(null);
-    setGame(createGame(drawn.pick, cluesFor(drawn.pick.id), mode));
+    setPractice(createGame(drawn.pick, cluesFor(drawn.pick.id), mode));
   }, [players, pools, event, choice, cluesFor, mode, field]);
 
-  const note = <RosterNote />;
+  if (!game && dailyOn) {
+    return (
+      <GameShell {...shell}>
+        <DailyPending status={daily.status} error={daily.error} />
+      </GameShell>
+    );
+  }
 
   if (!game) {
     return (
-      <GameShell game={meta} dataNote={note}>
+      <GameShell {...shell}>
         <div className="stack">
           <PoolSetup
             roster={roster}
@@ -209,30 +230,33 @@ function Game({
   const visible = game.clues.slice(0, game.revealed);
   const guessedIds = new Set(game.guesses.map((p) => p.id));
   const withMatches = showsMatches(game.mode);
+  /** The hand's biggest count, so each teammate's bar reads against it. */
+  const topCount = Math.max(1, ...game.clues.map((clue) => clue.events));
   /** A hand shorter than the guesses every round gets — see `MIN_GUESSES`. */
   const short = game.clues.length < MIN_GUESSES;
   const left = guessesLeft(game);
 
   return (
     <GameShell
-      game={meta}
-      dataNote={note}
+      {...shell}
       toolbar={
-        <>
-          <button type="button" className="icon-btn" onClick={start}>
-            ↺ New player
-          </button>
-          <button type="button" className="icon-btn" onClick={() => setGame(null)}>
-            ⚙ Setup
-          </button>
-        </>
+        dailyOn ? null : (
+          <>
+            <button type="button" className="icon-btn" onClick={start}>
+              ↺ New player
+            </button>
+            <button type="button" className="icon-btn" onClick={() => setPractice(null)}>
+              ⚙ Setup
+            </button>
+          </>
+        )
       }
     >
       <div className="stack">
         <div className="stats">
           <Stat label="Clues used" value={`${finished ? game.earned : game.revealed}/${game.clues.length}`} />
           <Stat label="Guesses" value={short ? `${game.guesses.length}/${MIN_GUESSES}` : game.guesses.length} />
-          <Stat label="Order" value={MODES.find((m) => m.id === game.mode)!.label} />
+          {dailyOn ? null : <Stat label="Order" value={MODES.find((m) => m.id === game.mode)!.label} />}
         </div>
 
         <section className="card stack">
@@ -242,31 +266,46 @@ function Game({
             the round fills in the teammates it was still holding back, here,
             dimmed; it does not print a second list of everyone on record.
           */}
-          <ul className="stack-sm list-reset">
-            {visible.map((clue, index) => (
-              <li
-                key={clue.player.id}
-                className="row-between"
-                style={{
-                  padding: '8px 0',
-                  borderBottom: '1px solid var(--border)',
-                  flexWrap: 'nowrap',
-                  opacity: finished && index >= game.earned ? 0.55 : 1,
-                }}
-              >
-                <PlayerLine
-                  player={clue.player}
-                  size={36}
-                  meta={clue.player.team ?? clue.player.countryName}
-                />
-                {withMatches || finished ? (
-                  <span className="chip nums">{plural(clue.events, 'tournament')}</span>
-                ) : (
-                  <span className="chip faint">?</span>
-                )}
-              </li>
-            ))}
-          </ul>
+          {/* Every teammate's slot on the board from the start, like Career Path's. */}
+          <ol className="board-grid board-grid--five list-reset">
+            {game.clues.map((clue, index) => {
+              if (index >= visible.length) {
+                return (
+                  <li key={clue.player.id} className="board-step">
+                    <div className="board-card board-card--hidden">
+                      <span className="board-card__num">{index + 1}</span>
+                      <span className="board-card__q">?</span>
+                    </div>
+                  </li>
+                );
+              }
+              const isNew = index === visible.length - 1 && !finished;
+              const shown = withMatches || finished;
+              return (
+                <li key={clue.player.id} className="board-step">
+                  <div
+                    className={`board-card${isNew ? ' board-card--new' : ''}${finished && index >= game.earned ? ' board-card--late' : ''}`}
+                  >
+                    <span className="board-card__num">{index + 1}</span>
+                    {isNew ? <span className="board-card__flag">new</span> : null}
+                    <PlayerAvatar player={clue.player} size={42} />
+                    <span className="board-card__title">
+                      <CountryBadge code={clue.player.country} name={clue.player.countryName} /> {clue.player.name}
+                    </span>
+                    <span className="board-card__meta">{clue.player.team ?? clue.player.countryName ?? '—'}</span>
+                    <span className="board-card__meta" style={{ fontWeight: 700 }}>
+                      {shown ? plural(clue.events, 'tournament') : '? tournaments'}
+                    </span>
+                    {shown ? (
+                      <span className="board-bar" aria-hidden="true">
+                        <span style={{ width: `${Math.round((clue.events / topCount) * 100)}%` }} />
+                      </span>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
           {finished && game.clues.length > game.earned ? (
             <p className="tiny faint" style={{ margin: 0 }}>
               You got there on {plural(game.earned, 'clue')} — the dimmed{' '}
@@ -314,9 +353,19 @@ function Game({
               </div>
             </div>
 
-            <button type="button" className="btn btn--primary btn--lg btn--block" onClick={start}>
-              Next player
-            </button>
+            {dailyOn ? (
+              <DailyEnd
+                game="who-are-ya"
+                number={daily.number}
+                day={daily.day}
+                result={clueResult(game)}
+                grid={clueGrid(game)}
+              />
+            ) : (
+              <button type="button" className="btn btn--primary btn--lg btn--block" onClick={start}>
+                Next player
+              </button>
+            )}
           </div>
         ) : (
           <div className="stack-sm">

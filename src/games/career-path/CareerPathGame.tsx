@@ -7,7 +7,11 @@ import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { PlayerSearch } from '@/components/PlayerSearch';
 import { PoolSetup } from '@/components/PoolSetup';
+import { DailyEnd, DailyPending } from '@/components/DailyEnd';
 import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
+import { clueGrid, clueResult, snapClues } from '@/daily/clue-round';
+import { useDailyRound, usePlayMode } from '@/daily/useDailyRound';
+import { restoreDaily } from './daily';
 import type { MajorResult, Majors } from '@/data/liquipedia/majors';
 import type { Pools } from '@/data/liquipedia/pools';
 import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
@@ -65,14 +69,27 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
   const [choice, setChoice] = usePoolChoice();
   const [event] = useEventMode();
   const [mode, setMode] = useState<Mode>('order');
-  const [game, setGame] = useState<GameState | null>(null);
+  const byId = useMemo(() => new Map(roster.players.map((player) => [player.id, player])), [roster]);
+  const [dailyOn, setDailyOn] = usePlayMode();
+  const daily = useDailyRound('career-path', {
+    on: dailyOn,
+    ready: true,
+    restore: (puzzle, saved) => restoreDaily(puzzle, majors, byId, saved),
+    snapshot: snapClues,
+    finished: (state) => state.status !== 'playing',
+    result: clueResult,
+  });
+  const [practice, setPractice] = useState<GameState | null>(null);
+  const game = dailyOn ? daily.state : practice;
+  const setGame = (next: GameState) => (dailyOn ? daily.setState(next) : setPractice(next));
 
-  useRoundRecorder('career-path', game !== null && game.status !== 'playing', () => ({
+  useRoundRecorder('career-path', dailyOn ? daily.endedHere : game !== null && game.status !== 'playing', () => ({
     title: `Career Path — ${game!.secret.name}`,
     data: majors.generated,
-    setup: poolSetup(event, choice, game!.mode),
+    setup: dailyOn ? { daily: daily.day, mode: game!.mode } : poolSetup(event, choice, game!.mode),
     ...roundRecord(game!),
   }));
+  const shell = { game: meta, dataNote: <RosterNote />, daily: { on: dailyOn, number: daily.number, setOn: setDailyOn } };
   const [error, setError] = useState<string | null>(null);
 
   // An event field asks about anyone in it with a major; the whole roster only
@@ -109,14 +126,20 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
     }
     writeLocal(key, drawn.seen);
     setError(null);
-    setGame(createGame(drawn.pick, majors.resultsFor(drawn.pick.id), mode, majors));
+    setPractice(createGame(drawn.pick, majors.resultsFor(drawn.pick.id), mode, majors));
   }, [players, pools, event, choice, majors, mode, field]);
 
-  const note = <RosterNote />;
+  if (!game && dailyOn) {
+    return (
+      <GameShell {...shell}>
+        <DailyPending status={daily.status} error={daily.error} />
+      </GameShell>
+    );
+  }
 
   if (!game) {
     return (
-      <GameShell game={meta} dataNote={note}>
+      <GameShell {...shell}>
         <div className="stack">
           <PoolSetup
             roster={roster}
@@ -169,24 +192,25 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
 
   return (
     <GameShell
-      game={meta}
-      dataNote={note}
+      {...shell}
       toolbar={
-        <>
-          <button type="button" className="icon-btn" onClick={start}>
-            ↺ New player
-          </button>
-          <button type="button" className="icon-btn" onClick={() => setGame(null)}>
-            ⚙ Setup
-          </button>
-        </>
+        dailyOn ? null : (
+          <>
+            <button type="button" className="icon-btn" onClick={start}>
+              ↺ New player
+            </button>
+            <button type="button" className="icon-btn" onClick={() => setPractice(null)}>
+              ⚙ Setup
+            </button>
+          </>
+        )
       }
     >
       <div className="stack">
         <div className="stats">
           <Stat label="Clues used" value={`${finished ? game.earned : game.revealed}/${game.clues.length}`} />
           <Stat label="Guesses" value={short ? `${game.guesses.length}/${MIN_GUESSES}` : game.guesses.length} />
-          <Stat label="Mode" value={game.mode === 'order' ? 'Order' : 'Random'} />
+          {dailyOn ? null : <Stat label="Mode" value={game.mode === 'order' ? 'Order' : 'Random'} />}
         </div>
 
         <section className="card stack">
@@ -199,16 +223,38 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
             printing a second copy of the career in a card underneath the
             answer. Clues you never needed are dimmed.
           */}
-          <ol className="cp-path list-reset">
-            {visible.map((clue, index) => (
-              <ClueRow
-                key={clue.result.tournament.name}
-                result={clue.result}
-                isNew={index === visible.length - 1 && !finished}
-                dim={finished && index >= game.earned}
-              />
+          {/*
+            Every clue's slot is on the board from the start, the ones still
+            to come dashed with a ?, so you can see how much career is left.
+            Numbered, so Order reads oldest first without arrows to wrap.
+          */}
+          <ol className="board-grid board-grid--five list-reset">
+            {game.clues.map((clue, index) => (
+              <li key={clue.result.tournament.name} className="board-step">
+                {index < visible.length ? (
+                  <ResultCard
+                    number={index + 1}
+                    result={clue.result}
+                    isNew={index === visible.length - 1 && !finished}
+                    dim={finished && index >= game.earned}
+                  />
+                ) : (
+                  <div className="board-card board-card--hidden">
+                    <span className="board-card__num">{index + 1}</span>
+                    <span className="board-card__q">?</span>
+                  </div>
+                )}
+              </li>
             ))}
           </ol>
+          <div className="board-progress" aria-hidden="true">
+            {game.clues.map((clue, index) => (
+              <span
+                key={clue.result.tournament.name}
+                className={index < (finished ? game.earned : game.revealed) ? 'is-on' : ''}
+              />
+            ))}
+          </div>
           {finished && game.clues.length > game.earned ? (
             <p className="tiny faint" style={{ margin: 0 }}>
               You got there on {plural(game.earned, 'clue')} — the dimmed{' '}
@@ -242,9 +288,19 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
             </Banner>
             <SecretCard player={game.secret} />
 
-            <button type="button" className="btn btn--primary btn--lg btn--block" onClick={start}>
-              Next player
-            </button>
+            {dailyOn ? (
+              <DailyEnd
+                game="career-path"
+                number={daily.number}
+                day={daily.day}
+                result={clueResult(game)}
+                grid={clueGrid(game)}
+              />
+            ) : (
+              <button type="button" className="btn btn--primary btn--lg btn--block" onClick={start}>
+                Next player
+              </button>
+            )}
           </div>
         ) : (
           <div className="stack-sm">
@@ -298,36 +354,41 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
   );
 }
 
-function ClueRow({
+/** A finish as a medal: gold, silver, bronze, the top ten in green. */
+function medalClass(placement: number): string {
+  if (placement === 1) return 'medal medal--gold';
+  if (placement === 2) return 'medal medal--silver';
+  if (placement === 3) return 'medal medal--bronze';
+  return placement <= 10 ? 'medal medal--top10' : 'medal';
+}
+
+function ResultCard({
+  number,
   result,
   isNew,
   dim,
 }: {
+  number: number;
   result: MajorResult;
   isNew?: boolean;
-  /** A result that was never one of the ten clues, in the full reveal. */
+  /** A clue the round never needed, once it is over. */
   dim?: boolean;
 }) {
   const { tournament, placement } = result;
   return (
-    <li className={`cp-clue${dim ? ' cp-clue--dim' : ''}`}>
-      <span className="cp-clue__dot" aria-hidden="true" />
-      <div className="cp-clue__body">
-        <div className="cp-clue__event">{tournament.shortName}</div>
-        <div className="cp-clue__meta">
-          {tournament.mode ? `${tournament.mode} · ` : ''}
-          {tournament.year}
-          {tournament.prizePool ? ` · ${moneyShort(tournament.prizePool)} pool` : ''}
-        </div>
-      </div>
-      <div
-        className={`cp-clue__place${placement === 1 ? ' cp-clue__place--win' : ''}`}
-        aria-label={`Placed ${ordinal(placement)}`}
-      >
+    <div className={`board-card${isNew ? ' board-card--new' : ''}${dim ? ' board-card--late' : ''}`}>
+      <span className="board-card__num">{number}</span>
+      {isNew ? <span className="board-card__flag">new</span> : null}
+      <span className={medalClass(placement)} aria-label={`Placed ${ordinal(placement)}`}>
         {ordinal(placement)}
-      </div>
-      {isNew ? <span className="cp-clue__new">new</span> : null}
-    </li>
+      </span>
+      <span className="board-card__title">{tournament.shortName}</span>
+      <span className="board-card__meta">
+        {tournament.mode ? `${tournament.mode} · ` : ''}
+        {tournament.year}
+        {tournament.prizePool ? ` · ${moneyShort(tournament.prizePool)}` : ''}
+      </span>
+    </div>
   );
 }
 

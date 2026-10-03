@@ -37,11 +37,13 @@ export interface Count {
  *   own      a game with no shared picker — Higher or Lower, Tic Tac Toe,
  *            Tenaball, List — on the whole roster, set up by its own level
  *            or category
+ *   daily    the day's puzzle, the same for everyone (`setup.daily` is the day)
  */
-export type Source = 'random' | 'chosen' | 'event' | 'own';
-export const SOURCES: Source[] = ['random', 'chosen', 'event', 'own'];
+export type Source = 'daily' | 'random' | 'chosen' | 'event' | 'own';
+export const SOURCES: Source[] = ['daily', 'random', 'chosen', 'event', 'own'];
 
 export function sourceOf(setup: Setup | undefined): Source {
+  if (setup?.daily) return 'daily';
   if (setup?.event) return 'event';
   if (setup?.pick === 'random') return 'random';
   if (setup?.pick === 'custom') return 'chosen';

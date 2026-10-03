@@ -16,8 +16,14 @@ export { NEAR_NESTED };
 /** Pure logic for the 3x3 grid game. */
 
 export const SIZE = 3;
-/** How many candidate boards to try per pass. */
-const GENERATION_ATTEMPTS = 600;
+/**
+ * How many candidate boards to try per pass. 600 was enough until orgs.json
+ * folded "NRG Esports" into NRG (3 Oct 2026): the org rules shifted, and one
+ * board in six on Medium ran out of tries and fell back to near-identical axes.
+ * A pass that finds a board stops early, so this only costs time on the rare
+ * hard seed.
+ */
+const GENERATION_ATTEMPTS = 1500;
 
 /**
  * The one setting the game has.
@@ -111,7 +117,7 @@ export function generateBoard(
   seed: string = String(Date.now()),
   recent: readonly string[] = [],
 ): Board | null {
-  const pool = buildCriteria({ ...source, players: pools.answers }, { minMatches: 5, maxShare: 0.45 });
+  const pool = boardRules(source, pools);
   if (pool.length < SIZE * 2) return null;
   const weights = kindWeights(pool);
   const level = LEVELS[difficulty];
@@ -138,6 +144,29 @@ export function generateBoard(
     }
   }
   return null;
+}
+
+/** The rules a board may use, built against the level's fame band. */
+function boardRules(source: Omit<CriteriaSource, 'players'>, pools: BoardPools): PlayerCriterion[] {
+  return buildCriteria({ ...source, players: pools.answers }, { minMatches: 5, maxShare: 0.45 });
+}
+
+/**
+ * A board from its rules' ids — how the daily puzzle rebuilds the grid it was
+ * given. Null when the data no longer makes one of the six rules.
+ */
+export function boardFrom(
+  source: Omit<CriteriaSource, 'players'>,
+  pools: BoardPools,
+  rows: readonly string[],
+  cols: readonly string[],
+): Board | null {
+  const byId = new Map(boardRules(source, pools).map((rule) => [rule.id, rule]));
+  const axis = (ids: readonly string[]) => ids.map((id) => byId.get(id));
+  const [r, c] = [axis(rows), axis(cols)];
+  if (r.length !== SIZE || c.length !== SIZE || [...r, ...c].some((rule) => !rule)) return null;
+  const board = { rows: r as PlayerCriterion[], cols: c as PlayerCriterion[] };
+  return { ...board, candidates: acceptedPerCell(board, pools.accepted) };
 }
 
 /**

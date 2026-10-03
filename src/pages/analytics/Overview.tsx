@@ -50,6 +50,7 @@ export function Overview({ data, pools }: { data: Dashboard | null; pools: Pools
               sort: (g) => (g.rounds ? g.outcomes['gave-up'] / g.rounds : -1),
               align: 'right',
             },
+            { head: 'Daily', cell: (g) => share(g, 'daily'), align: 'right' },
             { head: 'Random', cell: (g) => share(g, 'random'), align: 'right' },
             { head: 'Chosen', cell: (g) => share(g, 'chosen'), align: 'right' },
             { head: 'Event', cell: (g) => share(g, 'event'), align: 'right' },

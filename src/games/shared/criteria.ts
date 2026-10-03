@@ -1,6 +1,7 @@
 import type { Facts } from '@/data/liquipedia/facts';
 import type { Orgs } from '@/data/liquipedia/orgs';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
+import { countShort, PLATFORM_META, type Socials } from '@/data/socials';
 import { moneyShort } from '@/lib/format';
 
 /**
@@ -44,7 +45,9 @@ export type CriterionKind =
   | 'fncs-regions'
   | 'world-cup'
   | 'fncs-partners'
-  | 'played-with';
+  | 'played-with'
+  // Followers: built only when the server has fresh counts (`data/socials.ts`).
+  | 'socials';
 
 export interface PlayerCriterion {
   id: string;
@@ -62,7 +65,15 @@ export interface CriteriaSource {
   players: readonly RosterPlayer[];
   facts: Facts;
   orgs: Orgs;
+  /**
+   * Follower counts, when the server has fresh ones. Absent or empty, the
+   * follower rules are simply not built — the rest of the board is unchanged.
+   */
+  socials?: Socials | null;
 }
+
+/** The follower lines a rule can draw: "100K+ Twitch followers", "1M+ YouTube subscribers". */
+export const SOCIAL_THRESHOLDS = [100_000, 1_000_000] as const;
 
 export interface CriteriaOptions {
   /** Criteria with fewer matches than this are dropped. */
@@ -103,7 +114,7 @@ const REGION_SHORT: Record<string, string> = {
 };
 
 export function buildCriteria(
-  { players, facts, orgs }: CriteriaSource,
+  { players, facts, orgs, socials }: CriteriaSource,
   options: CriteriaOptions = {},
 ): PlayerCriterion[] {
   const { minMatches = 4, maxShare = 0.5, maxOrgs = 10 } = options;
@@ -279,6 +290,22 @@ export function buildCriteria(
       `Won FNCS in ${year}`,
       (p) => facts.of(p.id).fncsWinYears.includes(year),
     );
+  }
+
+  // ------------------------------------------------------------ followers --
+  // "Has 100K+ Twitch followers": a player's own channels, the count as the
+  // platform gives it. One rule per platform and line.
+  for (const platform of socials?.platforms ?? []) {
+    const meta = PLATFORM_META[platform];
+    for (const threshold of SOCIAL_THRESHOLDS) {
+      add(
+        `${platform}:${threshold}`,
+        'socials',
+        `has ${countShort(threshold)}+ ${meta.noun}`,
+        `${countShort(threshold)}+ ${meta.name}`,
+        (p) => (socials!.of(platform, p) ?? 0) >= threshold,
+      );
+    }
   }
 
   // ------------------------------------------------------ played at event --

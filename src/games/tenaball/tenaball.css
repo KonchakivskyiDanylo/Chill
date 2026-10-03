@@ -46,6 +46,7 @@
   border-style: solid;
   border-color: rgba(34, 197, 94, 0.4);
   background: var(--success-soft);
+  animation: board-pop 0.32s ease-out;
 }
 /* Half a duo named: solid enough to read as progress, not as a finished row. */
 .tb-slot--partial {
@@ -58,12 +59,30 @@
 }
 
 .tb-slot__rank {
-  width: 22px;
+  width: 24px;
+  height: 24px;
   flex: none;
-  text-align: center;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 0.8rem;
   font-weight: 800;
-  color: var(--text-faint);
+  color: var(--text-muted);
+  background: var(--surface-3);
   font-variant-numeric: tabular-nums;
+}
+/* The podium, as medals — the same colours as Career Path's finishes. */
+.tb-slot__rank--gold {
+  background: linear-gradient(135deg, #fde68a, #f59e0b);
+  color: #3b2300;
+}
+.tb-slot__rank--silver {
+  background: linear-gradient(135deg, #f1f5f9, #94a3b8);
+  color: #1e293b;
+}
+.tb-slot__rank--bronze {
+  background: linear-gradient(135deg, #fed7aa, #c2410c);
+  color: #2a1003;
 }
 
 .tb-slot__value {
@@ -108,6 +127,10 @@
 
 .tb-head {
   padding: 12px 14px;
+  background:
+    radial-gradient(360px 120px at 0% 0%, var(--primary-soft), transparent 70%),
+    var(--surface);
+  border-color: color-mix(in srgb, var(--primary) 25%, var(--border));
 }
 .tb-head__row {
   display: flex;
@@ -124,7 +147,8 @@
   color: var(--text-faint);
 }
 .tb-head__title {
-  font-size: 1.08rem;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
 }
 
 /* ------------------------------------------------------- a round in play -- */
@@ -140,6 +164,12 @@
 }
 .tb-play .stat__value {
   font-size: 1.15rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tb-slot--filled {
+    animation: none;
+  }
 }
 
 @media (max-width: 460px) {

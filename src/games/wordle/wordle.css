@@ -23,6 +23,28 @@
 }
 .wordle-tile--filled {
   border-color: var(--border-strong);
+  animation: board-pop 0.18s ease-out;
+}
+
+/* A scored row turns over tile by tile, left to right. */
+.wordle-tile--flip {
+  animation: wordle-flip 0.5s ease both;
+  animation-delay: calc(var(--i, 0) * 90ms);
+}
+@keyframes wordle-flip {
+  0% {
+    transform: rotateX(90deg);
+    filter: brightness(0.6);
+  }
+  100% {
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wordle-tile--filled,
+  .wordle-tile--flip {
+    animation: none;
+  }
 }
 .wordle-tile--correct {
   background: #2f9e5c;

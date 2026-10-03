@@ -59,6 +59,15 @@ export function createGame(secret: RosterPlayer): GameState {
   return startRound(secret, curveOf(secret), MIN_GUESSES);
 }
 
+/**
+ * Prize money from the first year to the newest one showing — the career so
+ * far, which the curve's log scale makes hard to add up by eye (the user,
+ * 3 Oct 2026: "from the beginning until the year is currently shown").
+ */
+export function totalSoFar(points: readonly Point[], shown: number): number {
+  return points.slice(0, shown).reduce((sum, point) => sum + point.earnings, 0);
+}
+
 /** One point as the curve labels it. */
 export function pointLabel(point: Point): string {
   return point.earnings > 0 ? moneyShort(point.earnings) : '$0';

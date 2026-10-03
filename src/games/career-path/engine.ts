@@ -285,8 +285,11 @@ export function createGame(
 ): GameState | null {
   if (results.length === 0) return null;
   const rng = makeRng(seed);
-  const clues = revealOrder(pickClues(results, secret, mode, field, rng), secret, mode, rng);
+  return roundOf(secret, revealOrder(pickClues(results, secret, mode, field, rng), secret, mode, rng), mode);
+}
 
+/** A fresh round on clues already chosen and ordered — how the daily puzzle rebuilds one. */
+export function roundOf(secret: RosterPlayer, clues: readonly MajorResult[], mode: Mode): GameState {
   return {
     mode,
     secret,

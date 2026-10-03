@@ -3,6 +3,7 @@ import type { Orgs } from '@/data/liquipedia/orgs';
 import type { Pool, Pools } from '@/data/liquipedia/pools';
 import { ageOn, type Roster, type RosterPlayer } from '@/data/liquipedia/roster';
 import type { Teammates } from '@/data/liquipedia/teammates';
+import { countShort, PLATFORM_META, type Socials } from '@/data/socials';
 import { moneyShort } from '@/lib/format';
 import type { Searchable } from '@/lib/text';
 
@@ -47,6 +48,8 @@ export function buildCriteria(
   /** Both optional: List loads them after the first paint — see `ListGame`. */
   orgs?: Orgs | null,
   teammates?: Teammates | null,
+  /** Fresh follower counts, when the server has them — `data/socials.ts`. */
+  socials?: Socials | null,
 ): Criterion[] {
   const out: Criterion[] = [];
   const byId = new Map(roster.players.map((player) => [player.id, player]));
@@ -417,8 +420,34 @@ export function buildCriteria(
     }
   }
 
+  // ------------------------------------------------------------ followers --
+  // Everyone over a follower line, worldwide and per region. A region gets the
+  // highest of its lines that still makes a round — 1M in Europe, 250K in
+  // Oceania — so every region has one and none is a census.
+  for (const platform of socials?.platforms ?? []) {
+    const meta = PLATFORM_META[platform];
+    const over = (line: number, players: readonly RosterPlayer[]) =>
+      players.filter((player) => (socials!.of(platform, player) ?? 0) >= line);
+    const subtitle = `Counts as ${meta.name} gives them, refreshed daily`;
+    for (const line of [1_000_000, 2_000_000, 5_000_000]) {
+      const answers = over(line, roster.players);
+      if (answers.length <= SOCIAL_MAX) add(`followers:${platform}:${line}`, `Players with ${countShort(line)}+ ${meta.noun}`, answers, subtitle);
+    }
+    for (const region of roster.regions) {
+      const here = roster.players.filter((player) => player.region === region);
+      const line = [1_000_000, 500_000, 250_000, 100_000].find((l) => over(l, here).length >= SOCIAL_MIN);
+      if (line && over(line, here).length <= SOCIAL_MAX) {
+        add(`followers:${platform}:${line}:${region}`, `${region} players with ${countShort(line)}+ ${meta.noun}`, over(line, here), subtitle);
+      }
+    }
+  }
+
   return out;
 }
+
+/** A follower list between these sizes: a round, not a coin toss and not a census. */
+const SOCIAL_MIN = 10;
+const SOCIAL_MAX = 120;
 
 /**
  * Everyone at all of the year's big events — for 2026: EWC, the Globals, the

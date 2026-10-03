@@ -38,7 +38,8 @@ How it runs:
 
 - **Locally:** `npm run dev:all` starts the site on port 5173 and the API on port 3000. The analytics page opens without a password, and rounds you play are recorded to `server/.data` on your machine.
 - **In production:** Heroku, live since the end of September 2026. `npm start` serves the built site and the API from one Node process, stores records in Postgres, and puts `/analytics` behind `ADMIN_PASSWORD`.
-- **No accounts yet.** Best scores live in each browser's local storage.
+- **No accounts yet.** Best scores, daily progress and streaks live in each browser's local storage.
+- **Daily only on the live site** (3 Oct 2026). See "Daily puzzles" below.
 
 ## The data
 
@@ -462,8 +463,7 @@ You get a rule, such as "has played for NRG" or "has won a LAN", and ten cards i
 1. **The rules.** Build the criteria for the chosen pool, keeping those with 4+ players and under 40% of the pool. Twelve kinds are used: country, region, organisation, FNCS winner, Global, LAN and major winner, 2+/3+ FNCS wins, earnings, won a region's FNCS, won an FNCS in a year, played at a named event.
 2. **One seat per kind.** Draw one rule per kind, then shuffle. A flat draw was an organisation generator: about 174 of 250 rules were organisations, so "has played for X" came up seven times in ten.
 3. **The ten cards.** Pick 4–6 players who fit (never more than the rule has) and fill the ten with players from the same pool who do not fit.
-
-The griefers are random outsiders, not near-misses. That is a possible improvement: see the last section.
+4. **Near misses** (since 3 Oct 2026). 60% of the griefers come from the outsiders who most nearly fit (`nearness` in the engine), the rest are random so not every card is a trap. Near means: the same scene for a country, the same flag elsewhere for a region, an FNCS partner of the org's players, a finalist or LAN podium for a title, one title short, just under the earnings line, a winner from another region or year, a player at another headline event — plus the same fame as the players who fit. "Has won a LAN" now deals TaySon and K1nG as griefers; "$1M+" deals players on $750K–$950K.
 
 ### Modes
 
@@ -772,8 +772,59 @@ It plays every game with a perfect player, generating the random games many time
 - **Who Are Ya:** the number one teammate is last in the ramped orders and never in Random's first four; a two-clue hand lasts five wrong guesses.
 - **Whole field:** every secret-player game deals all of an event field that its data allows, and Griefer, Connections and Tic Tac Toe build boards from the whole field.
 - **Analytics:** one real round per game, recorded and aggregated the way the dashboard reads it; the filters narrow every table, and the player view finds its player.
+- **Daily puzzles:** midnight in Berlin on both sides of a clock change; 30 days in a row each with all six puzzles, no secret player, board or list twice, three different secrets a day, all well known; every puzzle rebuilds, a saved round comes back, and the answer wins. `check:server` asks the endpoint for today twice and gets the same set.
 
 A generated data file that is missing makes its games report SKIPPED and the suite still passes, so a fresh clone is testable before the notebook runs.
+
+## Daily puzzles
+
+Since 3 October 2026 the live site is **daily puzzles only**: one puzzle per game per day, the same for everyone, for the six live games other than Higher or Lower (which stays an endless run). The setup screens — the pool picker, levels, modes, the board and list pickers — are still there on a dev server, behind a **🛠 Practice** button in each game's toolbar (`usePlayMode`, `DAILY_ONLY` in `src/daily/useDailyRound.ts`).
+
+| Piece | Where | What it does |
+| --- | --- | --- |
+| The day | `src/daily/day.ts` | A day is its date in `Europe/Berlin`, so the reset is midnight Central European time through summer time too. `DAILY_START` (5 Oct 2026) is puzzle #1; a day before it shows as "preview". `?day=YYYY-MM-DD` pretends it is another day, on a dev server only |
+| The puzzles | `src/daily/generate.ts`, `src/games/<game>/daily.ts` | A day's set is one small descriptor per game: a secret player and the clues in order, a Tenaball board id, a List id, Tic Tac Toe's six rule ids. Each game's `daily.ts` picks one (`pickDaily`) and rebuilds a round from one (`restoreDaily`) |
+| Kept once made | `server/index.ts` `GET /api/daily/<day>`, table `daily_puzzles` | The first request for a day makes its set and the store keeps it; every later request reads the kept one. A deploy or a data update mid-day cannot change a puzzle people have played. Never a day after today on the live site |
+| Your progress | `src/daily/progress.ts`, `useDailyRound.ts` | The round in progress is saved on every move (`daily:<game>`), so a reload carries on; every finished day goes in `daily-log:<game>`. Browser only — no accounts yet |
+| The end | `src/components/DailyEnd.tsx` | Score, a Wordle-style emoji grid, **Share** (the phone's share sheet, or the clipboard), played / won / streak / best, and the countdown |
+
+**Each game's daily:**
+
+| Game | The daily is | Score and grid |
+| --- | --- | --- |
+| Fortnitedle | a well-known name; Medium's digit help (a # where a digit sits, from guess 3) | `4/6`, Wordle's rows |
+| Career Path | a well-known player, clues oldest first | `3/10`, one square per clue: 🟥 guessed wrong, ⬛ skipped, 🟩 named, ⬜ not needed |
+| Who Are Ya | a well-known player, counts shown, weakest teammate first | the same as Career Path |
+| Tenaball | a board of a known kind (players, seasons, FNCS, places, teammates, events, orgs and countries, Div Cups all time), six of its ten rows well known; 3 lives | `7/10`, the ten slots and the hearts left |
+| List | a list of 10–60 with four famous names and 40% well known; wrong answers cost 3 seconds | `14/37`, ten blocks for the share found |
+| Tic Tac Toe | a Medium grid; the last week's rules left out | `9/9`, the grid and the hearts left |
+
+**Well known** (`src/daily/fame.ts`) is the Easy band plus the 250 best-earning players of the Medium band. The whole Medium band reaches into every region's own scene, which made "Top 10 duos of 2024 — Asia" a daily. The three secret players of a day are three different people, 60% from the Easy band, and none comes back while anyone unplayed is left (`SECRET_REST`). A Tenaball board rests 180 days and a List 120.
+
+**A streak** is days in a row with that game's daily played, win or lose — a hard day does not break a month. The home page's 🔥 counts days with any daily played.
+
+**Analytics:** a daily round's setup is `{ daily: '<day>' }`, which the dashboard counts as its own source, Daily.
+
+## Followers
+
+YouTube subscribers and Twitch followers, in ten games since 3 October 2026. Both platforms limit how long their numbers may be kept — YouTube 30 days, Twitch 24 hours (checked 3 Oct 2026) — so the counts are **never in git**:
+
+- `scripts/build_data.py` writes `links.json`: each player's YouTube and Twitch links, from Liquipedia. That is committed.
+- The live server fetches the counts itself about every 20 hours (`server/socials.ts`), keeps only the newest set in Postgres, and serves only fresh ones at `GET /api/socials`. A platform whose counts got too old drops out, and every category built on it disappears until the next fetch. Keys and the one-time Twitch login: UPDATE_DATA.md; status at `/analytics/socials`.
+- A dev server reads your local `socials.json` (from `scripts/socials_api.py`) and fetches nothing unless `SOCIALS_FETCH=1`. `check:games` uses the same file and skips the follower checks without it, as CI does.
+- Pages that show the counts say where they come from (`SocialsNote` in the rules; `/credits`), and `/privacy` carries what YouTube's API terms ask for: that the site uses YouTube API Services, YouTube's Terms of Service and Google's Privacy Policy. Counts are shown as the platforms give them and never added together — YouTube's terms rule out new metrics made from theirs.
+
+| Game | What uses them |
+| --- | --- |
+| Higher or Lower | Twitch Followers and YouTube Subscribers categories; the fame window ranks by the count itself, so a run opens on the big channels |
+| Tenaball | "Followers" boards per platform: everyone, each region, FNCS champions, under 20. Built in the browser; a level count goes to the bigger career earner. The daily may be the world, Europe, North America or the champions board |
+| List | Everyone over 1M / 2M / 5M, and each region over the highest line that makes a round |
+| Tic Tac Toe, Connections, Griefer, Bingo | rules "100K+ / 1M+ Twitch / YouTube"; Griefer's near misses are a quarter of the line or more |
+| Guess the Player | a Twitch column with arrows |
+| Pyramid | Twitch followers and YouTube subscribers, drawn from the biggest channels (60 on Easy, 200 on Medium) |
+| IRL | a "Channels" line late in the file |
+
+A daily puzzle can use them (Tic Tac Toe's rules, a follower board or list): the server makes the day with the counts it is serving, and the browser rebuilds it from the same server's counts. A refresh during the day can move a follower board by a place.
 
 ## Limited mode
 
@@ -798,7 +849,7 @@ Decided so far:
 
 - **Regions:** six, with North America as one.
 - **Nationality:** Scotland stays Scotland.
-- **Subscribers:** dropped until there is data. There is a source now — `scripts/socials_api.py` writes YouTube subscribers and Twitch followers to `socials.json` (see DATA.md) — but no game reads it yet.
+- **Subscribers:** YouTube subscribers and Twitch followers are in the games since 3 Oct 2026 — see "Followers".
 - **Small regions:** in the one-player games, each small-region player is used once across the four games.
 
 ## Open decisions and what to do next
@@ -817,7 +868,6 @@ My recommendation: commit this week's work and get the site live before the Glob
 
 - **The free Higher on Easy and Medium FNCS Wins.** A shown 0 is still a free Higher there, about 13–20% of rounds. Giving FNCS Wins an Equal button on every level would fix it.
 - **The Middle East in Higher or Lower pools.** Four players cannot fill five pools. Either one pool per category goes without, or one of them appears twice in a category.
-- **Griefer's griefers** are random players who don't fit. Near-misses would make boards sharper: a country's neighbours, an organisation's rivals, a winner's runner-up.
 - **Thin Connections pools.** Most single-region pools and South America Easy/Medium cannot build a board. Accept that, or add rule kinds that work inside one region.
-- **Data with no source yet:** eliminations and damage, and who qualified from where. Each unlocks limited-mode categories if a source is found. Creator subscribers now have one (`socials.json`, YouTube and Twitch only — X needs a paid API, Instagram and TikTok have none for this); which games use them is open.
+- **Data with no source yet:** eliminations and damage, and who qualified from where. Each unlocks limited-mode categories if a source is found. (X followers need a paid API; Instagram and TikTok have none for this.)
 - **Accounts.** Not started. The records are shaped so a user id can be attached later.

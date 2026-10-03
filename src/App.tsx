@@ -5,6 +5,7 @@ import { getGame, OPEN_HIDDEN } from '@/games/registry';
 import { gameMeta, HOME_META, NOT_FOUND_META, usePageMeta } from '@/lib/seo';
 import { Credits } from '@/pages/Credits';
 import { Home } from '@/pages/Home';
+import { Privacy } from '@/pages/Privacy';
 
 /**
  * Not linked from anywhere: it is the site owner's page, behind a password.
@@ -54,6 +55,7 @@ export function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/credits" element={<Credits />} />
+        <Route path="/privacy" element={<Privacy />} />
         <Route
           path="/analytics/*"
           element={

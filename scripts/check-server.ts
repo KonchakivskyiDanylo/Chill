@@ -14,6 +14,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { RECORD_VERSION, type RoundRecord } from '@/analytics/types';
+import { dayKey } from '@/daily/day';
+import type { DailySet } from '@/daily/types';
 
 const problems: string[] = [];
 const check = (ok: boolean, message: string) => {
@@ -84,6 +86,17 @@ try {
   check((await post('/api/support', { ...ticket, website: 'http://spam' })).status === 204, 'the honeypot did not answer like a success');
   check((await post('/api/support', { ...ticket, message: '   ' })).status === 400, 'an empty support message was accepted');
   check((await post('/api/errors', { message: 'boom', page: '/', app: 'check' })).status === 204, 'an error report was not accepted');
+
+  // ---- the daily puzzles: made on the first request, the same on every one after.
+  const today = dayKey();
+  const first = await request(`/api/daily/${today}`);
+  const set = first.body as DailySet;
+  check(first.status === 200 && set?.day === today && typeof set.puzzles === 'object', `the daily puzzles did not come (${first.status})`);
+  check(Object.keys(set?.puzzles ?? {}).length > 0, 'the daily set has no puzzles in it');
+  const again = await request(`/api/daily/${today}`);
+  check(JSON.stringify(again.body) === JSON.stringify(set), 'asking for the same day twice gave two different sets');
+  check((await request('/api/daily/2026-02-30')).status === 400, 'a day that does not exist was answered');
+  check((await request('/api/daily/today')).status === 400, 'a non-day was answered');
 
   // ---- LiquipediaDB's webhook: the secret is the path, and only the Fortnite
   // wiki's main namespace is kept (a move out of it counts).

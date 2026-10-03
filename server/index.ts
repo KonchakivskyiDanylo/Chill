@@ -15,6 +15,10 @@ import {
   type RoundRecord,
   type SupportRequest,
 } from '@/analytics/types';
+import { addDays, dayKey, isDayKey } from '@/daily/day';
+import type { DailySet } from '@/daily/types';
+import { Socials } from '@/data/socials';
+import { refreshSocials, scheduleSocials, servedSocials, socialsStatus, startTwitchLogin } from './socials';
 import { openStore, type PageChange } from './store';
 
 /**
@@ -23,6 +27,11 @@ import { openStore, type PageChange } from './store';
  *   POST /api/rounds    a finished round (anyone)
  *   POST /api/support   a support request (anyone)
  *   POST /api/errors    a browser error (anyone)
+ *   GET  /api/daily/<day>
+ *                       that day's daily puzzles, made on first request and kept
+ *                       (anyone; never a day after today)
+ *   GET  /api/socials   YouTube subscribers and Twitch followers, fresh ones only
+ *                       (anyone; see socials.ts)
  *   POST /api/liquipedia/<secret>
  *                       LiquipediaDB's webhook: a wiki page changed (Liquipedia)
  *   /api/admin/*        the dashboard behind `/analytics` (you): the dashboard,
@@ -43,6 +52,8 @@ import { openStore, type PageChange } from './store';
  *   LIQUIPEDIA_WEBHOOK_SECRET
  *                     the last part of the webhook URL you give Liquipedia; the
  *                     webhook route does not exist without it
+ *   YOUTUBE_API_KEY, TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET
+ *                     the follower counts — see socials.ts
  */
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -153,6 +164,45 @@ function isAdmin(req: IncomingMessage): boolean {
   return sameText(mac, sign(expires));
 }
 
+// ------------------------------------------------------------------- daily --
+
+/**
+ * A day's puzzles, made once.
+ *
+ * The first request for a day makes its set and the store keeps it; every
+ * later request, and every restart and deploy, reads the kept one. So the
+ * puzzle someone shares at nine in the morning is the puzzle someone else
+ * opens at eleven at night, whatever was deployed in between.
+ *
+ * The data and the generator load on first use and stay loaded — a few tens of
+ * megabytes, once a day of work. Two requests for a new day at the same
+ * moment share one making, and the store's first-write-wins settles the rest.
+ */
+const making = new Map<string, Promise<DailySet>>();
+let dailyModule: Promise<typeof import('@/daily/generate')> | null = null;
+let dailyData: Promise<import('@/daily/generate').DailyData> | null = null;
+
+/** Days back a new day looks so as not to repeat a secret player or a board. */
+const DAILY_HISTORY = 365;
+
+async function dailySet(day: string): Promise<DailySet> {
+  const kept = await store.daily(day);
+  if (kept) return kept;
+  if (!making.has(day)) {
+    const made = (async () => {
+      dailyModule ??= import('@/daily/generate');
+      const { generateDaily, loadDailyData } = await dailyModule;
+      dailyData ??= loadDailyData();
+      const history = await store.dailies(addDays(day, -DAILY_HISTORY));
+      // The counts the site is serving right now, so a follower rule rebuilds the same in the browser.
+      const socials = new Socials(await servedSocials(store));
+      return store.addDaily(generateDaily(day, { ...(await dailyData), socials }, history));
+    })().finally(() => making.delete(day));
+    making.set(day, made);
+  }
+  return making.get(day)!;
+}
+
 // ------------------------------------------------------------------ routes --
 
 async function api(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
@@ -205,6 +255,24 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL): Promise
     if (!isObject(body) || typeof body.message !== 'string') throw new HttpError(400, 'Not an error');
     await store.addError(body as unknown as ClientError);
     return send(res, 204);
+  }
+
+  // ---- the daily puzzles
+  // Never a day after today on the live site: tomorrow's puzzle is not out yet.
+  // A dev server answers any day, for `?day=` in the browser.
+  const daily = /^GET \/api\/daily\/([^/]+)$/.exec(route);
+  if (daily) {
+    const day = decodeURIComponent(daily[1]);
+    if (!isDayKey(day)) throw new HttpError(400, 'Not a day');
+    if (SECURE && day > dayKey()) throw new HttpError(404, 'Not out yet');
+    if (!allowed(req, 'daily', 120, 10)) throw new HttpError(429, 'Slow down');
+    return send(res, 200, await dailySet(day), { 'cache-control': 'public, max-age=300' });
+  }
+
+  // ---- YouTube subscribers and Twitch followers: only fresh ones, see socials.ts.
+  if (route === 'GET /api/socials') {
+    if (!allowed(req, 'socials', 60, 10)) throw new HttpError(429, 'Slow down');
+    return send(res, 200, await servedSocials(store), { 'cache-control': 'public, max-age=900' });
   }
 
   // ---- LiquipediaDB webhook
@@ -279,6 +347,13 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL): Promise
   if (lens) {
     const since = days > 0 ? new Date(Date.now() - days * 86_400_000) : undefined;
     return send(res, 200, playerLens(await store.rounds(since), decodeURIComponent(lens[1]), scope));
+  }
+  // The follower counts: how fresh they are, the one-time Twitch login, a refresh now.
+  if (route === 'GET /api/admin/socials') return send(res, 200, await socialsStatus(store));
+  if (route === 'POST /api/admin/socials/twitch-login') return send(res, 200, await startTwitchLogin(store));
+  if (route === 'POST /api/admin/socials/refresh') {
+    void refreshSocials(store);
+    return send(res, 202, { started: true });
   }
   if (route === 'GET /api/admin/support') return send(res, 200, await store.support());
   if (route === 'GET /api/admin/errors') return send(res, 200, await store.errors(200));
@@ -405,4 +480,8 @@ createServer(async (req, res) => {
 }).listen(PORT, () => {
   const dashboard = OPEN ? 'open (ADMIN_OPEN, local only)' : ADMIN_PASSWORD ? 'on' : 'off (no ADMIN_PASSWORD)';
   console.log(`OffSpawn on :${PORT} — ${process.env.DATABASE_URL ? 'Postgres' : 'file store'}, dashboard ${dashboard}`);
+  // Today's puzzles made now rather than on the first visitor's request.
+  if (SECURE) void dailySet(dayKey()).catch((error) => console.error('daily puzzles:', error));
+  // The follower counts, kept fresh — nothing happens without the API keys.
+  scheduleSocials(store);
 });

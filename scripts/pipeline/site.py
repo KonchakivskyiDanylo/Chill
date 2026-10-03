@@ -38,6 +38,46 @@ def _slim(p):
     return row
 
 
+def links(raw_dir, folder):
+    """links.json - each player's YouTube and Twitch links, as their Liquipedia page gives them.
+
+    The site's server looks the counts up itself, once a day, and keeps only
+    the latest (server/socials.ts): YouTube lets a count be kept 30 days and
+    Twitch 24 hours, so the counts can never be a file in git. The links can -
+    they are Liquipedia's, under the same licence as the rest of this folder.
+
+    Every `youtube`, `youtube2`, ... and `twitch`, `twitch2`, ... link of a
+    player a game can use. Skipped, with a note, when there is no raw dump.
+    """
+    import re
+    from datetime import date
+
+    raw_players = os.path.join(raw_dir, 'players.json')
+    if not os.path.exists(raw_players):
+        print('links.json: no raw dump - skipped')
+        return
+    usable = {p['pagename'] for p in json.load(open(os.path.join(folder, 'players.json'), encoding='utf-8'))
+              if p.get('tier') != 'unused'}
+    out = {}
+    for row in json.load(open(raw_players, encoding='utf-8')):
+        page = row.get('pagename')
+        found = row.get('links') if isinstance(row.get('links'), dict) else {}
+        if page not in usable:
+            continue
+        entry = {}
+        for platform in ('youtube', 'twitch'):
+            urls = [value for key, value in sorted(found.items()) if re.fullmatch(rf'{platform}\d*', key) and value]
+            if urls:
+                entry[platform] = urls
+        if entry:
+            out[page] = entry
+    path = os.path.join(folder, 'links.json')
+    with open(path, 'w', encoding='utf-8') as fh:
+        json.dump({'generated': date.today().isoformat(), 'players': dict(sorted(out.items()))}, fh,
+                  ensure_ascii=False, separators=(',', ':'))
+    print(f'links.json: {len(out):,} players with a YouTube or Twitch link, {os.path.getsize(path) / 1e6:.2f} MB')
+
+
 def run(folder):
     players = json.load(open(os.path.join(folder, 'players.json'), encoding='utf-8'))
     rows = [_slim(p) for p in players if p.get('tier') != 'unused']

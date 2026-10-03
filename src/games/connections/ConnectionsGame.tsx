@@ -31,6 +31,7 @@ import {
   record as roundRecord,
 } from './engine';
 import './connections.css';
+import { useSocials } from '@/data/useSocials';
 
 const meta = getGame('connections')!;
 
@@ -67,6 +68,7 @@ function Game({
 }) {
   const [choice, setChoice] = usePoolChoice();
   const [event] = useEventMode();
+  const socials = useSocials();
   const [game, setGame] = useState<GameState | null>(null);
 
   useRoundRecorder('connections', game !== null && game.status !== 'playing', () => ({
@@ -91,14 +93,14 @@ function Game({
     // Random leans towards names people know, as every game's Random does; a
     // chosen tier or an event field is dealt evenly.
     const mix = !pools?.get(event) && choice.mode === 'random' ? RANDOM_MIX : undefined;
-    const puzzle = generatePuzzle({ players, facts, orgs }, undefined, mix);
+    const puzzle = generatePuzzle({ players, facts, orgs, socials }, undefined, mix);
     if (!puzzle) {
       setError('Could not find four clean groups of four in this pool. Try a wider one.');
       return;
     }
     setError(null);
     setGame(createGame(puzzle));
-  }, [players, facts, orgs, pools, event, choice.mode]);
+  }, [players, facts, orgs, socials, pools, event, choice.mode]);
 
   if (!game) {
     return (

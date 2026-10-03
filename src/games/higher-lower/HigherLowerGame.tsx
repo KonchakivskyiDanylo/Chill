@@ -7,18 +7,20 @@ import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { LevelSetup, type LevelOption } from '@/components/PoolSetup';
 import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
 import { loadFacts, type Facts } from '@/data/liquipedia/facts';
+import { useSocials } from '@/data/useSocials';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import type { Pools } from '@/data/liquipedia/pools';
 import { EXPORT_DATE, type Roster, type RosterPlayer } from '@/data/liquipedia/roster';
 import { activePool, useEventMode } from '@/games/shared/mode';
 import { poolPlayers } from '@/games/shared/pool';
-import { ordinal, playerMoney, plural } from '@/lib/format';
+import { money, ordinal, playerMoney, plural } from '@/lib/format';
 import { CountryBadge } from '@/components/CountryBadge';
 import { useBestScore, useLocalState } from '@/lib/storage';
 import { getGame } from '@/games/registry';
 import {
   CATEGORIES,
+  SOCIAL_CATEGORIES,
   correctAnswer,
   createGame,
   giveUp,
@@ -53,6 +55,8 @@ function displayValue(player: Contender, category: Category): string {
   if (category === 'fncsWins') return plural(player.fncsWins, 'FNCS win');
   if (category === 'fncsFinals') return plural(player.fncsFinals ?? 0, 'FNCS final');
   if (category === 'placement') return `${ordinal(player.placement?.place ?? 0)} place`;
+  if (category === 'twitch') return `${(player.twitch ?? 0).toLocaleString('en-US')} followers`;
+  if (category === 'youtube') return `${(player.youtube ?? 0).toLocaleString('en-US')} subscribers`;
   return playerMoney(player);
 }
 
@@ -62,7 +66,7 @@ function displayValue(player: Contender, category: Category): string {
  * FNCS Finals round, where a player's titles are a floor under their finals.
  */
 function secondaryFact(player: Contender, category: Category): string {
-  return category === 'fncsWins' || category === 'fncsFinals' || category === 'placement'
+  return category === 'fncsWins' || category === 'fncsFinals' || category === 'placement' || SOCIAL_CATEGORIES.includes(category)
     ? playerMoney(player)
     : plural(player.fncsWins, 'FNCS win');
 }
@@ -88,12 +92,15 @@ export default function HigherLowerGame() {
 function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   const [event] = useEventMode();
   const pool = activePool(pools, event);
+  const socials = useSocials();
   const [picked, setCategory] = useState<Category>('earnings');
   // Placement is a question about the event's results. With no mode, or a mode
   // whose results are not in yet, it falls back to the default rather than
   // leaving the setup on a card that is not there.
   const hasResults = Object.keys(pool?.placements ?? {}).length > 0;
-  const category: Category = picked === 'placement' && !hasResults ? 'earnings' : picked;
+  // A follower category whose platform the server has nothing fresh for is not offered either.
+  const offline = (id: Category) => (id === 'twitch' || id === 'youtube') && !socials?.has(id);
+  const category: Category = (picked === 'placement' && !hasResults) || offline(picked) ? 'earnings' : picked;
   const [difficulty, setDifficulty] = useLocalState<Difficulty>('higher-lower:level', 'easy');
   const [game, setGame] = useState<GameState | null>(null);
 
@@ -142,9 +149,13 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   const players = useMemo((): Contender[] => {
     const field = poolPlayers(roster, pools, event);
     const base = field.length > 0 ? field : roster.players;
-    const counted = facts ? base.map((p) => ({ ...p, fncsFinals: facts.of(p.id).fncsApps })) : base;
+    const counted = base.map((p) => ({
+      ...p,
+      ...(facts ? { fncsFinals: facts.of(p.id).fncsApps } : {}),
+      ...(socials ? { twitch: socials.of('twitch', p) ?? undefined, youtube: socials.of('youtube', p) ?? undefined } : {}),
+    }));
     return withPlacements(counted, pool?.placements);
-  }, [roster, pools, event, facts, pool]);
+  }, [roster, pools, event, facts, pool, socials]);
 
   const start = useCallback(() => {
     if (category === 'fncsFinals' && !facts) {
@@ -205,7 +216,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
               <section className="card stack">
                 <div className="card__title">Category</div>
                 <OptionGrid>
-                  {CATEGORIES.filter((item) => !item.eventOnly || pool).map((item) => {
+                  {CATEGORIES.filter((item) => (!item.eventOnly || pool) && !offline(item.id)).map((item) => {
                     const waiting = item.id === 'placement' && !hasResults;
                     return (
                       <OptionCard
@@ -288,6 +299,7 @@ function Board({
           player={game.challenger}
           category={game.category}
           value={revealed ? displayValue(game.challenger, game.category) : null}
+          countUp={revealed ? countUpFor(game.challenger, game.category) : null}
           tone={
             revealed && game.lastAnswer ? (game.status === 'gameover' ? 'wrong' : 'right') : undefined
           }
@@ -352,7 +364,9 @@ function Board({
       <p className="tiny faint center">
         {game.category === 'placement'
           ? `Did ${game.challenger.name} place higher or lower than ${game.current.name}${eventLabel ? ` at ${eventLabel}` : ''}?`
-          : `Is ${game.challenger.name}’s ${categoryMeta.title.toLowerCase()} higher or lower than ${game.current.name}’s?`}
+          : game.category === 'twitch' || game.category === 'youtube'
+            ? `Does ${game.challenger.name} have more or fewer ${categoryMeta.title.replace(/ ([FS])/, (m) => m.toLowerCase())} than ${game.current.name}?`
+            : `Is ${game.challenger.name}’s ${categoryMeta.title.toLowerCase()} higher or lower than ${game.current.name}’s?`}
         {/* Only Hard is ever dealt a tie, so only Hard needs telling. */}
         {hasEqualButton(game.difficulty) ? ' Or exactly equal — Hard deals ties.' : ''}
       </p>
@@ -360,17 +374,59 @@ function Board({
   );
 }
 
+/**
+ * The big numbers count up as they are revealed — money and followers, where
+ * watching $1.2M climb past the number on the left is half the fun. Small
+ * counts and ages just appear.
+ */
+function countUpFor(player: Contender, category: Category): { to: number; format: (n: number) => string } | null {
+  if (category === 'earnings' && player.earningsKnown) return { to: player.earnings, format: money };
+  if (category === 'twitch') return { to: player.twitch ?? 0, format: (n) => `${n.toLocaleString('en-US')} followers` };
+  if (category === 'youtube') return { to: player.youtube ?? 0, format: (n) => `${n.toLocaleString('en-US')} subscribers` };
+  return null;
+}
+
+function useCountUp(target: { to: number; format: (n: number) => string } | null, ms = 650): string | null {
+  const [shown, setShown] = useState<string | null>(null);
+  useEffect(() => {
+    if (!target) {
+      setShown(null);
+      return;
+    }
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      setShown(target.format(target.to));
+      return;
+    }
+    const start = performance.now();
+    let frame = 0;
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / ms);
+      // Ease out, so it slows into the real number.
+      setShown(target.format(Math.round(target.to * (1 - (1 - t) ** 3))));
+      if (t < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target?.to, target === null]);
+  return shown;
+}
+
 function PlayerPanel({
   player,
   category,
   value,
+  countUp = null,
   tone,
 }: {
   player: RosterPlayer;
   category: Category;
   value: string | null;
+  countUp?: { to: number; format: (n: number) => string } | null;
   tone?: 'right' | 'wrong';
 }) {
+  const counting = useCountUp(countUp);
+  value = value !== null && counting !== null ? counting : value;
   return (
     <div className={`hl-panel${tone ? ` hl-panel--${tone}` : ''}`}>
       <PlayerAvatar player={player} size={72} />

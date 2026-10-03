@@ -1,6 +1,7 @@
 import { ref, type GamePayloads, type Outcome } from '@/analytics/types';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 import { moneyShort } from '@/lib/format';
+import { countShort } from '@/data/socials';
 
 /** Pure logic for Guess the Player. */
 
@@ -29,7 +30,8 @@ export type AttributeKey =
   | 'earnings'
   | 'fncsWins'
   | 'fncsFinals'
-  | 'together';
+  | 'together'
+  | 'twitch';
 
 /**
  * Green or red, nothing between.
@@ -56,6 +58,8 @@ export interface Extras {
   fncsFinals?: (playerId: string) => number;
   /** Tournaments two players entered together, from `teammates.json`. */
   together?: (a: string, b: string) => number;
+  /** Twitch followers, while the server has fresh counts; null is no channel. */
+  twitch?: (playerId: string) => number | null;
 }
 
 export interface AttributeResult {
@@ -210,6 +214,18 @@ export function compare(
     );
   }
   if (extras.together) out.push(togetherResult(guess, secret, extras.together(guess.id, secret.id)));
+  if (extras.twitch) {
+    // Always a direction, like earnings: nobody matches a follower count exactly.
+    const mine = extras.twitch(guess.id) ?? 0;
+    const theirs = extras.twitch(secret.id) ?? 0;
+    out.push({
+      key: 'twitch',
+      label: 'Twitch',
+      display: mine > 0 ? countShort(mine) : '—',
+      state: mine === theirs ? 'hit' : 'miss',
+      ...(mine === theirs ? {} : { direction: theirs > mine ? ('up' as const) : ('down' as const) }),
+    });
+  }
   return out;
 }
 

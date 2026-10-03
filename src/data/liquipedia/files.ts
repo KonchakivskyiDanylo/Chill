@@ -28,7 +28,10 @@ export type DataFile =
   | 'facts'
   | 'rankings'
   | 'pools'
-  | 'bios';
+  | 'bios'
+  // Node only, never in the glob below, so never in the site's bundle: the
+  // follower counts (`data/socials.ts`) reach the browser from the server.
+  | 'socials';
 
 type Loader = () => Promise<{ default: unknown }>;
 

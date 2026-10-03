@@ -51,7 +51,7 @@ ROSTER_TS = ROOT / "src" / "data" / "liquipedia" / "roster.ts"
 
 CLEAN_FILES = ["players.json", "teams.json", "tournaments.json", "transfers.json", "placements.json"]
 OUTPUTS = CLEAN_FILES + ["orgs.json", "rankings.json", "pools.json", "teammates.json", "career_path.json", "facts.json",
-                         "roster.json", "bios.json"]
+                         "roster.json", "bios.json", "links.json"]
 STEPS = ["clean", "players", "derived"]
 
 
@@ -136,8 +136,9 @@ def main(argv=None):
     if "derived" in todo:
         print("derived - rankings, pools, teammates, career path, facts")
         derived.build(str(stage).replace("\\", "/"))
-    print("site - roster.json")
+    print("site - roster.json, links.json")
     site.run(stage)
+    site.links(RAW, stage)
 
     if not args.skip_check:
         print("\ncheck - npm run check:games on the new files")
@@ -165,4 +166,9 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    # A Windows console on a non-UTF-8 code page (cp1251 here) cannot print the
+    # checks' ✗ and ✓, and used to crash on them right when a check failed.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
     sys.exit(main())

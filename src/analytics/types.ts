@@ -59,6 +59,8 @@ export const ref = (item: { id: string; name: string }): Ref => ({ id: item.id, 
  * some of these.
  */
 export interface Setup {
+  /** The day, "YYYY-MM-DD", when this was that day's daily puzzle. */
+  daily?: string;
   /** The event mode's pool id, when one was in force. */
   event?: string | null;
   /** Shared pool picker: Random or Choose. */

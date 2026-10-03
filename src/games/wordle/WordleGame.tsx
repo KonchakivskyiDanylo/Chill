@@ -7,7 +7,10 @@ import { GiveUpButton } from '@/components/GiveUpButton';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PoolSetup } from '@/components/PoolSetup';
+import { DailyEnd, DailyPending } from '@/components/DailyEnd';
 import { Banner } from '@/components/ui';
+import { useDailyRound, usePlayMode } from '@/daily/useDailyRound';
+import { restoreDaily, result as dailyResult, shareGrid, snapshot } from './daily';
 import { rotationKey } from '@/games/shared/rotation';
 import { useEventMode } from '@/games/shared/mode';
 import { chosenLevel, dealSecret, poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
@@ -114,14 +117,35 @@ export default function WordleGame() {
 function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   const [choice, setChoice] = usePoolChoice();
   const [event] = useEventMode();
-  const [game, setGame] = useState<GameState | null>(null);
+  const [dailyOn, setDailyOn] = usePlayMode();
+  const daily = useDailyRound('wordle', {
+    on: dailyOn,
+    ready: true,
+    restore: (puzzle, saved) => restoreDaily(puzzle, roster, saved),
+    snapshot,
+    finished: (state) => state.status !== 'playing',
+    result: dailyResult,
+  });
+  const [practice, setPractice] = useState<GameState | null>(null);
+  const game = dailyOn ? daily.state : practice;
+  const saveDaily = daily.setState;
+  const setGame = useCallback(
+    (next: GameState | null) => (dailyOn ? next && saveDaily(next) : setPractice(next)),
+    [dailyOn, saveDaily],
+  );
 
-  useRoundRecorder('wordle', game !== null && game.status !== 'playing', () => ({
+  useRoundRecorder('wordle', dailyOn ? daily.endedHere : game !== null && game.status !== 'playing', () => ({
     title: `Fortnitedle — ${game!.secret.name}`,
     data: EXPORT_DATE,
-    setup: poolSetup(event, choice),
+    setup: dailyOn ? { daily: daily.day } : poolSetup(event, choice),
     ...roundRecord(game!),
   }));
+  const shell = {
+    game: meta,
+    examples: <Examples />,
+    dataNote: <RosterNote />,
+    daily: { on: dailyOn, number: daily.number, setOn: setDailyOn },
+  };
   const [draft, setDraft] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   /** Set when a round opened a fresh cycle, so the board can say so. */
@@ -145,7 +169,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
     const key = rotationKey(meta.id, ...poolScope(event, choice));
     const drawn = dealSecret(players, readLocal<string[]>(key, []), pools, event, choice);
     if (drawn) writeLocal(key, drawn.seen);
-    setGame(drawn ? gameFor(drawn.pick, chosenLevel(event, choice)) : null);
+    setPractice(drawn ? gameFor(drawn.pick, chosenLevel(event, choice)) : null);
     setWrapped(drawn?.wrapped ?? false);
     setDraft('');
     setMessage(null);
@@ -161,7 +185,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
     setMessage(null);
     setDraft('');
     setGame(result.state);
-  }, [game, draft]);
+  }, [game, draft, setGame]);
 
   const press = useCallback(
     (key: string) => {
@@ -196,9 +220,17 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [press]);
 
+  if (!game && dailyOn) {
+    return (
+      <GameShell {...shell}>
+        <DailyPending status={daily.status} error={daily.error} />
+      </GameShell>
+    );
+  }
+
   if (!game) {
     return (
-      <GameShell game={meta} examples={<Examples />} dataNote={<RosterNote />}>
+      <GameShell {...shell}>
         <div className="stack">
           <PoolSetup
             roster={roster}
@@ -236,13 +268,13 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
 
   return (
     <GameShell
-      game={meta}
-      examples={<Examples />}
-      dataNote={<RosterNote />}
+      {...shell}
       toolbar={
-        <button type="button" className="icon-btn" onClick={() => setGame(null)}>
-          ⚙ Setup
-        </button>
+        dailyOn ? null : (
+          <button type="button" className="icon-btn" onClick={() => setPractice(null)}>
+            ⚙ Setup
+          </button>
+        )
       }
     >
       <div className="stack">
@@ -258,7 +290,8 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
               return (
                 <div
                   key={`${rowIndex}-${colIndex}`}
-                  className={`wordle-tile${state ? ` wordle-tile--${state}` : ''}${char && !state ? ' wordle-tile--filled' : ''}`}
+                  className={`wordle-tile${state ? ` wordle-tile--${state} wordle-tile--flip` : ''}${char && !state ? ' wordle-tile--filled' : ''}`}
+                  style={state ? ({ '--i': colIndex } as CSSProperties) : undefined}
                 >
                   {char}
                 </div>
@@ -308,9 +341,13 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
                 </div>
               </div>
             </div>
-            <button type="button" className="btn btn--primary btn--lg btn--block" onClick={newGame}>
-              New game
-            </button>
+            {dailyOn ? (
+              <DailyEnd game="wordle" number={daily.number} day={daily.day} result={dailyResult(game)} grid={shareGrid(game)} />
+            ) : (
+              <button type="button" className="btn btn--primary btn--lg btn--block" onClick={newGame}>
+                New game
+              </button>
+            )}
           </div>
         ) : (
           <>

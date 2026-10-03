@@ -1,0 +1,149 @@
+import type { Board, Rankings } from '@/data/liquipedia/rankings';
+import { membersOf } from '@/data/liquipedia/rankings';
+import type { Roster } from '@/data/liquipedia/roster';
+import { knownPlayers } from '@/daily/fame';
+import type { Socials } from '@/data/socials';
+import { DAILY_SOCIAL, SOCIAL_GROUP, socialBoards } from './social-boards';
+import type { DailyContext, DailyPuzzles, DailyResult } from '@/daily/types';
+import { pick } from '@/lib/rng';
+import { createGame, HARD_LIVES, namedIn, slotsIn, type Difficulty, type GameState } from './engine';
+
+/** Three lives, so the daily ends on its own and the score is how many you found. */
+export const DAILY_LEVEL: Difficulty = 'hard';
+
+type Puzzle = DailyPuzzles['tenaball'];
+
+/**
+ * The kinds of board a daily can be, by picker group. A kind is drawn first and
+ * a board inside it second, so the forty-odd Div Cup and season boards do not
+ * crowd out the one career-earnings board.
+ *
+ * Left out: Div Cup seasons, Performance Evaluations and the smaller regions'
+ * FNCS finals (too deep for a puzzle everyone gets), and Paydays (naming a
+ * tournament exactly is a spelling test).
+ */
+const KINDS: { kind: string; groups: RegExp }[] = [
+  { kind: 'players', groups: /^Players$/ },
+  { kind: 'seasons', groups: /^\d{4} season$/ },
+  { kind: 'fncs', groups: /^FNCS all time$/ },
+  { kind: 'places', groups: /^By (region|country)$/ },
+  { kind: 'teammates', groups: /^Teammates$/ },
+  { kind: 'events', groups: /^(Tournaments|FNCS finals — (Europe|North America))$/ },
+  { kind: 'orgs', groups: /^(Organisations|Countries)$/ },
+  { kind: 'divcups', groups: /^Div Cups — all time$/ },
+  // Twitch and YouTube, built from the day's counts (`social-boards.ts`).
+  { kind: 'followers', groups: /^Followers$/ },
+];
+
+/** Rows on a player board that must hold a famous name or a regular. */
+const FAMOUS_ROWS = 6;
+
+/** A board is not offered again for this long, while others are left. */
+const REST_DAYS = [180, 60, 7];
+
+function kindOf(board: Board): string | null {
+  return KINDS.find((entry) => entry.groups.test(board.group))?.kind ?? null;
+}
+
+/**
+ * A board whose slots are duos or trios. Fine for practice; for the daily they
+ * double the names a slot needs, and a season's duo board ranks on an average
+ * finish nobody holds in their head.
+ */
+function teamBoard(board: Board): boolean {
+  return board.rows.some((row) => membersOf(row).length > 1);
+}
+
+/** Whether the board is about players people know: six of the ten rows hold one (`daily/fame.ts`). */
+function famousEnough(board: Board, known: ReadonlySet<string>): boolean {
+  if (board.entity !== 'player') return true;
+  const rows = board.rows.filter((row) => membersOf(row).some((member) => known.has(member.key)));
+  return rows.length >= FAMOUS_ROWS;
+}
+
+/** Every board a daily can name: the shipped set, and the follower boards while there are counts. */
+function boardsWith(rankings: Rankings, roster: Roster, socials: Socials | null): Board[] {
+  return [...rankings.boards, ...socialBoards(roster, socials)];
+}
+
+export function pickDaily(roster: Roster, rankings: Rankings, socials: Socials | null, ctx: DailyContext): Puzzle | null {
+  const known = knownPlayers(roster);
+  // A follower board is famous by what it ranks, so it skips the fame test — but
+  // only the big ones: the world, Europe, North America, the FNCS champions.
+  const offered = boardsWith(rankings, roster, socials).filter((board) =>
+    board.group === SOCIAL_GROUP
+      ? DAILY_SOCIAL(board.id)
+      : kindOf(board) !== null && !teamBoard(board) && famousEnough(board, known),
+  );
+  const rng = ctx.rng('tenaball');
+  const recent = ctx.recent('tenaball');
+  for (const rest of [...REST_DAYS, 0]) {
+    const resting = new Set(recent.filter((entry) => entry.daysAgo <= rest).map((entry) => entry.puzzle.board));
+    const left = offered.filter((board) => !resting.has(board.id));
+    if (left.length === 0) continue;
+    const kinds = [...new Set(left.map(kindOf))];
+    const kind = pick(rng, kinds);
+    return { board: pick(rng, left.filter((board) => kindOf(board) === kind)).id };
+  }
+  return null;
+}
+
+/** Which names are on the board so far, by rank — `Map`s and `Set`s do not survive JSON. */
+export interface Snapshot {
+  named: [number, string[]][];
+  found: number[];
+  wrong: string[];
+  lives: number;
+  status: GameState['status'];
+}
+
+export function restoreDaily(
+  puzzle: Puzzle,
+  rankings: Rankings,
+  roster: Roster,
+  socials: Socials | null,
+  saved: Snapshot | null,
+): GameState | null {
+  const board = boardsWith(rankings, roster, socials).find((candidate) => candidate.id === puzzle.board);
+  if (!board) return null;
+  const fresh = createGame(board, DAILY_LEVEL);
+  if (!saved) return fresh;
+  return {
+    ...fresh,
+    named: new Map(saved.named.map(([rank, keys]) => [rank, new Set(keys)])),
+    found: new Set(saved.found),
+    wrong: saved.wrong,
+    lives: saved.lives,
+    status: saved.status,
+  };
+}
+
+export function snapshot(state: GameState): Snapshot {
+  return {
+    named: [...state.named].map(([rank, keys]) => [rank, [...keys]]),
+    found: [...state.found],
+    wrong: state.wrong,
+    lives: state.lives,
+    status: state.status,
+  };
+}
+
+export function result(state: GameState): DailyResult {
+  return {
+    outcome: state.status === 'won' ? 'won' : state.lives <= 0 ? 'lost' : 'gave-up',
+    score: `${state.found.size}/${state.board.rows.length}`,
+  };
+}
+
+/** The ten slots in rank order, 🟩 named, 🟨 half a team, ⬛ missed; then the lives left. */
+export function shareGrid(state: GameState): string[] {
+  const squares = slotsIn(state).map((slot) =>
+    state.found.has(slot.rank) ? '🟩' : namedIn(state, slot.rank).size > 0 ? '🟨' : '⬛',
+  );
+  const lives = Math.max(0, Math.min(HARD_LIVES, state.lives));
+  return [
+    squares.slice(0, 5).join(''),
+    squares.slice(5).join(''),
+    '❤️'.repeat(lives) + '🖤'.repeat(HARD_LIVES - lives),
+  ];
+}

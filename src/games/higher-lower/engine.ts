@@ -5,7 +5,11 @@ import { makeRng, pick, sample, type Rng } from '@/lib/rng';
 
 /** Pure game logic for Higher or Lower — no React, no DOM. */
 
-export type Category = 'age' | 'earnings' | 'fncsWins' | 'fncsFinals' | 'placement';
+export type Category = 'age' | 'earnings' | 'fncsWins' | 'fncsFinals' | 'placement' | 'twitch' | 'youtube';
+
+/** The follower categories: offered only while the server has fresh counts (`data/socials.ts`). */
+export const SOCIAL_CATEGORIES: readonly Category[] = ['twitch', 'youtube'];
+const social = (category: Category) => SOCIAL_CATEGORIES.includes(category);
 export type Answer = 'higher' | 'lower' | 'equal';
 
 /**
@@ -22,6 +26,9 @@ export type Answer = 'higher' | 'lower' | 'equal';
 export type Contender = RosterPlayer & {
   fncsFinals?: number;
   placement?: { place: number; of: number };
+  /** Followers and subscribers, attached by the page from the server's counts. */
+  twitch?: number;
+  youtube?: number;
 };
 
 export type { Difficulty };
@@ -74,6 +81,18 @@ export const CATEGORIES: CategoryMeta[] = [
     title: 'Placement',
     eventOnly: true,
   },
+  {
+    id: 'twitch',
+    label: 'Twitch Followers',
+    hint: 'Followers on their Twitch channel, as Twitch counts them today.',
+    title: 'Twitch Followers',
+  },
+  {
+    id: 'youtube',
+    label: 'YouTube Subscribers',
+    hint: 'Subscribers to their YouTube channel, rounded the way YouTube shows them.',
+    title: 'YouTube Subscribers',
+  },
 ];
 
 export function valueOf(player: Contender, category: Category): number {
@@ -83,6 +102,8 @@ export function valueOf(player: Contender, category: Category): number {
   // Places count down, so the place is negated: 1st is the highest value and
   // Higher means the better finish.
   if (category === 'placement') return -(player.placement?.place ?? 0);
+  if (category === 'twitch') return player.twitch ?? 0;
+  if (category === 'youtube') return player.youtube ?? 0;
   return player.earnings;
 }
 
@@ -123,6 +144,7 @@ export function eligible<T extends Contender>(players: readonly T[], category: C
     if (category === 'fncsWins') return true;
     if (category === 'fncsFinals') return (player.fncsFinals ?? 0) > 0;
     if (category === 'placement') return player.placement !== undefined;
+    if (social(category)) return valueOf(player, category) > 0;
     return player.earningsKnown && player.earnings > 0;
   });
 }
@@ -220,6 +242,19 @@ const BANDS: Record<Category, Record<Closeness, [number, number]>> = {
     close: [2, 4],
     'very-close': [0, 2],
   },
+  // Followers are relative like money: 100K against 200K is the question 1M against 2M is.
+  twitch: {
+    obvious: [0.5, Infinity],
+    moderate: [0.25, 0.5],
+    close: [0.1, 0.25],
+    'very-close': [0, 0.1],
+  },
+  youtube: {
+    obvious: [0.5, Infinity],
+    moderate: [0.25, 0.5],
+    close: [0.1, 0.25],
+    'very-close': [0, 0.1],
+  },
   // A share of the field, like earnings: ten places apart is a wide gap among
   // 33 trios and a narrow one among 100 solo players. In a field of 50 duos
   // obvious is 20+ places apart and very close is under 5.
@@ -240,7 +275,7 @@ export function gapBetween(a: Contender, b: Contender, category: Category): numb
   const x = valueOf(a, category);
   const y = valueOf(b, category);
   if (category === 'placement') return Math.abs(x - y) / (a.placement?.of ?? 1);
-  if (category !== 'earnings') return Math.abs(x - y);
+  if (category !== 'earnings' && !social(category)) return Math.abs(x - y);
   const hi = Math.max(x, y);
   return hi <= 0 ? 0 : Math.abs(x - y) / hi;
 }
@@ -305,7 +340,8 @@ function answerBetween(hidden: RosterPlayer, shown: RosterPlayer, category: Cate
  * a place, which in a duos event means one team: that one is worth knowing.
  */
 function answersDealt(category: Category, difficulty: Difficulty): Answer[] {
-  return hasEqualButton(difficulty) && category !== 'earnings'
+  // Nor on followers: YouTube rounds to three figures, so its "level" is often two different channels.
+  return hasEqualButton(difficulty) && category !== 'earnings' && !social(category)
     ? ['higher', 'lower', 'equal']
     : ['higher', 'lower'];
 }
@@ -546,7 +582,11 @@ export function createGame(
   seed: string = String(Date.now()),
   spread = false,
 ): GameState | null {
-  const ranked = [...eligible(players, category)].sort((a, b) => b.earnings - a.earnings);
+  // Fame is career earnings — except on followers, where the famous names are
+  // the big channels, and a run opening on the top earners would open on pros
+  // with a few thousand followers.
+  const fame = (player: Contender) => (social(category) ? valueOf(player, category) : player.earnings);
+  const ranked = [...eligible(players, category)].sort((a, b) => fame(b) - fame(a));
   if (ranked.length < 2) return null;
 
   const rng = makeRng(`${seed}:0`);

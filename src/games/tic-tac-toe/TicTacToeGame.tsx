@@ -5,7 +5,10 @@ import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PlayerSearch } from '@/components/PlayerSearch';
 import { LevelSetup, type LevelOption } from '@/components/PoolSetup';
+import { DailyEnd, DailyPending } from '@/components/DailyEnd';
 import { Banner, Hearts, Stat } from '@/components/ui';
+import { useDailyRound, usePlayMode } from '@/daily/useDailyRound';
+import { restoreDaily, result as dailyResult, shareGrid, snapshot } from './daily';
 import type { Facts } from '@/data/liquipedia/facts';
 import type { Orgs } from '@/data/liquipedia/orgs';
 import type { Pools } from '@/data/liquipedia/pools';
@@ -35,6 +38,9 @@ import {
   record as roundRecord,
 } from './engine';
 import './tic-tac-toe.css';
+import { useSocials } from '@/data/useSocials';
+import { PlayerAvatar } from '@/components/PlayerAvatar';
+import type { CriterionKind } from '@/games/shared/criteria';
 
 const meta = getGame('tic-tac-toe')!;
 
@@ -102,15 +108,30 @@ function Game({
   pools: Pools | null;
 }) {
   const [event] = useEventMode();
+  /** Follower counts: a daily grid may have a follower rule, so it waits for them. */
+  const socials = useSocials();
   const [difficulty, setDifficulty] = useState<Difficulty>('easy');
-  const [game, setGame] = useState<GameState | null>(null);
+  const byId = useMemo(() => new Map(roster.players.map((player) => [player.id, player])), [roster]);
+  const [dailyOn, setDailyOn] = usePlayMode();
+  const daily = useDailyRound('tic-tac-toe', {
+    on: dailyOn,
+    ready: socials !== null,
+    restore: (puzzle, saved) => restoreDaily(puzzle, roster, facts, orgs, socials, byId, saved),
+    snapshot,
+    finished: (state) => state.status !== 'playing',
+    result: dailyResult,
+  });
+  const [practice, setPractice] = useState<GameState | null>(null);
+  const game = dailyOn ? daily.state : practice;
+  const setGame = (next: GameState) => (dailyOn ? daily.setState(next) : setPractice(next));
 
-  useRoundRecorder('tic-tac-toe', game !== null && game.status !== 'playing', () => ({
+  useRoundRecorder('tic-tac-toe', dailyOn ? daily.endedHere : game !== null && game.status !== 'playing', () => ({
     title: `Tic Tac Toe — ${game!.difficulty}`,
     data: facts.generated,
-    setup: { event, level: game!.difficulty },
+    setup: dailyOn ? { daily: daily.day, level: game!.difficulty } : { event, level: game!.difficulty },
     ...roundRecord(game!),
   }));
+  const shell = { game: meta, dataNote: <RosterNote />, daily: { on: dailyOn, number: daily.number, setOn: setDailyOn } };
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ tone: string; message: string } | null>(null);
   /** Set when more than one cell would take this player and keep the board winnable. */
@@ -137,7 +158,7 @@ function Game({
   const [recent, setRecent] = useLocalState<string[]>('tic-tac-toe:recent', []);
 
   const start = useCallback(() => {
-    const board = generateBoard({ facts, orgs }, { answers, accepted }, difficulty, undefined, recent);
+    const board = generateBoard({ facts, orgs, socials }, { answers, accepted }, difficulty, undefined, recent);
     if (!board) {
       setError('Not enough players in this field to build a solvable grid.');
       return;
@@ -146,17 +167,25 @@ function Game({
     setError(null);
     setFeedback(null);
     setChoosing(null);
-    setGame(createGame(board, difficulty));
-  }, [answers, accepted, facts, orgs, difficulty, recent, setRecent]);
+    setPractice(createGame(board, difficulty));
+  }, [answers, accepted, facts, orgs, socials, difficulty, recent, setRecent]);
 
   const usedIds = useMemo(
     () => new Set(game ? [...game.filled.values()].map((player) => player.id) : []),
     [game],
   );
 
+  if (!game && dailyOn) {
+    return (
+      <GameShell {...shell}>
+        <DailyPending status={daily.status} error={daily.error} />
+      </GameShell>
+    );
+  }
+
   if (!game) {
     return (
-      <GameShell game={meta} dataNote={<RosterNote />}>
+      <GameShell {...shell}>
         <div className="stack">
           <LevelSetup
             pools={pools}
@@ -217,12 +246,13 @@ function Game({
 
   return (
     <GameShell
-      game={meta}
-      dataNote={<RosterNote />}
+      {...shell}
       toolbar={
-        <button type="button" className="icon-btn" onClick={() => setGame(null)}>
-          ↺ New board
-        </button>
+        dailyOn ? null : (
+          <button type="button" className="icon-btn" onClick={() => setPractice(null)}>
+            ↺ New board
+          </button>
+        )
       }
     >
       <div className="stack">
@@ -239,6 +269,9 @@ function Game({
             <div className="ttt-corner" aria-hidden="true" />
             {board.cols.map((col) => (
               <div key={col.id} className="ttt-head" title={col.label}>
+                <span className="ttt-head__icon" aria-hidden="true">
+                  {kindIcon(col.kind)}
+                </span>
                 {col.short}
               </div>
             ))}
@@ -249,6 +282,7 @@ function Game({
                 rowIndex={rowIndex}
                 label={row.short}
                 title={row.label}
+                icon={kindIcon(row.kind)}
                 game={game}
                 finished={finished}
                 choosing={choosing}
@@ -278,9 +312,19 @@ function Game({
                 : 'Every empty cell below shows players who would have worked.'}
             </Banner>
             {game.status === 'lost' ? <Reveal game={game} /> : null}
-            <button type="button" className="btn btn--primary btn--lg btn--block" onClick={start}>
-              New board
-            </button>
+            {dailyOn ? (
+              <DailyEnd
+                game="tic-tac-toe"
+                number={daily.number}
+                day={daily.day}
+                result={dailyResult(game)}
+                grid={shareGrid(game)}
+              />
+            ) : (
+              <button type="button" className="btn btn--primary btn--lg btn--block" onClick={start}>
+                New board
+              </button>
+            )}
           </div>
         ) : (
           <div className="stack-sm">
@@ -340,10 +384,43 @@ function Reveal({ game }: { game: GameState }) {
   );
 }
 
+/** What kind of rule a header is, at a glance — the board reads faster when titles look like titles. */
+function kindIcon(kind: CriterionKind): string {
+  switch (kind) {
+    case 'country':
+    case 'region':
+      return '🌍';
+    case 'org':
+    case 'org-count':
+      return '🏢';
+    case 'earnings':
+      return '💰';
+    case 'age':
+      return '🎂';
+    case 'played-event':
+    case 'world-cup':
+      return '🎟️';
+    case 'lan-winner':
+    case 'lan-podium':
+      return '🏟️';
+    case 'global-winner':
+      return '🌐';
+    case 'fncs-with':
+    case 'played-with':
+    case 'fncs-partners':
+      return '🤝';
+    case 'socials':
+      return '📺';
+    default:
+      return '🏆';
+  }
+}
+
 function BoardRow({
   rowIndex,
   label,
   title,
+  icon,
   game,
   finished,
   choosing,
@@ -352,6 +429,7 @@ function BoardRow({
   rowIndex: number;
   label: string;
   title: string;
+  icon: string;
   game: GameState;
   finished: boolean;
   choosing: { player: RosterPlayer; cells: Cell[] } | null;
@@ -360,6 +438,9 @@ function BoardRow({
   return (
     <>
       <div className="ttt-head ttt-head--row" title={title}>
+        <span className="ttt-head__icon" aria-hidden="true">
+          {icon}
+        </span>
         {label}
       </div>
       {Array.from({ length: SIZE }, (_, col) => {
@@ -377,7 +458,10 @@ function BoardRow({
             disabled={Boolean(player) || finished || !offered}
           >
             {player ? (
-              <span className="ttt-cell__name">{player.name}</span>
+              <>
+                <PlayerAvatar player={player} size={34} />
+                <span className="ttt-cell__name">{player.name}</span>
+              </>
             ) : (
               <span className="ttt-cell__plus" aria-hidden="true">
                 {offered ? '↓' : finished ? '?' : ''}

@@ -76,6 +76,7 @@ export function Footer() {
 
         <nav className="site-footer__links" aria-label="Site information">
           <Link to="/credits">Credits &amp; licence</Link>
+          <Link to="/privacy">Privacy</Link>
         </nav>
       </div>
     </footer>

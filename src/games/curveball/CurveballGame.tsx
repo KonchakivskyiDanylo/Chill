@@ -13,8 +13,17 @@ import { useRoster } from '@/data/liquipedia/useRoster';
 import { getGame } from '@/games/registry';
 import { giveUp, guess, skip } from '@/games/shared/clue-round';
 import { dealFresh, LEVEL_LABEL, levelPlayers, type Level } from '@/games/shared/levels';
-import { plural } from '@/lib/format';
-import { createGame, eligible, MIN_GUESSES, pointLabel, record as roundRecord, type GameState, type Point } from './engine';
+import { moneyShort, plural } from '@/lib/format';
+import {
+  createGame,
+  eligible,
+  MIN_GUESSES,
+  pointLabel,
+  record as roundRecord,
+  totalSoFar,
+  type GameState,
+  type Point,
+} from './engine';
 import './curveball.css';
 
 const meta = getGame('curveball')!;
@@ -94,6 +103,10 @@ function Game({ roster }: { roster: Roster }) {
         <div className="stats">
           <Stat label="Years" value={`${finished ? game.earned : game.revealed}/${game.clues.length}`} />
           <Stat label="Guesses" value={game.guesses.length} />
+          <Stat
+            label={finished ? 'Career total' : 'Total so far'}
+            value={moneyShort(totalSoFar(game.clues, finished ? game.clues.length : game.revealed))}
+          />
         </div>
 
         <section className="card stack cb-card">

@@ -4,6 +4,7 @@ import type { MajorResult, Majors } from '@/data/liquipedia/majors';
 import { orgName, type Orgs } from '@/data/liquipedia/orgs';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 import type { Teammates } from '@/data/liquipedia/teammates';
+import { countShort, PLATFORM_META, type Socials } from '@/data/socials';
 import { moneyShort, ordinal, plural } from '@/lib/format';
 import { recordRound, startRound, type ClueRound } from '@/games/shared/clue-round';
 
@@ -26,6 +27,7 @@ export type ClueId =
   | 'titles'
   | 'highlight'
   | 'teammate'
+  | 'socials'
   | 'team'
   | 'aliases'
   | 'handle';
@@ -41,6 +43,8 @@ export interface Sources {
   orgs: Orgs | null;
   teammates: Teammates | null;
   majors: Majors | null;
+  /** Follower counts, while the server has fresh ones. */
+  socials?: Socials | null;
 }
 
 export type GameState = ClueRound<RosterPlayer, Clue>;
@@ -117,6 +121,12 @@ export function fileOf(player: RosterPlayer, bios: Bios, sources: Sources, byId:
   if (mate) {
     out.push({ id: 'teammate', label: 'Most frequent teammate', value: `${mate.player.name} — ${plural(mate.events, 'tournament')}` });
   }
+  // Late in the file: a big channel narrows a real name to a handful of streamers.
+  const channels = (['twitch', 'youtube'] as const)
+    .map((platform) => ({ platform, count: sources.socials?.of(platform, player) ?? null }))
+    .filter((entry): entry is { platform: 'twitch' | 'youtube'; count: number } => entry.count !== null && entry.count > 0)
+    .map(({ platform, count }) => `${countShort(count)} ${PLATFORM_META[platform].noun}`);
+  if (channels.length) out.push({ id: 'socials', label: 'Channels', value: channels.join(' · ') });
   if (team) out.push({ id: 'team', label: 'Plays for', value: team });
   if (player.aliases.length) out.push({ id: 'aliases', label: 'Also known as', value: player.aliases.join(', ') });
   out.push({ id: 'handle', label: 'Handle', value: handleShape(player.name) });

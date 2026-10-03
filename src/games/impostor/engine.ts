@@ -1,3 +1,5 @@
+import type { Facts } from '@/data/liquipedia/facts';
+import type { Platform, Socials } from '@/data/socials';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 import { makeRng, randInt, sample, shuffle } from '@/lib/rng';
 import { ref, type GamePayloads, type Outcome } from '@/analytics/types';
@@ -56,6 +58,8 @@ const USABLE = new Set([
   'won-fncs-region',
   'won-fncs-year',
   'played-event',
+  // "Has 100K+ Twitch followers", when the server has fresh counts.
+  'socials',
 ]);
 
 /**
@@ -88,6 +92,124 @@ function byKind(criteria: PlayerCriterion[], rng: ReturnType<typeof makeRng>): P
   return [...ordered, ...shuffle(rng, criteria)];
 }
 
+/**
+ * Share of the griefers drawn from the near misses; the rest stay random, so a
+ * board is not ten look-alikes and a player who reads every card as a trap is
+ * wrong too.
+ */
+export const NEAR_SHARE = 0.6;
+
+/**
+ * How nearly an outsider fits the rule — the griefer worth putting on a board.
+ *
+ * Random outsiders made most griefers easy to dismiss: "has won the EU FNCS"
+ * next to a Japanese player nobody has heard of. A near miss is the player you
+ * have to stop and think about (the user's open decision, closed 3 Oct 2026):
+ *
+ *   country, region      the same scene as the players who fit, or the same
+ *                        flag competing somewhere else
+ *   organisation         someone who has won an FNCS beside one of its players
+ *   titles               a finalist who never won one, or a podium at a LAN
+ *   2+ / 3+ titles       one title short
+ *   earnings             just under the line
+ *   FNCS in a region     a winner from another region, or a finalist from this one
+ *   FNCS in a year       a winner in another year
+ *   played at an event   at another of the headline events, not this one
+ *   followers            a quarter of the line or more
+ *
+ * plus a little for sitting at the same fame as the players who fit, so the
+ * griefers are not told apart by being nobodies.
+ */
+export function nearness(
+  criterion: PlayerCriterion,
+  members: readonly RosterPlayer[],
+  player: RosterPlayer,
+  facts: Facts,
+  headline: ReadonlySet<string>,
+  socials?: Socials | null,
+): number {
+  const mine = facts.of(player.id);
+  const arg = criterion.id.split(':')[1] ?? '';
+  const memberRegions = new Set(members.map((member) => member.region));
+  let score = 0;
+  switch (criterion.kind) {
+    case 'country':
+      if (memberRegions.has(player.region)) score += 2;
+      break;
+    case 'region':
+      if (members.some((member) => member.countryName && member.countryName === player.countryName)) score += 3;
+      break;
+    case 'org':
+      if (members.some((member) => facts.fncsPartners(member.id).has(player.id))) score += 3;
+      else if (memberRegions.has(player.region)) score += 1;
+      break;
+    case 'fncs-winner':
+    case 'global-winner':
+    case 'lan-winner':
+    case 'tournament-winner':
+      if (player.fncsWins > 0 || mine.podium.some((index) => facts.events[index]?.lan)) score += 3;
+      else score += 2 * Math.min(1, mine.apps / 20);
+      break;
+    case 'fncs-wins':
+      if (player.fncsWins === Number(arg) - 1) score += 4;
+      break;
+    case 'earnings': {
+      const line = Number(arg);
+      if (player.earnings >= line / 2) score += 4 * (player.earnings / line);
+      break;
+    }
+    case 'won-fncs-region':
+      if (player.fncsWins > 0) score += 2;
+      if (members.some((member) => member.region === player.region)) score += 1.5 * Math.min(1, mine.apps / 15);
+      break;
+    case 'won-fncs-year':
+      if (mine.fncsWinYears.length > 0) score += 3;
+      break;
+    case 'played-event':
+      if (headline.has(player.id)) score += 3;
+      break;
+    case 'socials': {
+      const [platform, line] = criterion.id.split(':');
+      const count = socials?.of(platform as Platform, player) ?? 0;
+      if (count >= Number(line) / 4) score += 4 * (count / Number(line));
+      break;
+    }
+  }
+  // The same fame as the players who fit: within a factor of ten in earnings.
+  const typical = members.reduce((sum, member) => sum + Math.log10(member.earnings + 1), 0) / Math.max(1, members.length);
+  score += Math.max(0, 1 - Math.abs(Math.log10(player.earnings + 1) - typical));
+  return score;
+}
+
+function pickGriefers(
+  criterion: PlayerCriterion,
+  members: readonly RosterPlayer[],
+  outsiders: readonly RosterPlayer[],
+  count: number,
+  facts: Facts,
+  rng: ReturnType<typeof makeRng>,
+  socials?: Socials | null,
+): RosterPlayer[] {
+  const headline = new Set(facts.headlineEvents.flatMap((event) => [...facts.playedAt(event.index)]));
+  const ranked = outsiders
+    .map((player) => ({ player, score: nearness(criterion, members, player, facts, headline, socials) + rng() * 0.5 }))
+    .sort((a, b) => b.score - a.score);
+  // The near misses are the best-scored few, drawn from rather than taken in
+  // order, so the same rule does not deal the same griefers every time.
+  const near = sample(
+    rng,
+    ranked.slice(0, Math.max(count * 3, 12)).map((entry) => entry.player),
+    Math.ceil(count * NEAR_SHARE),
+  );
+  const taken = new Set(near.map((player) => player.id));
+  const rest = sample(
+    rng,
+    outsiders.filter((player) => !taken.has(player.id)),
+    count - near.length,
+  );
+  return [...near, ...rest];
+}
+
 export function createRound(source: CriteriaSource, seed: string = String(Date.now())): Round | null {
   const rng = makeRng(seed);
   const criteria = buildCriteria(source, { minMatches: MIN_MEMBERS, maxShare: 0.4 }).filter(
@@ -116,7 +238,7 @@ export function createRound(source: CriteriaSource, seed: string = String(Date.n
     if (outsiders.length < grieferCount) continue;
 
     const members = sample(rng, criterion.matches, memberCount);
-    const griefers = sample(rng, outsiders, grieferCount);
+    const griefers = pickGriefers(criterion, members, outsiders, grieferCount, source.facts, rng, source.socials);
     return {
       criterion,
       board: shuffle(rng, [...members, ...griefers]),

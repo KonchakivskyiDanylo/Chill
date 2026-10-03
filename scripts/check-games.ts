@@ -54,6 +54,7 @@ import * as tenaball from '@/games/tenaball/engine';
 import { buildCriteria as buildListCriteria, buildPoolCriteria } from '@/games/list/criteria';
 import { poolBoards } from '@/games/tenaball/pool-boards';
 import { derivedBoards } from '@/games/tenaball/derived-boards';
+import { socialBoards } from '@/games/tenaball/social-boards';
 import * as griefer from '@/games/impostor/engine';
 import * as ttt from '@/games/tic-tac-toe/engine';
 import * as connections from '@/games/connections/engine';
@@ -68,6 +69,7 @@ import * as transferWindow from '@/games/transfer-window/engine';
 import * as whichLobby from '@/games/which-lobby/engine';
 import * as rewind from '@/games/rewind/engine';
 import { loadBios } from '@/data/liquipedia/bios';
+import { loadSocials } from '@/data/socials';
 import {
   giveUp as clueGiveUp,
   guess as clueGuess,
@@ -76,6 +78,17 @@ import {
   type Named,
 } from '@/games/shared/clue-round';
 import { LEVEL_IDS, levelPlayers, type Level } from '@/games/shared/levels';
+import * as daily from '@/daily/day';
+import * as dailyProgress from '@/daily/progress';
+import { clueGrid, clueResult, snapClues } from '@/daily/clue-round';
+import { knownPlayers } from '@/daily/fame';
+import { generateDaily } from '@/daily/generate';
+import { DAILY_GAMES, type DailySet } from '@/daily/types';
+import * as wordleDaily from '@/games/wordle/daily';
+import * as careerDaily from '@/games/career-path/daily';
+import * as whoDaily from '@/games/who-are-ya/daily';
+import * as tenaballDaily from '@/games/tenaball/daily';
+import * as tttDaily from '@/games/tic-tac-toe/daily';
 import { lobbiesOf, parseLobby, roundLabel } from '@/games/shared/lobbies';
 
 const problems: string[] = [];
@@ -145,6 +158,8 @@ const rankings = await optional(loadRankings, 'rankings.json');
 const pools = await loadPools(); // never rejects
 const majors = await optional(loadMajors, 'career_path.json');
 const teammates = await optional(loadTeammates, 'teammates.json');
+// The developer's own socials.json when there is one (never in git, so never in CI).
+const socials = await loadSocials();
 
 // ------------------------------------------------------------- 1. name search
 // The one piece of shared logic every typing game depends on.
@@ -187,7 +202,9 @@ const hlCategories: hl.Category[] = facts ? ['age', 'earnings', 'fncsWins', 'fnc
  * the output — the category, or Placement and the event it is about.
  */
 function checkHigherLower(contenders: readonly hl.Contender[], category: hl.Category, tag: string = category) {
-  const ranked = [...hl.eligible(contenders, category)].sort((a, b) => b.earnings - a.earnings);
+  // The engine's own fame order: earnings, or the count itself on a follower category.
+  const fame = (player: hl.Contender) => (hl.SOCIAL_CATEGORIES.includes(category) ? hl.valueOf(player, category) : player.earnings);
+  const ranked = [...hl.eligible(contenders, category)].sort((a, b) => fame(b) - fame(a));
   const rank = new Map(ranked.map((player, index) => [player.id, index + 1]));
   for (const difficulty of ['easy', 'medium', 'hard'] as const) {
     let rounds = 0;
@@ -2291,6 +2308,152 @@ if (pools.pools.length > 0) {
     const lans = TERMS.lan.events!(facts).names;
     check(lans.length === facts.events.filter((e) => e.lan).length, 'glossary: the LAN list is not every LAN');
     notes.push(`glossary: ${lans.length} LANs listed — ${lans.join(', ')}`);
+  }
+}
+
+// ------------------------------------------------------------ 12d. followers
+// Only when this machine has counts (scripts/socials_api.py writes them; git and
+// CI never see them). Every game that reads them builds with them.
+if (socials.platforms.length > 0) {
+  const byId = new Map(roster.players.map((player) => [player.id, player]));
+  for (const platform of socials.platforms) {
+    // Higher or Lower: the run checks, on contenders carrying the counts.
+    const withCounts: hl.Contender[] = roster.players.map((p) => ({ ...p, [platform]: socials.of(platform, p) ?? undefined }));
+    checkHigherLower(withCounts, platform);
+  }
+  // Tenaball: every follower board is ten nameable players and a spare.
+  const boards = socialBoards(roster, socials);
+  for (const board of boards) {
+    check(board.rows.length === 10 && board.rows.every((row) => byId.has(row.key)) && byId.has(board.next.key), `followers: ${board.title} has an answer nobody can type`);
+    check(board.rows.every((row, i) => i === 0 || board.rows[i - 1].value >= row.value), `followers: ${board.title} is out of order`);
+  }
+  check(boards.length >= socials.platforms.length * 4, `followers: only ${boards.length} Tenaball boards`);
+  // List, and the shared rules.
+  if (facts && orgs) {
+    const followerLists = buildListCriteria(roster, facts, null, orgs, null, socials).filter((list) => list.id.startsWith('followers:'));
+    check(followerLists.length > 0 && followerLists.every((list) => list.answers.length >= 10 && list.answers.length <= 120), 'followers: a List follower list is missing or out of bounds');
+    const rules = buildCriteria({ players: roster.players, facts, orgs, socials }, { minMatches: 4, maxShare: 0.5 }).filter((rule) => rule.kind === 'socials');
+    check(rules.length > 0, 'followers: no follower rules were built');
+    // Pyramid: some seed deals a follower pyramid, in order.
+    let followerPyramids = 0;
+    for (let seed = 0; seed < 60 && followerPyramids < 3; seed++) {
+      const puzzle = pyramid.generatePuzzle(roster, facts, null, 'easy', `f-${seed}`, null, null, socials);
+      if (!puzzle?.id.startsWith('followers:')) continue;
+      followerPyramids++;
+      check(puzzle.items.length === pyramid.SIZE, `followers: a pyramid of ${puzzle.items.length}`);
+    }
+    check(followerPyramids > 0, 'followers: no follower pyramid in 60 deals');
+    notes.push(`followers: ${socials.platforms.join(' and ')} — ${boards.length} Tenaball boards, ${followerLists.length} lists, ${rules.length} rules (${rules.map((rule) => `${rule.short} ${rule.matches.length}`).join(', ')})`);
+  }
+  // Guess the Player's Twitch column points the right way.
+  if (socials.has('twitch')) {
+    const [big, small] = ['Ninja', 'Bugha'].map((id) => byId.get(id));
+    if (big && small) {
+      const cell = gtp.compare(small, big, 'direction', { twitch: (id) => socials.of('twitch', id) }).find((r) => r.key === 'twitch');
+      check(cell?.direction === 'up', `followers: Guess the Player's Twitch arrow points ${cell?.direction}`);
+    }
+  }
+} else {
+  skipped.push('followers (no socials.json here — scripts/socials_api.py)');
+}
+
+// ------------------------------------------------------------ 12c. the daily puzzles
+// The day turns over at midnight in Berlin, summer time or not; a month of days
+// in a row comes out whole, never repeats a secret or a board, and every
+// puzzle rebuilds into a round the perfect player can finish.
+{
+  check(daily.dayKey(Date.parse('2026-10-04T21:59:00Z')) === '2026-10-04', 'daily: 23:59 CEST is not still the 4th');
+  check(daily.dayKey(Date.parse('2026-10-04T22:00:00Z')) === '2026-10-05', 'daily: 00:00 CEST is not the 5th');
+  check(daily.dayKey(Date.parse('2026-12-01T22:59:00Z')) === '2026-12-01', 'daily: 23:59 CET is not still the 1st');
+  check(daily.dayKey(Date.parse('2026-12-01T23:00:00Z')) === '2026-12-02', 'daily: 00:00 CET is not the 2nd');
+  check(daily.startOf('2026-10-26') === Date.parse('2026-10-25T23:00:00Z'), 'daily: the day after summer time ends starts at the wrong hour');
+  check(daily.startOf('2027-03-29') === Date.parse('2027-03-28T22:00:00Z'), 'daily: the day after summer time starts begins at the wrong hour');
+  const evening = Date.parse('2026-10-25T22:30:00Z');
+  check(daily.msUntilNextDay(evening) === 30 * 60_000, `daily: half an hour to midnight read ${daily.msUntilNextDay(evening)}ms`);
+  check(daily.puzzleNumber(daily.DAILY_START) === 1 && daily.puzzleNumber(daily.addDays(daily.DAILY_START, 9)) === 10, 'daily: puzzle numbers are off');
+
+  // Streaks count days played in a row, up to today or, before today's is played, yesterday.
+  const days = ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-05'];
+  const streak = (today: string) => dailyProgress.statsOf(days, today);
+  check(streak('2026-10-05').streak === 1 && streak('2026-10-06').streak === 1 && streak('2026-10-07').streak === 0, 'daily: the streak does not count up to today or yesterday');
+  check(streak('2026-10-04').streak === 3 && streak('2026-10-05').best === 3, 'daily: the streak or best run is miscounted');
+
+  if (facts && orgs && rankings && majors && teammates) {
+    const data = { roster, majors, teammates, facts, orgs, rankings, socials };
+    const byId = new Map(roster.players.map((player) => [player.id, player]));
+    const lists = buildListCriteria(roster, facts, null, orgs, teammates, socials);
+    const history: DailySet[] = [];
+    let day = daily.DAILY_START;
+    const DAYS = 30;
+    for (let i = 0; i < DAYS; i++, day = daily.addDays(day, 1)) {
+      const set = generateDaily(day, data, history);
+      history.push(set);
+      const p = set.puzzles;
+      const missing = DAILY_GAMES.filter((game) => !p[game]);
+      check(missing.length === 0, `daily ${day}: no puzzle for ${missing.join(', ')}`);
+      if (i === 0) {
+        check(JSON.stringify(generateDaily(day, data, [])) === JSON.stringify(set), `daily ${day}: two makings of the same day differ`);
+      }
+
+      // Fortnitedle: the answer typed straight away wins in one, and shares one row.
+      const w = p.wordle && wordleDaily.restoreDaily(p.wordle, roster, null);
+      check(Boolean(w), `daily ${day}: Fortnitedle did not rebuild`);
+      if (w) {
+        const won = wordle.submitGuess(w, w.answer);
+        check(won.ok && won.state.status === 'won' && wordleDaily.result(won.ok ? won.state : w).score === '1/6', `daily ${day}: Fortnitedle's answer did not win in one`);
+        if (won.ok) check(wordleDaily.shareGrid(won.state).join('') === '🟩'.repeat(w.answer.length), `daily ${day}: Fortnitedle's share grid is wrong`);
+      }
+
+      // Career Path and Who Are Ya: the descriptor's clues come back in order, and a saved round comes back too.
+      const cp = p['career-path'] && careerDaily.restoreDaily(p['career-path'], majors, byId, null);
+      check(Boolean(cp) && cp!.clues.map((c) => c.result.tournament.name).join('|') === p['career-path']!.clues.join('|'), `daily ${day}: Career Path did not rebuild its clues`);
+      if (cp) {
+        const skipped = career.revealNext(cp);
+        const back = careerDaily.restoreDaily(p['career-path']!, majors, byId, snapClues(skipped));
+        check(back?.revealed === 2, `daily ${day}: a saved Career Path round did not come back`);
+        const solved = career.submitGuess(skipped, cp.secret);
+        check(clueResult(solved).score === `2/${cp.clues.length}` && clueGrid(solved)[0].startsWith('⬛🟩'), `daily ${day}: Career Path's result reads ${clueResult(solved).score} ${clueGrid(solved).join('/')}`);
+      }
+      const wy = p['who-are-ya'] && whoDaily.restoreDaily(p['who-are-ya'], teammates, byId, null);
+      check(Boolean(wy) && wy!.clues.map((c) => c.player.id).join('|') === p['who-are-ya']!.clues.join('|'), `daily ${day}: Who Are Ya did not rebuild its clues`);
+
+      // No secret player twice on one day.
+      const secrets = [p.wordle?.secret, p['career-path']?.secret, p['who-are-ya']?.secret].filter(Boolean);
+      check(new Set(secrets).size === secrets.length, `daily ${day}: one player is the secret in two games`);
+
+      // Tenaball: rebuilds, and a snapshot taken mid-round comes back the same.
+      const tb = p.tenaball && tenaballDaily.restoreDaily(p.tenaball, rankings, roster, socials, null);
+      check(Boolean(tb) && tb!.lives === tenaball.HARD_LIVES, `daily ${day}: Tenaball did not rebuild on Hard`);
+      if (tb) {
+        const first = tenaball.slotsIn(tb)[0].members[0];
+        const one = tenaball.applyGuess(tb, first.key, first.label).state;
+        const wrong = tenaball.applyGuess(one, '__nobody__', 'Nobody').state;
+        const back = tenaballDaily.restoreDaily(p.tenaball!, rankings, roster, socials, tenaballDaily.snapshot(wrong));
+        check(back?.lives === wrong.lives && back?.found.size === wrong.found.size && tenaball.namedIn(back, 1).has(first.key), `daily ${day}: a saved Tenaball round did not come back`);
+        check(tenaballDaily.shareGrid(wrong).length === 3, `daily ${day}: Tenaball's share grid is not two rows and the lives`);
+      }
+
+      // List: the list exists and fits the daily's bounds.
+      const list = p.list && lists.find((entry) => entry.id === p.list!.list);
+      check(Boolean(list) && list!.answers.length >= 10 && list!.answers.length <= 60, `daily ${day}: List's list is missing or out of bounds`);
+
+      // Tic Tac Toe: the six rules rebuild a grid nine different players can fill.
+      const tt = p['tic-tac-toe'] && tttDaily.restoreDaily(p['tic-tac-toe'], roster, facts, orgs, socials, byId, null);
+      check(Boolean(tt) && tt!.difficulty === tttDaily.DAILY_LEVEL, `daily ${day}: Tic Tac Toe did not rebuild`);
+      if (tt) check(tt.board.candidates.flat().every((cell) => cell.length >= 1), `daily ${day}: Tic Tac Toe has an empty cell`);
+    }
+    const window = (game: 'wordle' | 'career-path' | 'who-are-ya') => history.map((set) => set.puzzles[game]?.secret);
+    const allSecrets = [...window('wordle'), ...window('career-path'), ...window('who-are-ya')];
+    check(new Set(allSecrets).size === allSecrets.length, `daily: a secret player came back within ${DAYS} days`);
+    const boards = history.map((set) => set.puzzles.tenaball?.board);
+    const listIds = history.map((set) => set.puzzles.list?.list);
+    check(new Set(boards).size === DAYS && new Set(listIds).size === DAYS, `daily: a Tenaball board or a List came back within ${DAYS} days`);
+    const known = knownPlayers(roster);
+    const famous = allSecrets.filter((id) => known.has(id!)).length;
+    check(famous === allSecrets.length, `daily: ${allSecrets.length - famous} secret players are not well known`);
+    notes.push(`daily: ${DAYS} days made — ${new Set(allSecrets).size} different secret players, ${allSecrets.filter((id) => byId.get(id!)?.tier === 'easy').length} of them famous`);
+  } else {
+    skipped.push('daily puzzles (needs facts, orgs, rankings, career_path and teammates)');
   }
 }
 

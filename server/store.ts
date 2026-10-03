@@ -1,6 +1,8 @@
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import pg from 'pg';
+import type { DailySet } from '@/daily/types';
+import type { Platform } from '@/data/socials';
 import type {
   ClientError,
   RoundRecord,
@@ -45,6 +47,26 @@ export interface Store {
   addPageChange(body: PageChange): Promise<void>;
   /** Oldest first, the ones after id `after` — the updater keeps its own cursor. */
   pageChanges(after: number, limit: number): Promise<Stored<PageChange>[]>;
+  /** One day's daily puzzles, or null if nobody has asked for that day yet. */
+  daily(day: string): Promise<DailySet | null>;
+  /**
+   * Keeps a day's puzzles unless the day already has some, and returns whichever
+   * set is kept — the first one made always wins, so a day never changes.
+   */
+  addDaily(set: DailySet): Promise<DailySet>;
+  /** The days from `since` on, oldest first — what a new day avoids repeating. */
+  dailies(since: string): Promise<DailySet[]>;
+  /** One platform's latest follower counts, or null. Only ever the latest: a new set replaces the old. */
+  socials(platform: Platform): Promise<SocialCounts | null>;
+  setSocials(platform: Platform, counts: SocialCounts): Promise<void>;
+  /** The socials fetcher's own memory: YouTube's handle lookups, the Twitch login. Null deletes. */
+  socialState(key: string): Promise<unknown>;
+  setSocialState(key: string, value: unknown): Promise<void>;
+}
+
+export interface SocialCounts {
+  fetched: string;
+  counts: Record<string, number>;
 }
 
 export async function openStore(): Promise<Store> {
@@ -86,6 +108,19 @@ class PostgresStore implements Store {
       create table if not exists liquipedia_changes (
         id bigserial primary key,
         at timestamptz not null default now(),
+        body jsonb not null
+      );
+      create table if not exists daily_puzzles (
+        day text primary key,
+        at timestamptz not null default now(),
+        body jsonb not null
+      );
+      create table if not exists social_counts (
+        platform text primary key,
+        body jsonb not null
+      );
+      create table if not exists social_state (
+        key text primary key,
         body jsonb not null
       );
     `);
@@ -143,6 +178,52 @@ class PostgresStore implements Store {
     );
     return rows.map((row) => ({ id: Number(row.id), at: new Date(row.at).toISOString(), body: row.body }));
   }
+
+  async daily(day: string): Promise<DailySet | null> {
+    const { rows } = await this.pool.query('select body from daily_puzzles where day = $1', [day]);
+    return rows[0]?.body ?? null;
+  }
+
+  async addDaily(set: DailySet): Promise<DailySet> {
+    await this.pool.query('insert into daily_puzzles (day, body) values ($1, $2) on conflict (day) do nothing', [
+      set.day,
+      set,
+    ]);
+    return (await this.daily(set.day)) ?? set;
+  }
+
+  async dailies(since: string): Promise<DailySet[]> {
+    const { rows } = await this.pool.query('select body from daily_puzzles where day >= $1 order by day', [since]);
+    return rows.map((row) => row.body);
+  }
+
+  async socials(platform: Platform): Promise<SocialCounts | null> {
+    const { rows } = await this.pool.query('select body from social_counts where platform = $1', [platform]);
+    return rows[0]?.body ?? null;
+  }
+
+  async setSocials(platform: Platform, counts: SocialCounts): Promise<void> {
+    await this.pool.query(
+      'insert into social_counts (platform, body) values ($1, $2) on conflict (platform) do update set body = excluded.body',
+      [platform, counts],
+    );
+  }
+
+  async socialState(key: string): Promise<unknown> {
+    const { rows } = await this.pool.query('select body from social_state where key = $1', [key]);
+    return rows[0]?.body ?? null;
+  }
+
+  async setSocialState(key: string, value: unknown): Promise<void> {
+    if (value === null) {
+      await this.pool.query('delete from social_state where key = $1', [key]);
+      return;
+    }
+    await this.pool.query(
+      'insert into social_state (key, body) values ($1, $2) on conflict (key) do update set body = excluded.body',
+      [key, JSON.stringify(value)],
+    );
+  }
 }
 
 // -------------------------------------------------------------------- files --
@@ -158,6 +239,7 @@ class FileStore implements Store {
   private tickets: StoredSupport[] = [];
   private faults: Stored<ClientError>[] = [];
   private changes: Stored<PageChange>[] = [];
+  private days = new Map<string, DailySet>();
 
   private constructor(private readonly dir: string) {}
 
@@ -168,6 +250,9 @@ class FileStore implements Store {
     store.tickets = await store.read('support');
     store.faults = await store.read('errors');
     store.changes = await store.read('liquipedia');
+    for (const set of await store.read<DailySet>('daily')) {
+      if (!store.days.has(set.day)) store.days.set(set.day, set);
+    }
     return store;
   }
 
@@ -238,5 +323,54 @@ class FileStore implements Store {
 
   async pageChanges(after: number, limit: number): Promise<Stored<PageChange>[]> {
     return this.changes.filter((row) => row.id > after).slice(0, limit);
+  }
+
+  async daily(day: string): Promise<DailySet | null> {
+    return this.days.get(day) ?? null;
+  }
+
+  async addDaily(set: DailySet): Promise<DailySet> {
+    const kept = this.days.get(set.day);
+    if (kept) return kept;
+    this.days.set(set.day, set);
+    await this.append('daily', set);
+    return set;
+  }
+
+  async dailies(since: string): Promise<DailySet[]> {
+    return [...this.days.values()].filter((set) => set.day >= since).sort((a, b) => a.day.localeCompare(b.day));
+  }
+
+  // The follower counts and their state are one small JSON file each, rewritten
+  // whole: only the latest is ever kept.
+  private async readOne<T>(name: string): Promise<T | null> {
+    try {
+      return JSON.parse(await readFile(path.join(this.dir, `${name}.json`), 'utf8')) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  private async writeOne(name: string, value: unknown): Promise<void> {
+    await writeFile(path.join(this.dir, `${name}.json`), JSON.stringify(value));
+  }
+
+  async socials(platform: Platform): Promise<SocialCounts | null> {
+    return this.readOne<SocialCounts>(`socials-${platform}`);
+  }
+
+  async setSocials(platform: Platform, counts: SocialCounts): Promise<void> {
+    await this.writeOne(`socials-${platform}`, counts);
+  }
+
+  async socialState(key: string): Promise<unknown> {
+    return (await this.readOne<Record<string, unknown>>('socials-state'))?.[key] ?? null;
+  }
+
+  async setSocialState(key: string, value: unknown): Promise<void> {
+    const all = (await this.readOne<Record<string, unknown>>('socials-state')) ?? {};
+    if (value === null) delete all[key];
+    else all[key] = value;
+    await this.writeOne('socials-state', all);
   }
 }

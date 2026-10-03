@@ -236,10 +236,10 @@ NOT_A_TEAM = {"free agent", "retired", "retirement", "inactive", "none", "unknow
 # Esports" and left "NRG", Team Falcons was "Falcons Esports". Without folding
 # these, one stint split into a join at one org and a leave at another.
 #
-# Only bios.json folds them (`loose`). orgs.json still matches display names
-# exactly, as it always has, so the live games' rules do not move: folding there
-# too gives NRG 18 former players instead of 12, which is right, but it changes
-# Tic Tac Toe's boards and is the user's call (2 Oct 2026).
+# Both orgs.json and bios.json fold them (`loose`). orgs.json used to match
+# display names exactly so the live games' rules would not move; folding gives
+# NRG 18 former players instead of 12, which is right, and the user asked for it
+# on 3 Oct 2026 knowing it shifts some Tic Tac Toe boards.
 ORG_WORDS = {"team", "esports", "esport", "gaming", "clan", "gg"}
 
 
@@ -326,7 +326,7 @@ def build_orgs(base_dir):
     transfers = json.loads((base_dir / "transfers.json").read_text(encoding="utf-8"))
 
     resolve = player_resolver(players_rows)
-    org_key = org_resolver(teams_rows)
+    org_key = org_resolver(teams_rows, loose=True)
     team_meta = {t["pagename"]: t for t in teams_rows}
 
     ever = defaultdict(set)

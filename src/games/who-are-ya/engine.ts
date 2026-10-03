@@ -133,10 +133,15 @@ export function createGame(
   const rng = makeRng(seed);
   const hand = draw(usable, rng);
   const ordered = mode === 'random' ? holdBackTop(shuffle(rng, hand), hand[0], rng) : [...hand].reverse();
+  return roundOf(secret, ordered, mode);
+}
+
+/** A fresh round on clues already drawn and ordered — how the daily puzzle rebuilds one. */
+export function roundOf(secret: RosterPlayer, ordered: readonly TeammateClue[], mode: Mode): GameState {
   return {
     mode,
     secret,
-    clues: ordered,
+    clues: [...ordered],
     revealed: 1,
     earned: 1,
     guesses: [],

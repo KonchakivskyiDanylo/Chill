@@ -1,0 +1,207 @@
+/* The daily puzzles' shared pieces: the end-of-round panel, the header chip,
+   the home page's "Today" board. */
+
+.daily-end {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+  background:
+    radial-gradient(420px 160px at 0% 0%, var(--primary-soft), transparent 70%),
+    radial-gradient(420px 160px at 100% 100%, rgba(168, 85, 247, 0.1), transparent 70%),
+    var(--surface);
+}
+
+.daily-end__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.daily-end__score {
+  font-size: 2.2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.daily-end__grid {
+  margin: 0;
+  font-family: inherit;
+  font-size: 1.15rem;
+  line-height: 1.25;
+  letter-spacing: 0.06em;
+  text-align: right;
+  white-space: pre;
+}
+
+.daily-end__fallback {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  resize: none;
+}
+
+.daily-end__stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.daily-end__stat {
+  text-align: center;
+  padding: 10px 4px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.daily-end__stat-value {
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+
+.daily-end__stat-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+.daily-end__next {
+  margin: 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.daily-end__clock {
+  font-family: var(--mono);
+  color: var(--text);
+}
+
+.daily-more {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.daily-more__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.daily-more__item:hover {
+  border-color: var(--border-strong);
+}
+
+.daily-more__item--done {
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+}
+
+.daily-more__tick {
+  color: var(--success);
+  font-weight: 700;
+  font-size: 0.78rem;
+}
+
+/* The "Daily #12" chip beside a game's title. */
+.daily-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  vertical-align: middle;
+}
+
+.daily-chip--practice {
+  color: var(--warning);
+  background: var(--warning-soft);
+  border-color: color-mix(in srgb, var(--warning) 30%, transparent);
+}
+
+/* The home page's "Today" strip and the done state of a game card. */
+.home-today {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.home-today__done {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.home-today__side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.home-today__streak {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  background: rgba(249, 115, 22, 0.14);
+  border: 1px solid rgba(249, 115, 22, 0.35);
+}
+
+.home-today__next {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.home-today__next strong {
+  font-family: var(--mono);
+  color: var(--text);
+}
+
+.game-card--done {
+  border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+}
+
+.game-card__done {
+  margin-left: auto;
+  flex: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--success);
+  background: var(--success-soft);
+  white-space: nowrap;
+}
+
+.game-card__play {
+  margin-left: auto;
+  flex: none;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.game-card__done--lost {
+  color: var(--text-muted);
+  background: var(--surface-3);
+}

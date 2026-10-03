@@ -5,6 +5,7 @@ import { membersOf, type Rankings } from '@/data/liquipedia/rankings';
 import type { FameTier, Roster, RosterPlayer } from '@/data/liquipedia/roster';
 import { money, ordinal } from '@/lib/format';
 import { makeRng, shuffle, type Rng } from '@/lib/rng';
+import { countShort, PLATFORM_META, type Socials } from '@/data/socials';
 
 /**
  * Pure logic for Pyramid: ten players and one category, sorted into a pyramid
@@ -78,11 +79,11 @@ const count = (word: string) => (value: number) => `${value} ${word}${value === 
  * LAN wins is on the roadmap and not here: only fifteen players have won one,
  * almost all of them once, so ten players on it would be nearly all tied.
  */
-function playerKinds(roster: Roster, facts: Facts): PlayerCategory[][] {
+function playerKinds(roster: Roster, facts: Facts, socials: Socials | null): PlayerCategory[][] {
   const years = [...new Set(roster.players.flatMap((player) => Object.keys(player.earningsByYear)))]
     .map(Number)
     .sort();
-  return [
+  const kinds: PlayerCategory[][] = [
     [
       {
         id: 'fncs-finals',
@@ -118,8 +119,24 @@ function playerKinds(roster: Roster, facts: Facts): PlayerCategory[][] {
         display: count('LAN'),
       },
     ],
+    // Followers, one kind for both platforms, while the server has fresh counts.
+    (socials?.platforms ?? []).map((platform) => ({
+      id: `followers:${platform}`,
+      title: PLATFORM_META[platform].noun,
+      kind: 'money' as const,
+      value: (player: RosterPlayer) => socials!.of(platform, player) ?? 0,
+      display: (value: number) => `${countShort(value)} ${PLATFORM_META[platform].short}`,
+    })),
   ];
+  return kinds.filter((kind) => kind.length > 0);
 }
+
+/**
+ * Who a follower pyramid draws from: the biggest channels, not the level's
+ * earnings band — the famous streamers are rarely the top earners, and an Easy
+ * pyramid of pros with a few thousand followers would be the hardest on the site.
+ */
+const FOLLOWER_POOL: Record<Difficulty, number> = { easy: 60, medium: 200, hard: Number.POSITIVE_INFINITY };
 
 /**
  * Ten players from one category, close together in its ranking.
@@ -308,11 +325,13 @@ export function generatePuzzle(
   avoid: string | null = null,
   /** Every finish at every major, for tournaments drawn from the whole field. */
   majors: Majors | null = null,
+  /** Fresh follower counts, when there are any — `data/socials.ts`. */
+  socials: Socials | null = null,
 ): Puzzle | null {
   const rng = makeRng(seed);
   const level = LEVELS[difficulty];
   const pool = level.bands.flatMap((band) => roster.exactly(band));
-  const kinds: (PlayerCategory[] | 'tournament')[] = [...playerKinds(roster, facts)];
+  const kinds: (PlayerCategory[] | 'tournament')[] = [...playerKinds(roster, facts, socials)];
   if (rankings) kinds.push('tournament');
   const names = new Map(roster.players.map((player) => [player.id, player.name]));
 
@@ -325,7 +344,12 @@ export function generatePuzzle(
     }
     const category = kind[Math.floor(rng() * kind.length)];
     if (category.id === avoid) continue;
-    const items = drawPlayers(category, pool, difficulty, rng);
+    const from = category.id.startsWith('followers:')
+      ? [...roster.players]
+          .sort((a, b) => category.value(b) - category.value(a))
+          .slice(0, FOLLOWER_POOL[difficulty])
+      : pool;
+    const items = drawPlayers(category, from, difficulty, rng);
     if (items) {
       return { id: category.id, group: 'Players', title: category.title, direction: 'Most at the top', items };
     }

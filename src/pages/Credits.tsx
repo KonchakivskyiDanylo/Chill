@@ -54,6 +54,15 @@ export function Credits() {
       </section>
 
       <section className="card stack-sm">
+        <div className="card__title">YouTube and Twitch</div>
+        <p className="small">
+          Follower counts are from YouTube (through YouTube API Services) and Twitch, refreshed daily and
+          shown as each platform gives them. They belong to YouTube and Twitch, not to this licence; the
+          channel links come from Liquipedia. See <Link to="/privacy" className="link">Privacy</Link>.
+        </p>
+      </section>
+
+      <section className="card stack-sm">
         <div className="card__title">This site</div>
         <p className="small muted">
           Our data files are shared under the same licence, as is, without warranty. Spotted wrong data? Tell

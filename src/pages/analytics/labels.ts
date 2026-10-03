@@ -13,6 +13,7 @@ import { getGame } from '@/games/registry';
 export const gameTitle = (id: string) => getGame(id)?.title ?? id;
 
 export const SOURCE_LABEL: Record<Source, string> = {
+  daily: 'Daily',
   random: 'Random',
   chosen: 'Chosen',
   event: 'Event mode',
@@ -20,6 +21,7 @@ export const SOURCE_LABEL: Record<Source, string> = {
 };
 
 export const SOURCE_HINT: Record<Source, string> = {
+  daily: 'the daily puzzle, the same for everyone that day',
   random: 'the shared picker left on Random',
   chosen: 'the picker on Choose: a region and a difficulty',
   event: 'an event field in force, from the home page',
@@ -38,6 +40,8 @@ const CATEGORY_LABEL: Record<string, string> = {
   fncsWins: 'FNCS wins',
   fncsFinals: 'FNCS finals',
   age: 'Age',
+  twitch: 'Twitch followers',
+  youtube: 'YouTube subscribers',
 };
 
 /** "all-at-once" -> "All at once", "easy" -> "Easy". */

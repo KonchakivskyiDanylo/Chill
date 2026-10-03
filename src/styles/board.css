@@ -1,0 +1,275 @@
+/*
+ * The board look the October games brought in (Transfer Window's crests, Org
+ * Chart's cards), shared by the live games since 3 Oct 2026: every slot of a
+ * round is on the board from the start, the unrevealed ones dashed with a ?,
+ * the newest one lit, and the ones never needed dimmed once the round is over.
+ */
+
+.board-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px 26px;
+}
+
+.board-grid--tight {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+/* Ten slots as two rows of five — Career Path's results, Who Are Ya's teammates. */
+.board-grid--five {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 760px) {
+  .board-grid--five {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.board-step {
+  position: relative;
+  display: flex;
+}
+
+/* The arrow to the next card, for rounds read in order. */
+.board-arrow {
+  position: absolute;
+  right: -20px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-weight: 800;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.board-card {
+  flex: 1;
+  min-height: 128px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 12px 8px;
+  text-align: center;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  position: relative;
+}
+.board-card--hidden {
+  border-style: dashed;
+  background: transparent;
+  color: var(--text-faint);
+}
+.board-card--new {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+  animation: board-in 0.35s ease-out;
+}
+.board-card--late {
+  opacity: 0.45;
+}
+.board-card--hit {
+  border-color: color-mix(in srgb, var(--success) 55%, transparent);
+  background: color-mix(in srgb, var(--success) 9%, var(--surface-2));
+}
+.board-card--miss {
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+}
+
+.board-card__num {
+  position: absolute;
+  top: 7px;
+  left: 9px;
+  font-size: 0.66rem;
+  font-weight: 800;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.board-card__flag {
+  position: absolute;
+  top: 7px;
+  right: 9px;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+.board-card__title {
+  font-weight: 800;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.board-card__meta {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.board-card__q {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--primary);
+  font-weight: 800;
+  font-size: 1.15rem;
+}
+
+/*
+ * A finishing place as a medal: gold, silver and bronze for the podium, green
+ * for the top ten, plain past it — so a career reads at a glance before a
+ * single event name is read.
+ */
+.medal {
+  min-width: 46px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.95rem;
+  border: 1px solid var(--border);
+  background: var(--surface-3);
+  color: var(--text);
+}
+.medal--gold {
+  background: linear-gradient(135deg, #fde68a, #f59e0b);
+  border-color: #f59e0b;
+  color: #3b2300;
+}
+.medal--silver {
+  background: linear-gradient(135deg, #f1f5f9, #94a3b8);
+  border-color: #94a3b8;
+  color: #1e293b;
+}
+.medal--bronze {
+  background: linear-gradient(135deg, #fed7aa, #c2410c);
+  border-color: #c2410c;
+  color: #2a1003;
+}
+.medal--top10 {
+  background: var(--success-soft);
+  border-color: color-mix(in srgb, var(--success) 45%, transparent);
+  color: var(--success);
+}
+
+/* A count shown as a bar under a card: Who Are Ya's shared tournaments. */
+.board-bar {
+  width: 100%;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.board-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+}
+
+/* A fact tile row under a board. */
+.board-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+}
+.board-fact {
+  flex: 1 1 120px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.board-fact dt {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.board-fact dd {
+  margin: 0;
+  font-weight: 800;
+}
+
+/* A progress strip: how much of a round is used, or found. */
+.board-progress {
+  display: flex;
+  gap: 4px;
+}
+.board-progress > span {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-3);
+}
+.board-progress > .is-on {
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+}
+.board-progress > .is-hit {
+  background: var(--success);
+}
+.board-progress > .is-miss {
+  background: var(--danger);
+}
+
+@keyframes board-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes board-pop {
+  0% {
+    transform: scale(0.92);
+  }
+  60% {
+    transform: scale(1.04);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-card--new {
+    animation: none;
+  }
+}
+
+/* A phone: one card per line, the arrows turned to point down. */
+@media (max-width: 460px) {
+  .board-grid,
+  .board-grid--five {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .board-grid--line {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+  .board-grid--line .board-arrow {
+    right: 50%;
+    top: auto;
+    bottom: -20px;
+    transform: translateX(50%) rotate(90deg);
+  }
+  .board-grid:not(.board-grid--line) .board-arrow {
+    display: none;
+  }
+  .board-card {
+    min-height: 0;
+    padding: 12px 8px;
+  }
+}

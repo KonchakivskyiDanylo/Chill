@@ -19,3 +19,63 @@
 .list-clock--low {
   color: var(--danger);
 }
+
+/* The list's head: how much of it is found, and the clock draining. */
+.list-head {
+  background:
+    radial-gradient(360px 120px at 0% 0%, var(--primary-soft), transparent 70%),
+    var(--surface);
+  border-color: color-mix(in srgb, var(--primary) 25%, var(--border));
+}
+
+.list-meter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.list-meter__bar {
+  flex: 1;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.list-meter__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--success), #4ade80);
+  transition: width 0.3s ease;
+}
+.list-meter__count {
+  font-weight: 800;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.list-timer {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.list-timer > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  transition: width 0.1s linear;
+}
+.list-timer > .is-low {
+  background: var(--danger);
+}
+
+.list-chip--new {
+  animation: board-pop 0.32s ease-out;
+  border-color: var(--success);
+}
+@media (prefers-reduced-motion: reduce) {
+  .list-chip--new {
+    animation: none;
+  }
+}

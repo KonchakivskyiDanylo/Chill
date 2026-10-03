@@ -17,6 +17,8 @@ import { useFacts } from '@/data/liquipedia/useFacts';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import { useTeammates } from '@/data/liquipedia/useTeammates';
+import type { Socials } from '@/data/socials';
+import { useSocials } from '@/data/useSocials';
 import { rotationKey } from '@/games/shared/rotation';
 import { activePool, useEventMode } from '@/games/shared/mode';
 import { dealSecret, poolPlayers, poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
@@ -52,6 +54,7 @@ const COLUMNS: { key: string; label: string }[] = [
   { key: 'fncsWins', label: 'FNCS wins' },
   { key: 'fncsFinals', label: 'FNCS finals' },
   { key: 'together', label: 'Together' },
+  { key: 'twitch', label: 'Twitch' },
 ];
 
 const MODES: { id: FeedbackMode; label: string; hint: string }[] = [
@@ -68,10 +71,11 @@ const MODES: { id: FeedbackMode; label: string; hint: string }[] = [
 ];
 
 /** The optional columns, for whichever of their files have arrived. */
-function extrasFrom(facts: Facts | null, teammates: Teammates | null): Extras {
+function extrasFrom(facts: Facts | null, teammates: Teammates | null, socials: Socials | null): Extras {
   return {
     fncsFinals: facts ? (id) => facts.of(id).fncsApps : undefined,
     together: teammates ? (a, b) => teammates.together(a, b) : undefined,
+    twitch: socials?.has('twitch') ? (id) => socials.of('twitch', id) : undefined,
   };
 }
 
@@ -85,8 +89,9 @@ export default function GuessThePlayerGame() {
    */
   const { facts, error: factsError } = useFacts();
   const { teammates, error: teammatesError } = useTeammates();
-  const settled = Boolean((facts || factsError) && (teammates || teammatesError));
-  const extras = useMemo(() => extrasFrom(facts, teammates), [facts, teammates]);
+  const socials = useSocials();
+  const settled = Boolean((facts || factsError) && (teammates || teammatesError) && socials);
+  const extras = useMemo(() => extrasFrom(facts, teammates, socials), [facts, teammates, socials]);
 
   return (
     <LiquipediaGate error={error} ready={Boolean(roster)}>
@@ -204,7 +209,8 @@ function Game({
   const columns = COLUMNS.filter(
     (column) =>
       (column.key !== 'fncsFinals' || game.extras.fncsFinals) &&
-      (column.key !== 'together' || game.extras.together),
+      (column.key !== 'together' || game.extras.together) &&
+      (column.key !== 'twitch' || game.extras.twitch),
   );
   // Guess, then one column per attribute this round compares.
   const attributes = columns.length - 1;

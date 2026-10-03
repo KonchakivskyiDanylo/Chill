@@ -4,6 +4,7 @@
  *
  *   dist/index.html                  the home page
  *   dist/credits/index.html          credits and licence
+ *   dist/privacy/index.html          privacy
  *   dist/game/<slug>/index.html      each game the site shows
  *   dist/sitemap.xml                 all of the above
  *
@@ -22,8 +23,9 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { brotliCompress, constants, gzip } from 'node:zlib';
 import { SOURCE, WIKIPEDIA } from '@/data/liquipedia/roster';
-import { VISIBLE_GAMES, type GameMeta } from '@/games/registry';
-import { CREDITS_META, gameMeta, HOME_META, metaTags, SITE_URL, type PageMeta } from '@/lib/seo';
+import { DAILY_GAMES } from '@/daily/types';
+import { rulesFor, VISIBLE_GAMES, type GameMeta } from '@/games/registry';
+import { CREDITS_META, gameMeta, HOME_META, metaTags, PRIVACY_META, SITE_URL, type PageMeta } from '@/lib/seo';
 
 const DIST = path.resolve(process.cwd(), 'dist');
 const brotli = promisify(brotliCompress);
@@ -51,12 +53,14 @@ function homeBody(): string {
 }
 
 function gameBody(game: GameMeta): string {
+  // The live site plays the daily puzzle, so its rules are the ones to index.
+  const { intro, rules, sections } = rulesFor(game, (DAILY_GAMES as readonly string[]).includes(game.id));
   return [
     `<h1>${esc(game.title)}</h1>`,
     `<p>${esc(game.tagline)}</p>`,
-    ...(game.intro ?? []).map((paragraph) => `<p>${esc(paragraph)}</p>`),
-    ...(game.rules?.length ? ['<h2>How to play</h2>', list(game.rules)] : []),
-    ...(game.sections ?? []).flatMap((section) => [`<h2>${esc(section.title)}</h2>`, list(section.items)]),
+    ...intro.map((paragraph) => `<p>${esc(paragraph)}</p>`),
+    ...(rules.length ? ['<h2>How to play</h2>', list(rules)] : []),
+    ...sections.flatMap((section) => [`<h2>${esc(section.title)}</h2>`, list(section.items)]),
     '<h2>More competitive Fortnite puzzles</h2>',
     gameLinks(game),
     `<p>${link('/', 'All games')} · ${link('/credits', 'Credits & licence')}</p>`,
@@ -71,6 +75,16 @@ function creditsBody(): string {
     `<p>FNCS title counts are from ${link(WIKIPEDIA.url, 'Competitive Fortnite records and statistics')} on Wikipedia, ` +
       `used under ${link(WIKIPEDIA.licenseUrl, WIKIPEDIA.license)}.</p>`,
     `<p>${link('/', 'All games')}</p>`,
+  ].join('');
+}
+
+function privacyBody(): string {
+  return [
+    '<h1>Privacy</h1>',
+    '<p>Your daily results, streaks, best scores and settings stay in your browser. There are no accounts.</p>',
+    '<p>Finished rounds are counted anonymously to tune the puzzles: no account, no device id, no cookie, no stored IP address.</p>',
+    `<p>Follower counts come from the YouTube Data API (YouTube API Services) and the Twitch API. Using the parts of OffSpawn that show them means agreeing to the ${link('https://www.youtube.com/t/terms', 'YouTube Terms of Service')}; YouTube data is handled under the ${link('https://policies.google.com/privacy', 'Google Privacy Policy')}.</p>`,
+    `<p>${link('/', 'All games')} · ${link('/credits', 'Credits & licence')}</p>`,
   ].join('');
 }
 
@@ -122,6 +136,7 @@ const pages: { file: string; meta: PageMeta; body: string; priority: string; cha
     changefreq: 'weekly',
   })),
   { file: 'credits/index.html', meta: CREDITS_META, body: creditsBody(), priority: '0.3', changefreq: 'monthly' },
+  { file: 'privacy/index.html', meta: PRIVACY_META, body: privacyBody(), priority: '0.2', changefreq: 'yearly' },
 ];
 
 for (const { file, meta, body } of pages) {

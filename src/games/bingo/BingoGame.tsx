@@ -34,6 +34,7 @@ import {
   type GameState,
 } from './engine';
 import './bingo.css';
+import { useSocials } from '@/data/useSocials';
 
 const meta = getGame('bingo')!;
 
@@ -82,6 +83,7 @@ export default function BingoGame() {
 }
 
 function Game({ roster, facts, orgs }: { roster: Roster; facts: Facts; orgs: Orgs }) {
+  const socials = useSocials();
   const { pools } = usePools();
   const [difficulty, setDifficulty] = useState<Difficulty>('easy');
   const [game, setGame] = useState<GameState | null>(null);
@@ -118,7 +120,7 @@ function Game({ roster, facts, orgs }: { roster: Roster; facts: Facts; orgs: Org
   }, [facts, roster, difficulty]);
 
   const start = useCallback(() => {
-    const board = generateBoard({ facts, orgs, teammates, roster: roster.players }, { answers }, difficulty);
+    const board = generateBoard({ facts, orgs, socials, teammates, roster: roster.players }, { answers }, difficulty);
     if (!board) {
       setError('Could not build a card from this data.');
       return;
@@ -126,7 +128,7 @@ function Game({ roster, facts, orgs }: { roster: Roster; facts: Facts; orgs: Org
     setError(null);
     setFeedback(null);
     setGame(createGame(board, difficulty));
-  }, [facts, orgs, teammates, roster, answers, difficulty]);
+  }, [facts, orgs, socials, teammates, roster, answers, difficulty]);
 
   if (!game) {
     return (

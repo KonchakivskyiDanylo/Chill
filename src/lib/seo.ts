@@ -24,8 +24,14 @@ export interface PageMeta {
 export const HOME_META: PageMeta = {
   title: 'OffSpawn — Competitive Fortnite Puzzles',
   description:
-    'Puzzle games about competitive Fortnite — guess pro players from their career results, teammates, earnings and FNCS titles. Player data from Liquipedia.',
+    'Daily puzzle games about competitive Fortnite — guess pro players from their career results, teammates, earnings and FNCS titles. New puzzles every day. Player data from Liquipedia.',
   path: '/',
+};
+
+export const PRIVACY_META: PageMeta = {
+  title: `Privacy | ${SITE_NAME}`,
+  description: 'What OffSpawn keeps: your results stay in your browser, finished rounds are counted anonymously, and follower counts come from YouTube and Twitch.',
+  path: '/privacy',
 };
 
 export const CREDITS_META: PageMeta = {

@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { installErrorReporting } from './analytics/client';
 import { App } from './App';
 import './styles/global.css';
+import './styles/board.css';
 
 installErrorReporting();
 

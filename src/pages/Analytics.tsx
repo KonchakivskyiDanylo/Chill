@@ -8,6 +8,7 @@ import { HOME_META, SITE_NAME, usePageMeta } from '@/lib/seo';
 import { AdminContext, api, useAdminData, useScope } from './analytics/api';
 import { GamePage } from './analytics/GamePage';
 import { Errors, Inbox } from './analytics/Inbox';
+import { Socials } from './analytics/Socials';
 import { gameTitle } from './analytics/labels';
 import { Overview } from './analytics/Overview';
 import { PlayerPage, Players } from './analytics/Players';
@@ -152,6 +153,9 @@ function Pages({ onReload, onOut }: { onReload: () => void; onOut: () => void })
           <NavLink to={on('/analytics/errors')} className={tab}>
             Errors{errors ? ` (${errors.length})` : ''}
           </NavLink>
+          <NavLink to={on('/analytics/socials')} className={tab}>
+            Followers
+          </NavLink>
         </div>
         <div className="row">
           <button type="button" className="btn" onClick={onReload} aria-label="Reload">
@@ -191,6 +195,7 @@ function Pages({ onReload, onOut }: { onReload: () => void; onOut: () => void })
         <Route path="players/:id" element={<PlayerPage />} />
         <Route path="support" element={<Inbox tickets={tickets} onChange={onReload} />} />
         <Route path="errors" element={<Errors errors={errors} />} />
+        <Route path="socials" element={<Socials />} />
         <Route path="*" element={<Navigate to={on('/analytics')} replace />} />
       </Routes>
     </div>

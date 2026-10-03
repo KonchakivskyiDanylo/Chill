@@ -106,9 +106,10 @@ itself. After that it stays logged in (the login is kept in
 `C:\Users\<you>\.offspawn\twitch_token.json`, outside the repo) — unless you
 skip it for more than 30 days, when it simply asks again.
 
-The numbers go to `liquipedia_data/clean_data/fortnite/socials.json`. No game
-reads them yet, so this step can be skipped until one does; the file stays on
-your machine (it is not committed).
+The numbers go to `liquipedia_data/clean_data/fortnite/socials.json`, which
+stays on your machine (it is never committed). **This step is optional:** the
+live site fetches its own counts every day (see "The follower counts on the
+live site" below). Your local copy is what a dev server and `check:games` use.
 
 Only one platform: `socials_api.py youtube` or `socials_api.py twitch`. A
 player with two channels on one platform gets the bigger one; a channel that
@@ -149,11 +150,34 @@ git push
 
 Only the files the site reads are committed (`roster.json`, `players.json`,
 `career_path.json`, `teammates.json`, `orgs.json`, `facts.json`,
-`rankings.json`, `pools.json`, `bios.json`) plus the date in `src/data/liquipedia/roster.ts`.
+`rankings.json`, `pools.json`, `bios.json`, `links.json`) plus the date in `src/data/liquipedia/roster.ts`.
 The raw dump, the large in-between files and `socials.json` stay on your
 machine — `.gitignore` handles that.
 
 ---
+
+## The follower counts on the live site
+
+YouTube lets a subscriber count be kept 30 days and Twitch 24 hours, so the
+counts can never be a file in git. The live server fetches them itself about
+once a day, keeps only the newest set, and stops showing a platform whose
+counts got too old. It reads the channel links from `links.json`, which
+`build_data.py` writes and you commit.
+
+**Once, on Heroku** (Settings → Config Vars), add the same keys you use locally:
+
+| Key | Value |
+| --- | --- |
+| `YOUTUBE_API_KEY` | your Google Cloud API key |
+| `TWITCH_CLIENT_ID` | your Twitch application's client ID |
+| `TWITCH_CLIENT_SECRET` | only if that application is Confidential |
+
+Then open `/analytics/socials` on the live site, click **Log in to Twitch**,
+open the link it shows and enter the code. YouTube needs no login. The page
+shows when each platform was last fetched and has a **Fetch now** button.
+
+Twitch only stays logged in while the server keeps using it (daily); if the
+page ever says "Not on the site" for Twitch, log in again there.
 
 ## If something goes wrong
 

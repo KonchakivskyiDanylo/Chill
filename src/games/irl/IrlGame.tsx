@@ -21,6 +21,7 @@ import { dealFresh, LEVEL_LABEL, levelPlayers, type Level } from '@/games/shared
 import { plural } from '@/lib/format';
 import { createGame, eligible, record as roundRecord, type GameState } from './engine';
 import './irl.css';
+import { useSocials } from '@/data/useSocials';
 
 const meta = getGame('irl')!;
 
@@ -54,6 +55,7 @@ function Game({ roster, bios }: { roster: Roster; bios: Bios }) {
   const [orgs, setOrgs] = useState<Orgs | null>(null);
   const [teammates, setTeammates] = useState<Teammates | null>(null);
   const [majors, setMajors] = useState<Majors | null>(null);
+  const socials = useSocials();
   useEffect(() => {
     let cancelled = false;
     loadOrgs().then((value) => !cancelled && setOrgs(value), () => {});
@@ -78,8 +80,8 @@ function Game({ roster, bios }: { roster: Roster; bios: Bios }) {
       return;
     }
     setError(null);
-    setGame(createGame(pick, bios, { orgs, teammates, majors }, byId));
-  }, [roster, bios, level, orgs, teammates, majors, byId]);
+    setGame(createGame(pick, bios, { orgs, teammates, majors, socials }, byId));
+  }, [roster, bios, level, orgs, teammates, majors, socials, byId]);
 
   if (!game) {
     return (

@@ -30,6 +30,7 @@ import {
   record as roundRecord,
 } from './engine';
 import './impostor.css';
+import { useSocials } from '@/data/useSocials';
 
 const meta = getGame('impostor')!;
 
@@ -77,6 +78,7 @@ function Game({
 }) {
   const [choice, setChoice] = usePoolChoice();
   const [event] = useEventMode();
+  const socials = useSocials();
   const [mode, setMode] = useState<Mode>('all-at-once');
   const [game, setGame] = useState<GameState | null>(null);
 
@@ -101,7 +103,7 @@ function Game({
   );
 
   const start = useCallback(() => {
-    const round = createRound({ players, facts, orgs });
+    const round = createRound({ players, facts, orgs, socials });
     if (!round) {
       setError('Not enough players in this pool to build a fair board. Try a wider one.');
       return;
@@ -109,7 +111,7 @@ function Game({
     setError(null);
     setPending(null);
     setGame(createGame(round, mode));
-  }, [players, facts, orgs, mode]);
+  }, [players, facts, orgs, socials, mode]);
 
   if (!game) {
     return (

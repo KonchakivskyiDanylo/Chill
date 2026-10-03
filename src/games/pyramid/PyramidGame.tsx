@@ -33,6 +33,7 @@ import {
   type Item,
 } from './engine';
 import './pyramid.css';
+import { useSocials } from '@/data/useSocials';
 
 const meta = getGame('pyramid')!;
 
@@ -70,6 +71,8 @@ function Game({ roster, facts }: { roster: Roster; facts: Facts }) {
   const [rankings, setRankings] = useState<Rankings | null>(null);
   /** Every finish at every major, so a tournament pyramid can reach past the top ten. Same terms. */
   const [majors, setMajors] = useState<Majors | null>(null);
+  /** Follower counts, for the follower pyramids; none is the same as no such category. */
+  const socials = useSocials();
   useEffect(() => {
     let cancelled = false;
     loadRankings().then(
@@ -93,7 +96,7 @@ function Game({ roster, facts }: { roster: Roster; facts: Facts }) {
   }));
 
   const start = useCallback(() => {
-    const puzzle = generatePuzzle(roster, facts, rankings, difficulty, undefined, game?.puzzle.id ?? null, majors);
+    const puzzle = generatePuzzle(roster, facts, rankings, difficulty, undefined, game?.puzzle.id ?? null, majors, socials);
     if (!puzzle) {
       setError('Could not build a pyramid from this data.');
       return;
@@ -102,7 +105,7 @@ function Game({ roster, facts }: { roster: Roster; facts: Facts }) {
     setFeedback(null);
     setSelected(null);
     setGame(createGame(puzzle, difficulty));
-  }, [roster, facts, rankings, majors, difficulty, game]);
+  }, [roster, facts, rankings, majors, socials, difficulty, game]);
 
   const move = (a: number, b: number) => {
     if (!game) return;
