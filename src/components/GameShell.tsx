@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { puzzleLabel } from '@/daily/day';
-import { DAILY_ONLY } from '@/daily/useDailyRound';
+import { DEV_TOGGLE } from '@/daily/useDailyRound';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { rulesFor, type GameMeta } from '@/games/registry';
 import './daily.css';
@@ -80,7 +80,7 @@ export function GameShell({
             </p>
           </div>
           <div className="row">
-            {daily && !DAILY_ONLY ? (
+            {daily && DEV_TOGGLE ? (
               <button
                 type="button"
                 className="icon-btn"

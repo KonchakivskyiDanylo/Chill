@@ -205,3 +205,16 @@
   color: var(--text-muted);
   background: var(--surface-3);
 }
+
+/* The line on the home page before the dailies start. */
+.home-soon {
+  margin: 0;
+  width: fit-content;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+}

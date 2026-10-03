@@ -42,6 +42,8 @@ export interface DailySet {
 /** What a game's daily picker gets to choose with. */
 export interface DailyContext {
   day: string;
+  /** The seed string for one purpose — for an engine that takes a seed of its own. */
+  seed: (purpose: string) => string;
   /** A generator of its own per purpose, so adding a draw in one game moves nothing in another. */
   rng: (purpose: string) => Rng;
   /**
@@ -50,7 +52,10 @@ export interface DailyContext {
    * past while anyone else is left.
    */
   pickPlayer: (game: DailyGame, pool: readonly RosterPlayer[]) => RosterPlayer | null;
-  /** This game's descriptors on earlier days, newest first, with how many days back each was. */
+  /**
+   * This game's descriptors on the days around this one, nearest first, with how
+   * many days away each is — before or after, for a schedule made ahead.
+   */
   recent: <G extends DailyGame>(game: G) => { daysAgo: number; puzzle: DailyPuzzles[G] }[];
 }
 

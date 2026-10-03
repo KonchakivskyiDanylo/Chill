@@ -123,6 +123,30 @@ try {
   const dash = await request('/api/admin/dashboard?days=7', {}, cookie);
   const data = dash.body as { rounds: number; wordle: { name: string; solved: number }[] };
   check(dash.status === 200 && data.rounds === 1, `the dashboard counts ${data?.rounds} rounds, expected 1`);
+
+  // The daily schedule editor: made ahead, two days swapped, a past day refused.
+  check((await request('/api/admin/daily?days=7')).status === 401, 'the schedule answered without a login');
+  const plan = (await request('/api/admin/daily?days=7', {}, cookie)).body as {
+    firstEditable: string;
+    rows: { day: string; editable: boolean; puzzles: Record<string, { label: string }> }[];
+  };
+  const editable = plan?.rows?.filter((row) => row.editable) ?? [];
+  check(editable.length === 7, `the schedule has ${editable.length} days ahead, expected 7`);
+  if (editable.length >= 2) {
+    const [a, b] = editable;
+    const swap = await post('/api/admin/daily/swap', { game: 'tenaball', a: a.day, b: b.day }, cookie);
+    check(swap.status === 204, `a swap was refused (${swap.status})`);
+    const after = (await request('/api/admin/daily?days=7', {}, cookie)).body as typeof plan;
+    const [a2, b2] = after.rows.filter((row) => row.editable);
+    check(
+      a2.puzzles.tenaball.label === b.puzzles.tenaball.label && b2.puzzles.tenaball.label === a.puzzles.tenaball.label,
+      'the swap did not swap the two days',
+    );
+    check(
+      (await post('/api/admin/daily/redraw', { game: 'tenaball', day: '2020-01-01' }, cookie)).status === 400,
+      'a day long past was redrawn',
+    );
+  }
   check(data.wordle?.[0]?.name === 'Bugha' && data.wordle[0].solved === 1, 'the dashboard lost the Fortnitedle round');
 
   // Filters ride on the same query string, and one that matches nothing is an

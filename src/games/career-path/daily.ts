@@ -11,11 +11,19 @@ export const DAILY_MODE: Mode = 'order';
 type Puzzle = DailyPuzzles['career-path'];
 
 export function pickDaily(roster: Roster, majors: Majors, ctx: DailyContext): Puzzle | null {
-  const secret = ctx.pickPlayer('career-path', levelPlayers(roster, 'medium', majors.eligible));
-  if (!secret) return null;
-  const round = createGame(secret, majors.resultsFor(secret.id), DAILY_MODE, majors, `daily:${ctx.day}:career-path`);
-  if (!round) return null;
-  return { secret: secret.id, clues: round.clues.map((clue) => clue.result.tournament.name) };
+  const secret = ctx.pickPlayer('career-path', dailyPool(roster, majors));
+  return secret ? puzzleFor(secret, majors, ctx.seed('career-path')) : null;
+}
+
+/** Who the daily may be about — also what the schedule editor offers. */
+export function dailyPool(roster: Roster, majors: Majors): RosterPlayer[] {
+  return levelPlayers(roster, 'medium', majors.eligible);
+}
+
+/** The puzzle on a secret already chosen: its ten clues, drawn and ordered. */
+export function puzzleFor(secret: RosterPlayer, majors: Majors, seed: string): Puzzle | null {
+  const round = createGame(secret, majors.resultsFor(secret.id), DAILY_MODE, majors, seed);
+  return round ? { secret: secret.id, clues: round.clues.map((clue) => clue.result.tournament.name) } : null;
 }
 
 /**

@@ -32,11 +32,29 @@ export function pickDaily(
   byId: ReadonlyMap<string, RosterPlayer>,
   ctx: DailyContext,
 ): Puzzle | null {
-  const secret = ctx.pickPlayer('who-are-ya', levelPlayers(roster, 'medium', canBeAnswer(teammates, facts, byId)));
-  if (!secret) return null;
-  const round = createGame(secret, teammates.cluesFor(secret.id, byId), DAILY_MODE, `daily:${ctx.day}:who-are-ya`);
-  if (!round) return null;
-  return { secret: secret.id, clues: round.clues.map((clue) => clue.player.id) };
+  const secret = ctx.pickPlayer('who-are-ya', dailyPool(roster, teammates, facts, byId));
+  return secret ? puzzleFor(secret, teammates, byId, ctx.seed('who-are-ya')) : null;
+}
+
+/** Who the daily may be about — also what the schedule editor offers. */
+export function dailyPool(
+  roster: Roster,
+  teammates: Teammates,
+  facts: Facts,
+  byId: ReadonlyMap<string, RosterPlayer>,
+): RosterPlayer[] {
+  return levelPlayers(roster, 'medium', canBeAnswer(teammates, facts, byId));
+}
+
+/** The puzzle on a secret already chosen: its teammates, drawn and ordered. */
+export function puzzleFor(
+  secret: RosterPlayer,
+  teammates: Teammates,
+  byId: ReadonlyMap<string, RosterPlayer>,
+  seed: string,
+): Puzzle | null {
+  const round = createGame(secret, teammates.cluesFor(secret.id, byId), DAILY_MODE, seed);
+  return round ? { secret: secret.id, clues: round.clues.map((clue) => clue.player.id) } : null;
 }
 
 export function restoreDaily(

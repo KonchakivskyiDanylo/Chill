@@ -9,6 +9,7 @@ import { AdminContext, api, useAdminData, useScope } from './analytics/api';
 import { GamePage } from './analytics/GamePage';
 import { Errors, Inbox } from './analytics/Inbox';
 import { Socials } from './analytics/Socials';
+import { Daily } from './analytics/Daily';
 import { gameTitle } from './analytics/labels';
 import { Overview } from './analytics/Overview';
 import { PlayerPage, Players } from './analytics/Players';
@@ -30,6 +31,8 @@ import './analytics.css';
  *   /analytics/players/<id>    one player across every game
  *   /analytics/support         the 💬 inbox
  *   /analytics/errors          browser errors
+ *   /analytics/daily           the daily schedule: reorder, choose, redraw
+ *   /analytics/socials         the follower counts and the Twitch login
  *
  * The range and the filters live in the query string and ride along on every
  * link, so they hold while you move between pages.
@@ -133,7 +136,8 @@ function Pages({ onReload, onOut }: { onReload: () => void; onOut: () => void })
   const { data: errors } = useAdminData<Stored<ClientError>[]>('errors');
 
   const fresh = (tickets ?? []).filter((ticket) => ticket.status === 'new').length;
-  const inbox = /\/analytics\/(support|errors)/.test(pathname);
+  // The inbox, the daily schedule and the followers page are not filtered by the dashboard's bar.
+  const inbox = /\/analytics\/(support|errors|daily|socials)/.test(pathname);
   const on = (path: string) => ({ pathname: path, search: search ? `?${search}` : '' });
   const tab = ({ isActive }: { isActive: boolean }) => `an-tab${isActive ? ' is-active' : ''}`;
 
@@ -152,6 +156,9 @@ function Pages({ onReload, onOut }: { onReload: () => void; onOut: () => void })
           </NavLink>
           <NavLink to={on('/analytics/errors')} className={tab}>
             Errors{errors ? ` (${errors.length})` : ''}
+          </NavLink>
+          <NavLink to={on('/analytics/daily')} className={tab}>
+            Daily
           </NavLink>
           <NavLink to={on('/analytics/socials')} className={tab}>
             Followers
@@ -196,6 +203,7 @@ function Pages({ onReload, onOut }: { onReload: () => void; onOut: () => void })
         <Route path="support" element={<Inbox tickets={tickets} onChange={onReload} />} />
         <Route path="errors" element={<Errors errors={errors} />} />
         <Route path="socials" element={<Socials />} />
+        <Route path="daily" element={<Daily />} />
         <Route path="*" element={<Navigate to={on('/analytics')} replace />} />
       </Routes>
     </div>

@@ -15,8 +15,8 @@ import {
   type RoundRecord,
   type SupportRequest,
 } from '@/analytics/types';
-import { addDays, dayKey, isDayKey } from '@/daily/day';
-import type { DailySet } from '@/daily/types';
+import { addDays, DAILY_START, dayKey, isDayKey, puzzleNumber } from '@/daily/day';
+import { DAILY_GAMES, type DailyGame, type DailySet } from '@/daily/types';
 import { Socials } from '@/data/socials';
 import { refreshSocials, scheduleSocials, servedSocials, socialsStatus, startTwitchLogin } from './socials';
 import { openStore, type PageChange } from './store';
@@ -185,22 +185,81 @@ let dailyData: Promise<import('@/daily/generate').DailyData> | null = null;
 /** Days back a new day looks so as not to repeat a secret player or a board. */
 const DAILY_HISTORY = 365;
 
+/**
+ * The generator and its data, loaded on first use. The follower counts are the
+ * ones the site is serving right now, so a follower rule rebuilds the same in
+ * the browser.
+ */
+async function dailyEnv() {
+  dailyModule ??= import('@/daily/generate');
+  const generate = await dailyModule;
+  dailyData ??= generate.loadDailyData();
+  const data = { ...(await dailyData), socials: new Socials(await servedSocials(store)) };
+  return { generate, data };
+}
+
 async function dailySet(day: string): Promise<DailySet> {
   const kept = await store.daily(day);
   if (kept) return kept;
   if (!making.has(day)) {
     const made = (async () => {
-      dailyModule ??= import('@/daily/generate');
-      const { generateDaily, loadDailyData } = await dailyModule;
-      dailyData ??= loadDailyData();
+      const { generate, data } = await dailyEnv();
+      // Both sides: the schedule editor makes days ahead, and a day steers clear of those too.
       const history = await store.dailies(addDays(day, -DAILY_HISTORY));
-      // The counts the site is serving right now, so a follower rule rebuilds the same in the browser.
-      const socials = new Socials(await servedSocials(store));
-      return store.addDaily(generateDaily(day, { ...(await dailyData), socials }, history));
+      return store.addDaily(generate.generateDaily(day, data, history));
     })().finally(() => making.delete(day));
     making.set(day, made);
   }
   return making.get(day)!;
+}
+
+// ------------------------------------------------------- the daily schedule --
+
+/**
+ * The editor on /analytics/daily: the days around today, each game's puzzle by
+ * name, and changing one — swapping two days, choosing a board or a player, or
+ * a new draw. Only today and the days after it change; a day before is what
+ * people played. Edits wait for each other, so two tabs cannot interleave.
+ */
+let editing: Promise<unknown> = Promise.resolve();
+function serially<T>(work: () => Promise<T>): Promise<T> {
+  const next = editing.then(work, work);
+  editing = next.catch(() => {});
+  return next;
+}
+
+/** The first day that may still change: today, or the first puzzle while the launch is still ahead. */
+const firstEditable = () => (dayKey() < DAILY_START ? DAILY_START : dayKey());
+
+async function schedule(days: number) {
+  const from = firstEditable();
+  const shownFrom = dayKey() < DAILY_START ? DAILY_START : addDays(dayKey(), -7);
+  const last = addDays(from, days - 1);
+  // Made in order, so each new day sees the ones before it.
+  for (let day = from; day <= last; day = addDays(day, 1)) await dailySet(day);
+  const all = await store.dailies(addDays(shownFrom, -60));
+  const sets = all.filter((set) => set.day >= shownFrom && set.day <= last);
+  const { data } = await dailyEnv();
+  const admin = await import('@/daily/admin');
+  return {
+    today: dayKey(),
+    start: DAILY_START,
+    firstEditable: from,
+    rows: admin
+      .rowsFor(sets, all, data)
+      .map((row) => ({ ...row, number: puzzleNumber(row.day), editable: row.day >= from })),
+  };
+}
+
+async function editDay(day: string, change: (set: DailySet, others: DailySet[]) => DailySet | null): Promise<void> {
+  if (!isDayKey(day) || day < firstEditable()) throw new HttpError(400, 'That day can no longer change');
+  await serially(async () => {
+    const set = await dailySet(day);
+    const others = (await store.dailies(addDays(day, -DAILY_HISTORY))).filter((other) => other.day !== day);
+    const next = change(set, others);
+    if (!next) throw new HttpError(422, 'Could not make that puzzle');
+    await store.setDaily(next);
+  });
 }
 
 // ------------------------------------------------------------------ routes --
@@ -265,8 +324,11 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL): Promise
     const day = decodeURIComponent(daily[1]);
     if (!isDayKey(day)) throw new HttpError(400, 'Not a day');
     if (SECURE && day > dayKey()) throw new HttpError(404, 'Not out yet');
+    // Before the launch the live site plays as it always did: nothing to hand out.
+    if (SECURE && day < DAILY_START) throw new HttpError(404, `The daily puzzles start on ${DAILY_START}`);
     if (!allowed(req, 'daily', 120, 10)) throw new HttpError(429, 'Slow down');
-    return send(res, 200, await dailySet(day), { 'cache-control': 'public, max-age=300' });
+    // A minute, not longer: the schedule editor can still change today.
+    return send(res, 200, await dailySet(day), { 'cache-control': 'public, max-age=60' });
   }
 
   // ---- YouTube subscribers and Twitch followers: only fresh ones, see socials.ts.
@@ -348,6 +410,51 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL): Promise
     const since = days > 0 ? new Date(Date.now() - days * 86_400_000) : undefined;
     return send(res, 200, playerLens(await store.rounds(since), decodeURIComponent(lens[1]), scope));
   }
+  // The daily schedule — see `schedule` above.
+  if (route === 'GET /api/admin/daily') {
+    const days = Math.min(120, Math.max(7, Math.floor(Number(url.searchParams.get('days')) || 30)));
+    return send(res, 200, await schedule(days));
+  }
+  if (route === 'GET /api/admin/daily/options') {
+    const game = String(url.searchParams.get('game'));
+    if (!DAILY_GAMES.includes(game as DailyGame)) throw new HttpError(400, 'No such game');
+    const { data } = await dailyEnv();
+    return send(res, 200, (await import('@/daily/admin')).optionsFor(game as DailyGame, data));
+  }
+  const dailyEdit = /^POST \/api\/admin\/daily\/(swap|choose|redraw)$/.exec(route);
+  if (dailyEdit) {
+    const body = await readJson(req, 2_048);
+    if (!isObject(body) || !DAILY_GAMES.includes(body.game as DailyGame)) throw new HttpError(400, 'No such game');
+    const game = body.game as DailyGame;
+    const admin = await import('@/daily/admin');
+    const { data } = await dailyEnv();
+    if (dailyEdit[1] === 'swap') {
+      const [a, b] = [String(body.a), String(body.b)];
+      if (!isDayKey(a) || !isDayKey(b) || a < firstEditable() || b < firstEditable()) {
+        throw new HttpError(400, 'Only today and the days after it can change');
+      }
+      await serially(async () => {
+        const [first, second] = [await dailySet(a), await dailySet(b)];
+        const take = (set: DailySet, from: DailySet): DailySet => ({
+          ...set,
+          puzzles: { ...set.puzzles, [game]: from.puzzles[game] },
+        });
+        await store.setDaily(take(first, second));
+        await store.setDaily(take(second, first));
+      });
+      return send(res, 204);
+    }
+    const day = String(body.day);
+    await editDay(day, (set, others) => {
+      const puzzle =
+        dailyEdit[1] === 'choose'
+          ? admin.puzzleForChoice(game, String(body.id), day, data)
+          : admin.redraw(game, set, others, data);
+      return puzzle ? { ...set, puzzles: { ...set.puzzles, [game]: puzzle } } : null;
+    });
+    return send(res, 204);
+  }
+
   // The follower counts: how fresh they are, the one-time Twitch login, a refresh now.
   if (route === 'GET /api/admin/socials') return send(res, 200, await socialsStatus(store));
   if (route === 'POST /api/admin/socials/twitch-login') return send(res, 200, await startTwitchLogin(store));
@@ -481,7 +588,9 @@ createServer(async (req, res) => {
   const dashboard = OPEN ? 'open (ADMIN_OPEN, local only)' : ADMIN_PASSWORD ? 'on' : 'off (no ADMIN_PASSWORD)';
   console.log(`OffSpawn on :${PORT} — ${process.env.DATABASE_URL ? 'Postgres' : 'file store'}, dashboard ${dashboard}`);
   // Today's puzzles made now rather than on the first visitor's request.
-  if (SECURE) void dailySet(dayKey()).catch((error) => console.error('daily puzzles:', error));
+  if (SECURE && dayKey() >= DAILY_START) {
+    void dailySet(dayKey()).catch((error) => console.error('daily puzzles:', error));
+  }
   // The follower counts, kept fresh — nothing happens without the API keys.
   scheduleSocials(store);
 });

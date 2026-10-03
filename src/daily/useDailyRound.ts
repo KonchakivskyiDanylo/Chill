@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocalState } from '@/lib/storage';
 import { useDailySet } from './client';
-import { puzzleNumber } from './day';
+import { DAILY_START, puzzleNumber } from './day';
 import { logResult, savedRound, saveRound } from './progress';
 import type { DailyGame, DailyPuzzles, DailyResult } from './types';
 import { useToday } from './useDay';
@@ -10,16 +10,19 @@ import { useToday } from './useDay';
  * Daily or practice.
  *
  * The live site is daily only (the user, 3 Oct 2026: "I would probably have
- * only daily puzzles, setup is only for dev"). A dev server keeps the old
- * setup screens behind a toggle in each game's toolbar, for working on the
- * games themselves; the choice is remembered in the browser.
+ * only daily puzzles, setup is only for dev") from `DAILY_START` on — before
+ * it, it plays as it always did, and it turns daily by itself at midnight on
+ * the day (the user: "let's start it actually on 5th October"). A dev server
+ * keeps the setup screens behind a toggle in each game's toolbar, for working
+ * on the games; the choice is remembered in the browser.
  */
-export const DAILY_ONLY = !import.meta.env?.DEV;
+export const DEV_TOGGLE = import.meta.env?.DEV === true;
 
 export function usePlayMode(): [daily: boolean, setDaily: (daily: boolean) => void] {
   const [mode, setMode] = useLocalState<'daily' | 'practice'>('dev:play-mode', 'daily');
+  const today = useToday();
   const set = useCallback((daily: boolean) => setMode(daily ? 'daily' : 'practice'), [setMode]);
-  return [DAILY_ONLY || mode === 'daily', set];
+  return [DEV_TOGGLE ? mode === 'daily' : today >= DAILY_START, set];
 }
 
 export interface DailyRound<S> {

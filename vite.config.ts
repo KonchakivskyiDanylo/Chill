@@ -76,5 +76,11 @@ export default defineConfig({
     // The analytics and support endpoints live in `server/`. Run `npm run api`
     // beside `npm run dev` to use them locally; without it the calls simply fail.
     proxy: { '/api': 'http://localhost:3000' },
+    // build_data.py stages its files in a hidden folder beside the data, and a
+    // 154 MB placements.json locked mid-write crashed the dev server's watcher
+    // (EBUSY). The raw dump never changes what the site loads either.
+    watch: {
+      ignored: ['**/liquipedia_data/raw_data/**', '**/liquipedia_data/clean_data/.*/**', '**/placements.json'],
+    },
   },
 });

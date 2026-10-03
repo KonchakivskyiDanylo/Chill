@@ -32,7 +32,7 @@ export function pickDaily(roster: Roster, facts: Facts, orgs: Orgs, socials: Soc
     .recent('tic-tac-toe')
     .filter((entry) => entry.daysAgo <= RECENT_DAYS)
     .flatMap((entry) => [...entry.puzzle.rows, ...entry.puzzle.cols]);
-  const board = generateBoard({ facts, orgs, socials }, dailyPools(roster, facts), DAILY_LEVEL, `daily:${ctx.day}:tic-tac-toe`, recent);
+  const board = generateBoard({ facts, orgs, socials }, dailyPools(roster, facts), DAILY_LEVEL, ctx.seed('tic-tac-toe'), recent);
   return board ? { rows: board.rows.map((rule) => rule.id), cols: board.cols.map((rule) => rule.id) } : null;
 }
 

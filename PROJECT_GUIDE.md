@@ -778,7 +778,7 @@ A generated data file that is missing makes its games report SKIPPED and the sui
 
 ## Daily puzzles
 
-Since 3 October 2026 the live site is **daily puzzles only**: one puzzle per game per day, the same for everyone, for the six live games other than Higher or Lower (which stays an endless run). The setup screens — the pool picker, levels, modes, the board and list pickers — are still there on a dev server, behind a **🛠 Practice** button in each game's toolbar (`usePlayMode`, `DAILY_ONLY` in `src/daily/useDailyRound.ts`).
+From **5 October 2026** (`DAILY_START`) the live site is **daily puzzles only** — before that day it plays as it always did, with a line on the home page saying when the dailies start, and it switches by itself at midnight in Berlin: one puzzle per game per day, the same for everyone, for the six live games other than Higher or Lower (which stays an endless run). The setup screens — the pool picker, levels, modes, the board and list pickers — are still there on a dev server, behind a **🛠 Practice** button in each game's toolbar (`usePlayMode`, `DAILY_ONLY` in `src/daily/useDailyRound.ts`).
 
 | Piece | Where | What it does |
 | --- | --- | --- |
@@ -804,6 +804,10 @@ Since 3 October 2026 the live site is **daily puzzles only**: one puzzle per gam
 **A streak** is days in a row with that game's daily played, win or lose — a hard day does not break a month. The home page's 🔥 counts days with any daily played.
 
 **Analytics:** a daily round's setup is `{ daily: '<day>' }`, which the dashboard counts as its own source, Daily.
+
+**The schedule editor** (`/analytics/daily`, `src/daily/admin.ts`): the next 30 days (more on request) made ahead and kept, one game at a time. ↑ and ↓ swap a puzzle with the day before or after; **Choose** sets a board, a list or a secret player by hand (Tic Tac Toe has no list — its six rules are drawn together); **↻ New** draws another, clear of every other scheduled day. A puzzle that repeats within 30 days, or a secret player who is the answer in two games on one day, is flagged. Days before today cannot change; today can, after a warning, since people may have played it. A new day steers clear of the days after it too, so a schedule made ahead never repeats itself.
+
+The home page lists Higher or Lower under **Unlimited** (it was "Any time").
 
 ## Followers
 

@@ -56,6 +56,8 @@ export interface Store {
   addDaily(set: DailySet): Promise<DailySet>;
   /** The days from `since` on, oldest first — what a new day avoids repeating. */
   dailies(since: string): Promise<DailySet[]>;
+  /** Replaces a day's puzzles — the schedule editor, for today and the days after it only. */
+  setDaily(set: DailySet): Promise<void>;
   /** One platform's latest follower counts, or null. Only ever the latest: a new set replaces the old. */
   socials(platform: Platform): Promise<SocialCounts | null>;
   setSocials(platform: Platform, counts: SocialCounts): Promise<void>;
@@ -195,6 +197,13 @@ class PostgresStore implements Store {
   async dailies(since: string): Promise<DailySet[]> {
     const { rows } = await this.pool.query('select body from daily_puzzles where day >= $1 order by day', [since]);
     return rows.map((row) => row.body);
+  }
+
+  async setDaily(set: DailySet): Promise<void> {
+    await this.pool.query(
+      'insert into daily_puzzles (day, body) values ($1, $2) on conflict (day) do update set body = excluded.body',
+      [set.day, set],
+    );
   }
 
   async socials(platform: Platform): Promise<SocialCounts | null> {
@@ -339,6 +348,13 @@ class FileStore implements Store {
 
   async dailies(since: string): Promise<DailySet[]> {
     return [...this.days.values()].filter((set) => set.day >= since).sort((a, b) => a.day.localeCompare(b.day));
+  }
+
+  async setDaily(set: DailySet): Promise<void> {
+    this.days.set(set.day, set);
+    const all = [...this.days.values()].sort((a, b) => a.day.localeCompare(b.day));
+    await writeFile(this.file('daily'), all.map((row) => `${JSON.stringify(row)}
+`).join(''));
   }
 
   // The follower counts and their state are one small JSON file each, rewritten

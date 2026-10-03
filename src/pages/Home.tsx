@@ -2,11 +2,11 @@ import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ModePicker } from '@/components/EventMode';
 import { loadDailySet } from '@/daily/client';
-import { puzzleLabel, puzzleNumber } from '@/daily/day';
+import { DAILY_START, puzzleLabel, puzzleNumber } from '@/daily/day';
 import { statsOf, useDailyLogs } from '@/daily/progress';
 import { DAILY_GAMES, type DailyGame } from '@/daily/types';
 import { useCountdown, useToday } from '@/daily/useDay';
-import { DAILY_ONLY } from '@/daily/useDailyRound';
+import { usePlayMode } from '@/daily/useDailyRound';
 import { loadRoster } from '@/data/liquipedia/roster';
 import { VISIBLE_GAMES, type GameMeta } from '@/games/registry';
 import { HOME_META, usePageMeta } from '@/lib/seo';
@@ -21,11 +21,11 @@ import '@/components/daily.css';
  * page itself; both loaders cache, so the game just picks up the same promise.
  * A failure is left for the game to report.
  */
-function usePrefetch(today: string) {
+function usePrefetch(today: string, daily: boolean) {
   useEffect(() => {
     const load = () => {
       void loadRoster().catch(() => {});
-      if (DAILY_ONLY) void loadDailySet(today).catch(() => {});
+      if (daily) void loadDailySet(today).catch(() => {});
     };
     if (typeof window.requestIdleCallback === 'function') {
       const id = window.requestIdleCallback(load, { timeout: 3000 });
@@ -33,16 +33,25 @@ function usePrefetch(today: string) {
     }
     const id = window.setTimeout(load, 1500);
     return () => window.clearTimeout(id);
-  }, [today]);
+  }, [today, daily]);
 }
 
 const isDaily = (game: GameMeta) => (DAILY_GAMES as readonly string[]).includes(game.id);
 const won = (outcome: string) => outcome === 'won' || outcome === 'cleared';
 
+/** "Monday 5 October" — the launch day, for the line on the home page before it. */
+const LAUNCH = new Date(`${DAILY_START}T12:00:00Z`).toLocaleDateString('en-GB', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+  timeZone: 'UTC',
+});
+
 export function Home() {
   usePageMeta(HOME_META);
   const today = useToday();
-  usePrefetch(today);
+  const [daily] = usePlayMode();
+  usePrefetch(today, daily);
   const countdown = useCountdown();
   const dailies = VISIBLE_GAMES.filter(isDaily);
   const endless = VISIBLE_GAMES.filter((game) => !isDaily(game));
@@ -55,6 +64,34 @@ export function Home() {
     logs.flatMap(([, log]) => Object.keys(log)),
     today,
   ).streak;
+
+  // Before the dailies start (or on a dev server in practice): every game, as the site always was.
+  if (!daily) {
+    return (
+      <div className="page stack-lg">
+        <section className="stack" style={{ paddingTop: 12 }}>
+          <h1>How well do you actually know competitive Fortnite?</h1>
+          <p className="muted" style={{ maxWidth: '60ch' }}>
+            Puzzles built on the real competitive record — FNCS grand finals, the World Cup, the LANs and
+            everything under them. No account, no sign-up: pick a game and play.
+          </p>
+          {today < DAILY_START ? (
+            <p className="home-soon">
+              📅 Daily puzzles start on {LAUNCH}: one a day in every game, the same for everyone.
+            </p>
+          ) : null}
+        </section>
+
+        <ModePicker />
+
+        <section className="game-grid">
+          {VISIBLE_GAMES.map((game) => (
+            <GameCard key={game.id} game={game} />
+          ))}
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="page stack-lg">
@@ -127,26 +164,33 @@ export function Home() {
       {endless.length > 0 ? (
         <section className="stack">
           <div className="card__title" style={{ marginBottom: 0 }}>
-            Any time
+            Unlimited
           </div>
           <div className="game-grid">
             {endless.map((game) => (
-              <Link key={game.id} to={`/game/${game.slug}`} className="game-card">
-                <span className="game-card__icon" aria-hidden="true">
-                  {game.icon}
-                </span>
-                <span className="game-card__body">
-                  <span className="game-card__title">{game.title}</span>
-                  <span className="game-card__tagline">{game.tagline}</span>
-                </span>
-                <span className="game-card__go" aria-hidden="true">
-                  →
-                </span>
-              </Link>
+              <GameCard key={game.id} game={game} />
             ))}
           </div>
         </section>
       ) : null}
     </div>
+  );
+}
+
+/** A game's card, for the games that are not a daily puzzle. */
+function GameCard({ game }: { game: GameMeta }) {
+  return (
+    <Link to={`/game/${game.slug}`} className="game-card">
+      <span className="game-card__icon" aria-hidden="true">
+        {game.icon}
+      </span>
+      <span className="game-card__body">
+        <span className="game-card__title">{game.title}</span>
+        <span className="game-card__tagline">{game.tagline}</span>
+      </span>
+      <span className="game-card__go" aria-hidden="true">
+        →
+      </span>
+    </Link>
   );
 }

@@ -147,7 +147,7 @@ export function generateBoard(
 }
 
 /** The rules a board may use, built against the level's fame band. */
-function boardRules(source: Omit<CriteriaSource, 'players'>, pools: BoardPools): PlayerCriterion[] {
+export function boardRules(source: Omit<CriteriaSource, 'players'>, pools: BoardPools): PlayerCriterion[] {
   return buildCriteria({ ...source, players: pools.answers }, { minMatches: 5, maxShare: 0.45 });
 }
 
