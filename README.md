@@ -2,12 +2,12 @@
 
 Browser puzzle games built around competitive Fortnite players — ten built,
 seven on the site. No accounts and no monetisation: the games run in the browser
-on data from Liquipedia and Wikipedia, and a small Node server (`server/index.ts`)
+on data from Liquipedia, and a small Node server (`server/index.ts`)
 serves the site and records anonymous round stats and support requests.
 
 Player data comes from [Liquipedia](https://liquipedia.net/fortnite) and is
-reused and modified under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/us/);
-FNCS title counts come from Wikipedia (CC BY-SA 4.0). The derived data files are
+reused and modified under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/us/),
+FNCS title counts included. The derived data files are
 shared under the same licence — see [CREDITS.md](CREDITS.md).
 
 ```bash
@@ -26,8 +26,7 @@ npm run dev:all      # the site on http://localhost:5173 and its API on :3000
 | `npm start` | The production server: `dist/` plus the API. What Heroku runs |
 | `npm run check:server` | Starts the server on a spare port with a throwaway store and checks every endpoint |
 
-The `etl:*`, `audit` and `check:data` scripts are gone, along with the
-316-player Wikipedia import they maintained. Every game reads the Liquipedia
+Every game reads the Liquipedia
 export, and `scripts/build_data.py` builds every data file from the raw
 dump (see DATA.md, "Keeping the dump current").
 
@@ -137,12 +136,6 @@ None of the derived files carries a `tier` column: difficulty is joined from
 `players.json` by page name, so re-tiering the roster re-tiers every game and
 the derived files cannot go stale against it.
 
-The older **Wikipedia import** — 316 players in `src/data/fortnite/`, with the
-`Dataset` / `PlayerRepository` layer and the ETL scripts that fed it — has been
-removed. It had not been read by a game since the migration, and the four npm
-scripts kept alive to validate it were validating a dataset nothing rendered.
-The history is in git if any of it is ever wanted back.
-
 **There is no build step.** The app imports that file in place, through the
 `@data` alias. Two columns in it are maintained by the notebook that owns the
 data rather than by any code here:
@@ -167,10 +160,8 @@ and reloading — no code changes, nothing to regenerate.
 
 ### The fame ranking
 
-`fame_calculation.ipynb` and the `fame-ranking.json` it produced belonged to the
-Wikipedia import and went with it. The Liquipedia roster has never used them:
-its difficulty is the `tier` / `region_tier` columns above, written upstream by
-the notebook that owns `players.json`.
+There is no separate fame file: difficulty is the `tier` / `region_tier`
+columns above, written by `scripts/build_data.py` into `players.json`.
 
 Games do not read the JSON. They ask for a pool:
 
@@ -238,7 +229,7 @@ falls back to a deterministic initials avatar.
 ## About the data
 
 5,678 players, 14,645 tournaments and 442,736 placements, imported from
-Liquipedia, with FNCS title counts matched in from Wikipedia. Nothing is
+Liquipedia — FNCS title counts included, counted from its results. Nothing is
 estimated: where a source is silent the field stays empty — a missing earnings
 figure renders as a dash, never a zero — and a player with no published
 birthday is left out of the questions that need one rather than guessed at.

@@ -88,6 +88,8 @@ import * as wordleDaily from '@/games/wordle/daily';
 import * as careerDaily from '@/games/career-path/daily';
 import * as whoDaily from '@/games/who-are-ya/daily';
 import * as tenaballDaily from '@/games/tenaball/daily';
+import * as listDaily from '@/games/list/daily';
+import * as reuse from '@/daily/reuse';
 import * as tttDaily from '@/games/tic-tac-toe/daily';
 import { lobbiesOf, parseLobby, roundLabel } from '@/games/shared/lobbies';
 
@@ -2448,6 +2450,24 @@ if (socials.platforms.length > 0) {
     const boards = history.map((set) => set.puzzles.tenaball?.board);
     const listIds = history.map((set) => set.puzzles.list?.list);
     check(new Set(boards).size === DAYS && new Set(listIds).size === DAYS, `daily: a Tenaball board or a List came back within ${DAYS} days`);
+    // Neighbouring days look different: no kind twice within KIND_GAP days, no Tenaball family within FAMILY_GAP.
+    const boardById = new Map([...rankings.boards, ...socialBoards(roster, socials)].map((board) => [board.id, board]));
+    const listById = new Map(lists.map((entry) => [entry.id, entry]));
+    const clashes = (ids: (string | undefined)[], key: (id: string) => string | null, gap: number) =>
+      ids.flatMap((id, i) =>
+        ids.slice(Math.max(0, i - gap), i).flatMap((before, k) => {
+          const a = id && key(id);
+          return a && before && key(before) === a ? [`${history[Math.max(0, i - gap) + k].day}/${history[i].day} ${a}`] : [];
+        }),
+      );
+    const near = [
+      ...clashes(boards, (id) => tenaballDaily.kindOf(boardById.get(id)!), reuse.KIND_GAP),
+      ...clashes(boards, (id) => tenaballDaily.familyOf(boardById.get(id)!), reuse.FAMILY_GAP),
+      ...clashes(listIds, (id) => listDaily.kindOf(listById.get(id)!), reuse.KIND_GAP),
+    ];
+    check(near.length === 0, `daily: neighbouring days look alike — ${near.slice(0, 4).join('; ')}`);
+    const onStatus = boards.filter((id) => id && /(^|[-:])active([-:]|$)/.test(id));
+    check(onStatus.length === 0, `daily: Tenaball boards that rank on active status — ${onStatus.join(', ')}`);
     const known = knownPlayers(roster);
     const famous = allSecrets.filter((id) => known.has(id!)).length;
     check(famous === allSecrets.length, `daily: ${allSecrets.length - famous} secret players are not well known`);

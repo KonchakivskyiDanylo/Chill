@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { EXPORT_DATE, SOURCE, WIKIPEDIA } from '@/data/liquipedia/roster';
+import { EXPORT_DATE, SOURCE } from '@/data/liquipedia/roster';
 import { formatDate } from '@/lib/format';
 import { Banner } from './ui';
 
@@ -37,9 +37,6 @@ export function LiquipediaGate({
  * every game carries this rather than relying on the footer. One line, but it
  * holds everything CC BY-SA asks of it: the source with a link back, that it
  * was modified, and the licence's URI. The long form is on /credits.
- *
- * Wikipedia is named on every game, not only the ones with an FNCS column:
- * its title counts sit on every roster row and several games' questions use them.
  */
 export function RosterNote() {
   return (
@@ -51,14 +48,6 @@ export function RosterNote() {
       (
       <a href={SOURCE.licenseUrl} className="link" target="_blank" rel="noreferrer noopener">
         {SOURCE.license}
-      </a>
-      ) and{' '}
-      <a href={WIKIPEDIA.url} className="link" target="_blank" rel="noreferrer noopener">
-        Wikipedia
-      </a>{' '}
-      (
-      <a href={WIKIPEDIA.licenseUrl} className="link" target="_blank" rel="noreferrer noopener">
-        {WIKIPEDIA.license}
       </a>
       ), modified · updated {formatDate(EXPORT_DATE)} ·{' '}
       <Link to="/credits" className="link">

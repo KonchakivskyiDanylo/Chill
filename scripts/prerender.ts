@@ -22,7 +22,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { brotliCompress, constants, gzip } from 'node:zlib';
-import { SOURCE, WIKIPEDIA } from '@/data/liquipedia/roster';
+import { SOURCE } from '@/data/liquipedia/roster';
 import { DAILY_GAMES } from '@/daily/types';
 import { rulesFor, VISIBLE_GAMES, type GameMeta } from '@/games/registry';
 import { CREDITS_META, gameMeta, HOME_META, metaTags, PRIVACY_META, SITE_URL, type PageMeta } from '@/lib/seo';
@@ -70,10 +70,11 @@ function gameBody(game: GameMeta): string {
 function creditsBody(): string {
   return [
     '<h1>Credits &amp; licence</h1>',
-    `<p>Player, team, tournament, placement and transfer data is from the ${link(SOURCE.url, 'Liquipedia Fortnite wiki')} ` +
-      `and its contributors, fetched through the Liquipedia API and used under ${link(SOURCE.licenseUrl, SOURCE.license)}.</p>`,
-    `<p>FNCS title counts are from ${link(WIKIPEDIA.url, 'Competitive Fortnite records and statistics')} on Wikipedia, ` +
-      `used under ${link(WIKIPEDIA.licenseUrl, WIKIPEDIA.license)}.</p>`,
+    `<p>Every player, team, tournament, result and transfer on OffSpawn comes from the ${link(SOURCE.url, 'Liquipedia Fortnite wiki')}, ` +
+      `written by its contributors, through the Liquipedia API, and is used under ${link(SOURCE.licenseUrl, SOURCE.license)}. ` +
+      'OffSpawn changed it: ages, difficulty levels, rankings, FNCS title counts and puzzle answers are worked out by the site.</p>',
+    `<p>Our data files are shared under the same licence, as they are, without warranty. Follower counts come from YouTube and Twitch and belong to them.</p>`,
+    '<p>OffSpawn is unofficial and not connected to Epic Games, Liquipedia or any team. Fortnite is a trademark of Epic Games, Inc.</p>',
     `<p>${link('/', 'All games')}</p>`,
   ].join('');
 }
@@ -81,8 +82,8 @@ function creditsBody(): string {
 function privacyBody(): string {
   return [
     '<h1>Privacy</h1>',
-    '<p>Your daily results, streaks, best scores and settings stay in your browser. There are no accounts.</p>',
-    '<p>Finished rounds are counted anonymously to tune the puzzles: no account, no device id, no cookie, no stored IP address.</p>',
+    '<p>No accounts, no ads, no tracking cookies. Your results and streaks stay in your browser.</p>',
+    '<p>When you finish a round, the site counts how it went without knowing who you are: no account, no device id, no cookie, and IP addresses are not saved.</p>',
     `<p>Follower counts come from the YouTube Data API (YouTube API Services) and the Twitch API. Using the parts of OffSpawn that show them means agreeing to the ${link('https://www.youtube.com/t/terms', 'YouTube Terms of Service')}; YouTube data is handled under the ${link('https://policies.google.com/privacy', 'Google Privacy Policy')}.</p>`,
     `<p>${link('/', 'All games')} · ${link('/credits', 'Credits & licence')}</p>`,
   ].join('');

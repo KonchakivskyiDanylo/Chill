@@ -6,7 +6,7 @@ import { loadJson } from './files';
  *
  * A column in `players.json`, maintained by the notebook — the roster is the
  * only thing that knows it, so it is declared here. It used to live in
- * `data/types.ts` alongside the Wikipedia import's domain model, which was
+ * `data/types.ts` alongside an older import's domain model, which was
  * deleted once no game read that import any more.
  */
 export type FameTier = 'easy' | 'medium' | 'hard';
@@ -20,12 +20,8 @@ export type FameTier = 'easy' | 'medium' | 'hard';
  * file, written by the notebook that maintains it. Re-tiering the roster means
  * editing one column and reloading; no code changes, and nothing to regenerate.
  *
- * Deliberately separate from `data/fortnite`, which is the earlier Wikipedia
- * import: 316 players with per-event results, teammates and org history, still
- * driving the eight games that ask questions only a career history can answer.
- * This one is wide and shallow — 5,700 players with a handle, a country, a
- * birthday and an earnings figure — which is exactly what Higher or Lower and
- * Fortnitedle need.
+ * The only source: every column, `fncs_wins` included, is Liquipedia's — the
+ * FNCS count is read off the regional finals' results by scripts/build_data.py.
  *
  * Content from Liquipedia, CC-BY-SA 3.0. See CREDITS.md.
  */
@@ -49,13 +45,6 @@ export const SOURCE = {
   url: 'https://liquipedia.net/fortnite',
   license: 'CC BY-SA 3.0',
   licenseUrl: 'https://creativecommons.org/licenses/by-sa/3.0/us/',
-} as const;
-
-/** Where the FNCS title counts come from — a different licence version from Liquipedia's. */
-export const WIKIPEDIA = {
-  url: 'https://en.wikipedia.org/wiki/Competitive_Fortnite_records_and_statistics',
-  license: 'CC BY-SA 4.0',
-  licenseUrl: 'https://creativecommons.org/licenses/by-sa/4.0/',
 } as const;
 
 /**

@@ -9,15 +9,8 @@ There is one dataset, and every game reads it:
 `liquipedia_data/clean_data/fortnite/` — 5,678 players, 14,645 tournaments,
 442,736 placements, from [Liquipedia (Fortnite)](https://liquipedia.net/fortnite/).
 
-The older Wikipedia import (316 players in `src/data/fortnite/`), the
-`Dataset` / `PlayerRepository` layer over it, the `scripts/etl/` pipeline that
-built it and `fame_calculation.ipynb` have all been **removed**. No game had
-read any of it since the migration. Earlier revisions of this file described
-that pipeline at length; git has them if they are ever needed.
-
-FNCS title counts still originate from Wikipedia's *Competitive Fortnite
-records and statistics* — they are matched into the `fncs_wins` column of
-`players.json` upstream, which is why the attribution still names both sources.
+Everything is Liquipedia's, FNCS title counts included: they are counted from
+Liquipedia's own results, like every other number.
 
 Licensing is in [CREDITS.md](CREDITS.md) and
 [src/data/LICENSE.md](src/data/LICENSE.md) — the data is CC BY-SA 3.0, not AGPL like the code.
@@ -84,9 +77,10 @@ reads, in three steps, each in `scripts/pipeline/`:
 - **It builds in a staging folder**, runs `npm run check:games` on the result,
   and only then replaces the files - all together, so a failed step leaves the
   site's data as it was. It also sets `EXPORT_DATE` in `roster.ts`.
-- **FNCS titles**: Wikipedia's table (`scripts/pipeline/wikipedia_fncs.json`,
-  taken from the import before `dce12ea`) up to FNCS 2026 Major 2, then each
-  regional grand final's winners from Liquipedia's own results.
+- **FNCS titles**: every player on the 1st-placed team of every regional FNCS
+  grand final, from Liquipedia's own results — PC only, the 2020 console FNCS
+  is not counted. The build reports a final with no winner yet (an upcoming one)
+  and any winner it cannot match to a player page.
 - **Proved against the notebooks**: on the same raw dump the five clean files
   come out identical to the notebooks' output, and on the current clean files
   `enrich.py` and `derived.py` reproduce `players.json`, `orgs.json` and every
@@ -148,7 +142,7 @@ owns the data:
 | --- | --- | --- |
 | `tier` | `easy` / `medium` / `hard` / `unused` | difficulty band; `unused` rows are dropped when the roster loads and never reach a game |
 | `region_tier` | same, optional | difficulty band within `region`, for Fortnitedle's region picker |
-| `fncs_wins` | integer ≥ 0 | FNCS grand finals won, matched over from the Wikipedia import |
+| `fncs_wins` | integer ≥ 0 | regional FNCS grand finals won (PC), counted from Liquipedia's results |
 
 `tier` is opaque to the app. Nothing recomputes it and there is no fallback
 ranking, so changing how it is calculated changes every game at once and
@@ -177,24 +171,12 @@ region but Africa all three bands. Africa has 22 rows, so 2% rounds to nobody;
 the setup screen greys that card out with its count showing rather than
 widening behind your back.
 
-### Why it is separate
+### One source
 
-The two datasets are not two versions of the same thing; they answer different
-questions.
-
-The Wikipedia import is **deep and narrow**: 316 players, but for each of them
-who they placed with, where, and under which org. Connections, Tenaball,
-Griefer and Piece Control are written around having that, and it is still the
-only source that publishes FNCS titles per player.
-
-The Liquipedia export is **wide**: 5,678 players, and — once the notebook has
-reduced `placements.json` — their finishes at 187 majors and who they queued
-with across all 14,645 tournaments. Higher or Lower and Fortnitedle only ever
-need "who exists and what are they worth"; Career Path and Who Are Ya need the
-two derived files as well, and get a far better game out of them than the
-winners-only view could give. All four read the files directly through `Roster`,
-`Majors` and `Teammates` rather than being squeezed through a model built for
-the smaller import.
+Every game reads the Liquipedia export: 5,678 players, their finishes at 187
+majors and who they queued with across all 14,645 tournaments, read directly
+through `Roster`, `Majors`, `Teammates` and the rest. There is no second source:
+the FNCS count is read off the regional finals' results like everything else.
 
 ### Inputs
 
@@ -236,8 +218,7 @@ field asks about anyone in it with one, and a short career gets five guesses. Ro
 "played together" means — 213,666 of the 442,736 rows are a roster of two or
 more, and two solo players at the same event are not teammates. That gives
 39,038 distinct pairs and counts with weight behind them: Peterbot and Pollo
-have entered 126 tournaments together, where the Wikipedia import could only
-see the ones they won.
+have entered 126 tournaments together, not just the ones they won.
 
 61,016 participant names (205,641 rows) have no `players.json` page and are
 skipped, because there is nothing to render and nothing to guess. A count is
@@ -258,34 +239,24 @@ absolute.
    settles it where the caller knows one, otherwise the biggest career wins.
 4. Scores every 1st place by Liquipedia's tier, tier type and prize pool, and
    derives the fame ranking from that plus career earnings.
-5. Carries **FNCS titles** over from the Wikipedia import by handle, with
-   hand-verified aliases for winners the two sources spell differently. Where
-   a handle belongs to several pages, nationality decides, then whichever page
-   Liquipedia itself has winning an FNCS final — both FHDs are Saudi, and
-   until 24 Sep 2026 the bigger earner took the other one's two titles. A
-   player is credited once per final, so Ruri's win as Takamura adds to their
-   count rather than being lost to it. The code is `fncs_titles` in
-   `scripts/pipeline/enrich.py`; the Wikipedia table it reads was taken out
-   of git (`dce12ea^`) into `scripts/pipeline/wikipedia_fncs.json`. Finals
-   after FNCS 2026 Major 2 count from Liquipedia's own winners.
+5. Counts **FNCS titles** from Liquipedia's results: every player on the
+   1st-placed team of every regional grand final, by the page the result links
+   to, so namesakes cannot swap titles. PC finals only. The code is
+   `fncs_titles` in `scripts/pipeline/enrich.py`.
 
 ### The FNCS Wins category
 
-The Liquipedia export publishes no per-player FNCS title count, which is why
-this one number crosses over from the older Wikipedia data. That table lists
-every grand-final winner in every region since 2019, so a handle missing from
-it has no title, and reads as 0.
+The count is Liquipedia's regional grand finals, winner by winner (see above),
+so a player who never won one reads as 0.
 
-278 players hold at least one, and the category asks only about them — in a pool
-where four in five players held zero, nearly every pair would be a tie and there
-would be no question to answer. Even so, ties are common, because 189 of those
-278 hold exactly one title:
+247 players hold at least one (422 titles), and 159 of them hold exactly one,
+so among the title-holders ties are common:
 
-| Tier | Players with a title | Chance a random pair ties |
+| Tier | Players with a title | Chance a random pair of them ties |
 | --- | --- | --- |
-| Easy | 83 | ~23% |
-| Medium | 194 | ~70% |
-| Hard | 1 → borrows Medium | — |
+| Easy | 58 | ~27% |
+| Medium | 169 | ~49% |
+| Hard | 20, all on one | 100% |
 
 On Easy and Medium there is no Equal button, so a tie accepts either answer.
 That makes Medium generous. If you would rather it were a real question, give
@@ -297,6 +268,4 @@ export function hasEqualButton(difficulty: Difficulty, category?: Category): boo
 }
 ```
 
-Hard has exactly one title-holder of its own, so it borrows Medium's pool
-through `playersFor`'s normal tier widening. `npm run check:games` reports that
-as a note rather than a failure, because for this category it is expected.
+Hard's twenty title-holders all have exactly one.

@@ -73,7 +73,7 @@ Fame is decided upstream. `tier` (easy, medium, hard or unused) and `region_tier
 | Major | An Epic-run main event that Liquipedia rates tier 1, from the 2019 World Cup on. Console, mobile, Twitch and challenge events are excluded, so MrBeast's Extreme Survival Challenge is not a major. 187 events, 178 of them regional FNCS grand finals |
 | LAN | A major played offline: 9 events (the two World Cup finals, the 2022 Invitational, the Globals 2023–26, the 2026 Summit, the Reload Elite Series Championship). The "LAN wins" board alone widens it to any offline tier 1–2 event, so DreamHack, Gamers8 and the Esports World Cup count there |
 | Global Championship | The 2019 World Cup finals and the FNCS Globals 2023–26 |
-| FNCS win | A regional FNCS grand final won, by Wikipedia's count. The Globals, the Invitational and the Summit are not FNCS wins |
+| FNCS win | A regional FNCS grand final won, PC only, counted from Liquipedia's results (the 2020 console FNCS is not counted). The Globals, the Invitational and the Summit are not FNCS wins |
 | FNCS finals played | Every FNCS-branded major reached, the Globals, Invitational and Summit included. The 2026 Globals already counts for its qualifiers, because the dump lists entrants before the event |
 | Nationality | The first one on the Liquipedia page. 487 players list two or more. England, Scotland and Wales count as their own nations when listed first |
 | Region | Where a player competes, one of six: Europe, North America (Central and West together), South America (Brazil), Asia, Oceania, Middle East |
@@ -432,7 +432,7 @@ You get one list and 90 seconds to name as many of it as you can. Every correct 
 
 Lists answered with countries or organisations search every name, not just the answers.
 
-- **Age at a win** is on the day of the grand final, from the published birthday; the dates are Liquipedia's regional finals, so a winner only Wikipedia records is on neither age list.
+- **Age at a win** is on the day of the grand final, from the published birthday; the dates are Liquipedia's regional finals, the same finals the FNCS count is made of.
 
 **Played or not.** Tenaball's and List's pickers mark each board green (completed), yellow (tried: gave up or fell short) or red (not played), from `progress:<game>` in local storage (`games/shared/progress.ts`). Keyed by puzzle id, so a daily puzzle can key by date. The Random buttons pick an unplayed board first, then a tried one, then any (`pickFresh`).
 
@@ -772,7 +772,7 @@ It plays every game with a perfect player, generating the random games many time
 - **Who Are Ya:** the number one teammate is last in the ramped orders and never in Random's first four; a two-clue hand lasts five wrong guesses.
 - **Whole field:** every secret-player game deals all of an event field that its data allows, and Griefer, Connections and Tic Tac Toe build boards from the whole field.
 - **Analytics:** one real round per game, recorded and aggregated the way the dashboard reads it; the filters narrow every table, and the player view finds its player.
-- **Daily puzzles:** midnight in Berlin on both sides of a clock change; 30 days in a row each with all six puzzles, no secret player, board or list twice, three different secrets a day, all well known; every puzzle rebuilds, a saved round comes back, and the answer wins. `check:server` asks the endpoint for today twice and gets the same set.
+- **Daily puzzles:** midnight in Berlin on both sides of a clock change; 30 days in a row each with all six puzzles, no secret player, board or list twice, no kind of board or list on days 2 apart or board family 7 apart, no board on active status, three different secrets a day, all well known; every puzzle rebuilds, a saved round comes back, and the answer wins. `check:server` asks the endpoint for today twice and gets the same set.
 
 A generated data file that is missing makes its games report SKIPPED and the suite still passes, so a fresh clone is testable before the notebook runs.
 
@@ -799,13 +799,15 @@ From **5 October 2026** (`DAILY_START`) the live site is **daily puzzles only** 
 | List | a list of 10–60 with four famous names and 40% well known; wrong answers cost 3 seconds | `14/37`, ten blocks for the share found |
 | Tic Tac Toe | a Medium grid; the last week's rules left out | `9/9`, the grid and the hearts left |
 
-**Well known** (`src/daily/fame.ts`) is the Easy band plus the 250 best-earning players of the Medium band. The whole Medium band reaches into every region's own scene, which made "Top 10 duos of 2024 — Asia" a daily. The three secret players of a day are three different people, 60% from the Easy band, and none comes back while anyone unplayed is left (`SECRET_REST`). A Tenaball board rests 180 days and a List 120.
+**Well known** (`src/daily/fame.ts`) is the Easy band plus the 250 best-earning players of the Medium band. The whole Medium band reaches into every region's own scene, which made "Top 10 duos of 2024 — Asia" a daily. The three secret players of a day are three different people, 60% from the Easy band, and none comes back while anyone unplayed is left (`SECRET_REST`).
+
+**Boards and lists come back only when they change** (`src/daily/reuse.ts`). Each Tenaball and List daily keeps a fingerprint of who its answers are (`sig`). A board is never a daily again while its top 10 is the same people; once a big event changes it ("Top 10 by career earnings" after a World Cup), it is a new puzzle and may come back, but not within 30 days (`CHANGED_REST`). Neighbouring days are kept apart too: no kind of board or list twice within 2 days (`KIND_GAP`), and no family — one board split by region or year, like "average FNCS finish — NA East" and "— NA West" — within 7 (`FAMILY_GAP`). Boards that count only players Liquipedia lists as active are never a daily, since its retired status is rarely updated.
 
 **A streak** is days in a row with that game's daily played, win or lose — a hard day does not break a month. The home page's 🔥 counts days with any daily played.
 
 **Analytics:** a daily round's setup is `{ daily: '<day>' }`, which the dashboard counts as its own source, Daily.
 
-**The schedule editor** (`/analytics/daily`, `src/daily/admin.ts`): the next 30 days (more on request) made ahead and kept, one game at a time. ↑ and ↓ swap a puzzle with the day before or after; **Choose** sets a board, a list or a secret player by hand (Tic Tac Toe has no list — its six rules are drawn together); **↻ New** draws another, clear of every other scheduled day. A puzzle that repeats within 30 days, or a secret player who is the answer in two games on one day, is flagged. Days before today cannot change; today can, after a warning, since people may have played it. A new day steers clear of the days after it too, so a schedule made ahead never repeats itself.
+**The schedule editor** (`/analytics/daily`, `src/daily/admin.ts`): the next 30 days (more on request) made ahead and kept, one game at a time. ↑ and ↓ swap a puzzle with the day before or after; **Choose** sets a board, a list or a secret player by hand (Tic Tac Toe has no list — its six rules are drawn together); **↻ New** draws another, clear of every other scheduled day. In Choose, a board or list already played with the same answers is greyed out with the day it ran; one on a coming day says so, and choosing it swaps the two days; one whose answers changed since says that and can be chosen. A secret player within 30 days, a board or list on another day with the same answers, or a secret player who is the answer in two games on one day, is flagged. Days before today cannot change; today can, after a warning, since people may have played it. A new day steers clear of the days after it too, so a schedule made ahead never repeats itself.
 
 The home page lists Higher or Lower under **Unlimited** (it was "Any time").
 

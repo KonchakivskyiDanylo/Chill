@@ -1,5 +1,6 @@
 import type { Roster } from '@/data/liquipedia/roster';
 import { knownPlayers } from '@/daily/fame';
+import { answerSig, resting, spaced } from '@/daily/reuse';
 import type { DailyContext, DailyPuzzles, DailyResult } from '@/daily/types';
 import { pick } from '@/lib/rng';
 import type { Criterion } from './criteria';
@@ -18,9 +19,18 @@ const SIZE = { min: 10, max: 60 };
 /** On a list of players: at least this many famous names, and this share famous or regular. */
 const FAMOUS = { names: 4, share: 0.4 };
 
-const REST_DAYS = [120, 30, 7];
+/**
+ * A list is never offered again while its answers are the same people
+ * (`daily/reuse.ts`); these are the fallbacks if every list ever ran out.
+ */
+const REST_DAYS = [Infinity, 120, 30, 7];
 
-const kindOf = (list: Criterion) => list.id.split(':')[0];
+/** Who is on a list, for telling a changed list from the same one. */
+export function listSig(list: Criterion): string {
+  return answerSig(list.answers.map((answer) => answer.id));
+}
+
+export const kindOf = (list: Criterion) => list.id.split(':')[0];
 
 export function pickDaily(roster: Roster, lists: readonly Criterion[], ctx: DailyContext): Puzzle | null {
   const tier = new Map(roster.players.map((player) => [player.id, player.tier]));
@@ -35,15 +45,19 @@ export function pickDaily(roster: Roster, lists: readonly Criterion[], ctx: Dail
     const known = list.answers.filter((answer) => wellKnown.has(answer.id)).length;
     return famous >= FAMOUS.names && known >= FAMOUS.share * list.answers.length;
   });
+  const byId = new Map(lists.map((list) => [list.id, list]));
   const rng = ctx.rng('list');
-  const recent = ctx.recent('list');
+  const sigs = new Map(offered.map((list) => [list.id, listSig(list)]));
+  const uses = ctx.recent('list').map(({ daysAgo, puzzle }) => ({ daysAgo, id: puzzle.list, sig: puzzle.sig }));
   for (const rest of [...REST_DAYS, 0]) {
-    const resting = new Set(recent.filter((entry) => entry.daysAgo <= rest).map((entry) => entry.puzzle.list));
-    const left = offered.filter((list) => !resting.has(list.id));
-    if (left.length === 0) continue;
+    const out = resting(uses, (id) => sigs.get(id) ?? null, rest);
+    const fresh = offered.filter((list) => !out.has(list.id));
+    if (fresh.length === 0) continue;
+    const left = spaced(fresh, uses, (id) => byId.get(id), kindOf);
     // A kind first, so fifty organisation lists do not make every other day an organisation.
     const kind = pick(rng, [...new Set(left.map(kindOf))]);
-    return { list: pick(rng, left.filter((list) => kindOf(list) === kind)).id };
+    const list = pick(rng, left.filter((candidate) => kindOf(candidate) === kind));
+    return { list: list.id, sig: sigs.get(list.id) };
   }
   return null;
 }

@@ -277,7 +277,7 @@ every push.
 
 ---
 
-The data is from [Liquipedia](https://liquipedia.net/fortnite) (CC-BY-SA 3.0)
-and FNCS titles from Wikipedia (CC-BY-SA 4.0). The committed files are shared
+The data is from [Liquipedia](https://liquipedia.net/fortnite) (CC-BY-SA 3.0),
+FNCS titles included. The committed files are shared
 under the same licence — see [CREDITS.md](CREDITS.md). Subscriber and follower
 counts come from the YouTube Data API and the Twitch API, under their terms.

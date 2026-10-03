@@ -6,11 +6,13 @@ import { PRIVACY_META, usePageMeta } from '@/lib/seo';
 /**
  * What the site keeps, and about whom.
  *
- * Short, and complete for what YouTube's API terms ask of a site that shows
+ * A short version first, then the detail, in plain words. It matches what the
+ * code does — `analytics/types.ts` for a round, `server/index.ts` for what the
+ * server keeps — and carries what YouTube's API terms ask of a site that shows
  * its data: that the site uses YouTube API Services, a link to YouTube's Terms
  * of Service and to Google's Privacy Policy, what is collected and stored, and
- * how to get in touch. Twitch's developer terms ask for a public privacy
- * notice too.
+ * how to get in touch. Twitch's developer terms ask for a public privacy notice
+ * too.
  */
 
 const Ext = ({ href, children }: { href: string; children: ReactNode }) => (
@@ -31,42 +33,76 @@ export function Privacy() {
       </div>
 
       <section className="card stack-sm">
-        <div className="card__title">What stays on your device</div>
+        <div className="card__title">The short version</div>
+        <ul className="small stack-sm" style={{ margin: 0, paddingLeft: 18 }}>
+          <li>No accounts, no ads, no tracking cookies, nothing loaded from other sites.</li>
+          <li>Your results and streaks stay in your browser.</li>
+          <li>When you finish a round, the site counts how it went — without knowing who you are.</li>
+        </ul>
+      </section>
+
+      <section className="card stack-sm">
+        <div className="card__title">Kept in your browser</div>
         <p className="small">
-          Your daily results, streaks, best scores and settings are kept in your browser’s local storage. They
-          never leave it, and clearing your site data deletes them. There are no accounts.
+          Your daily results, streaks, best scores and settings are saved in your browser’s local storage, on
+          your device only. They are never sent anywhere. Clearing your browser’s data for this site deletes
+          them, and they do not follow you to another browser or device.
         </p>
       </section>
 
       <section className="card stack-sm">
-        <div className="card__title">What the site counts</div>
+        <div className="card__title">What the site records</div>
         <p className="small">
-          When you finish a round, the site records how it went — which puzzle, the answers given, won or
-          lost — to see which puzzles are too hard. It is not linked to you: no account, no device id, no
-          cookie, and IP addresses are not stored. A message you send with the 💬 button is kept with any
-          contact details you choose to add, to reply to it.
+          When you finish a round, the site sends a short record of it: the game, the puzzle, how you set it up,
+          your answers and whether you won. It is used to see which puzzles are too hard or too easy. Nothing in
+          it says who you are: there is no account, no device id and no cookie, and IP addresses are not saved.
+        </p>
+        <p className="small">
+          If a page breaks, the site may send the error message and the page it happened on, so it can be
+          fixed. It holds nothing about you either.
+        </p>
+      </section>
+
+      <section className="card stack-sm">
+        <div className="card__title">Messages you send</div>
+        <p className="small">
+          A message sent with the 💬 button is kept with whatever you write in it, the page you were on, and —
+          only if you add them — your contact details and the round you just played. They are used only to
+          answer you and to fix what you report.
         </p>
       </section>
 
       <section className="card stack-sm">
         <div className="card__title">YouTube and Twitch</div>
         <p className="small">
-          Follower counts come from the YouTube Data API (YouTube API Services) and the Twitch API: the
-          public subscriber and follower totals of players’ channels, as linked from their Liquipedia pages.
-          The site asks for nothing about you from either, and keeps only the latest counts — refreshed daily,
-          never older than YouTube and Twitch allow.
+          Some games show players’ YouTube subscriber and Twitch follower counts. OffSpawn gets them from the
+          YouTube Data API (YouTube API Services) and the Twitch API: only the public totals of the channels
+          linked from players’ Liquipedia pages. The site asks YouTube and Twitch for nothing about you. It
+          keeps only the latest counts, refreshed every day, and never longer than YouTube and Twitch allow.
         </p>
         <p className="small">
-          By using the parts of OffSpawn that show these counts you agree to be bound by the{' '}
-          <Ext href={YOUTUBE_TERMS}>YouTube Terms of Service</Ext>. YouTube’s data is handled under the{' '}
-          <Ext href={GOOGLE_PRIVACY}>Google Privacy Policy</Ext>.
+          By using the parts of OffSpawn that show these counts, you agree to be bound by the{' '}
+          <Ext href={YOUTUBE_TERMS}>YouTube Terms of Service</Ext>. Google’s handling of YouTube data is
+          described in the <Ext href={GOOGLE_PRIVACY}>Google Privacy Policy</Ext>.
+        </p>
+      </section>
+
+      <section className="card stack-sm">
+        <div className="card__title">Hosting</div>
+        <p className="small">
+          The site runs on Heroku. Like any web host, it may keep short-lived technical logs of the requests
+          it serves.
         </p>
       </section>
 
       <section className="card stack-sm">
         <div className="card__title">Questions</div>
-        <p className="small muted">
-          Ask with the 💬 button at the top of any page. See also <Link to="/credits" className="link">Credits &amp; licence</Link>.
+        <p className="small muted" style={{ margin: 0 }}>
+          Ask with the 💬 button at the top of any page. Where the data comes from is on{' '}
+          <Link to="/credits" className="link">
+            Credits &amp; licence
+          </Link>
+          .
         </p>
       </section>
     </div>

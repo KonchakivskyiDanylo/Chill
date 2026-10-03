@@ -102,8 +102,8 @@ export const GAMES: GameMeta[] = [
     },
     icon: '📈',
     intro: [
-      'The goal is to decide whether the player on the right is higher or lower than the one on the left, on the category you picked.',
-      'If you make the correct choice you score 1 point, the right-hand player slides across and a new one appears. Keep going and get the best score!',
+      'Is the player on the right higher or lower than the one on the left, in the category you picked?',
+      'A right answer scores a point: the right-hand player slides across and a new one comes in. One wrong answer ends the run.',
     ],
     sections: [
       {
@@ -111,25 +111,25 @@ export const GAMES: GameMeta[] = [
         items: [
           'Age — how old each player is today, from their published birthday.',
           'Career Earnings — every dollar of tournament prize money on record.',
-          'FNCS Wins — FNCS grand finals won, across every season and region. Players with none are included.',
+          'FNCS Wins — regional FNCS grand finals won, every season and region. Players with none come up too.',
           'FNCS Finals — FNCS grand finals reached, the Globals and the other FNCS LANs included.',
-          'Twitch Followers, YouTube Subscribers — the counts as each platform gives them, refreshed every day. YouTube rounds to three figures.',
+          'Twitch Followers, YouTube Subscribers — the counts each platform shows, updated every day. YouTube rounds its counts, like 1.23M.',
         ],
       },
       {
         title: 'Difficulty',
         items: [
           'A run starts with famous players far apart. The longer it lasts, the less known the players and the closer their numbers.',
-          'Easy gets harder slowly and Medium sooner. Hard gets there much quicker, and adds an Equal button.',
+          'Easy gets harder slowly, Medium faster, Hard fastest. Hard also adds an Equal button.',
         ],
       },
       {
         title: 'Ties',
         items: [
-          'Easy and Medium never deal two players on the same number, so one of Higher and Lower is always right.',
-          'Hard does, and then only Equal is right — two players with no FNCS wins included.',
+          'Easy and Medium never show two players on the same number, so Higher or Lower is always right.',
+          'Hard can, and then only Equal is right — two players with no FNCS wins too.',
           'Age is compared in whole years: two 19-year-olds are level even with birthdays months apart.',
-          'Career earnings are never dealt level.',
+          'Two players are never level on career earnings.',
         ],
       },
     ],
@@ -148,7 +148,7 @@ export const GAMES: GameMeta[] = [
     },
     icon: '🟩',
     intro: [
-      'Guess the competitive Fortnite player in 6 tries. After each guess the colour of the tiles changes to show how close your guess was to the player’s name.',
+      'Guess the competitive Fortnite player in 6 tries. After each guess, the tiles change colour to show how close you were to the player’s name.',
     ],
     rules: [
       'Spaces and punctuation are removed, capitalisation does not matter.',
@@ -161,7 +161,7 @@ export const GAMES: GameMeta[] = [
         'Spaces and punctuation are removed, capitalisation does not matter.',
         'Digits 0–9 count as characters and are on the keyboard.',
         'Any combination of letters and digits is allowed — it does not have to be a real player.',
-        'From guess 3, a # shows where a digit sits — which digit is for you to find.',
+        'From your third guess, a # marks where the name has a digit. Which digit is up to you.',
       ],
     },
     sections: [
@@ -190,14 +190,14 @@ export const GAMES: GameMeta[] = [
     },
     icon: '🗺️',
     intro: [
-      'A secret player’s tournament results are revealed one at a time. Name them from the career alone.',
+      'Up to ten of a secret player’s major results are revealed one at a time. Name the player from the career alone.',
       'A wrong guess reveals the next clue, and running out of clues loses the round. The fewer clues you need, the better.',
     ],
     rules: [
       'Clues are majors only: Epic’s grand finals since the 2019 World Cup — regional FNCS finals, the Globals, the World Cup itself.',
       'Each clue is one tournament and where the player finished.',
       'Only players with at least five majors on record can be the answer.',
-      'When the round ends, the clues you did not need turn face up, dimmed.',
+      'When the round ends, the clues you did not need are shown, dimmed.',
     ],
     sections: [
       {
@@ -209,11 +209,11 @@ export const GAMES: GameMeta[] = [
         ],
       },
       {
-        title: 'Which ten',
+        title: 'Which results',
         items: [
           'A mix of finishes — a win, a top 10, a 40th — with the bigger stages preferred.',
-          'The first clues never give it away: no win or big podium in the first three for the best-known players.',
-          'The ten fit only one player, except for thirteen who played every major beside the same partner. Name the partner and your next guess is the one.',
+          'The first clues never give it away: no win or $1M podium in the first three for famous players, or the first two for regulars.',
+          'The clues fit only one player. The exception is a few players who played every major with the same partner — if you name the partner, the answer is the other one.',
         ],
       },
       POOL_SECTION,
@@ -239,14 +239,14 @@ export const GAMES: GameMeta[] = [
     rules: [
       'Teammates are ranked by how many tournaments the pair entered together, across every tournament on record.',
       'A clue is a teammate who entered at least three tournaments with the answer. Only players with three such teammates and five majors can be the answer.',
-      'When the round ends, the rest of the list turns face up with the counts.',
+      'When the round ends, the rest of the list is shown with the counts.',
     ],
     daily: {
       rules: [
         'Teammates are ranked by how many tournaments the pair entered together, across every tournament on record.',
-        'They come weakest first, each with that count. Teammates on the same count can come in either order.',
+        'They come fewest shared tournaments first, each with its count. Teammates on the same count can come in either order.',
         'A clue is a teammate who entered at least three tournaments with the answer. Only players with three such teammates and five majors can be the answer.',
-        'When the round ends, the rest of the list turns face up.',
+        'When the round ends, the rest of the list is shown.',
       ],
     },
     sections: [
@@ -306,9 +306,9 @@ export const GAMES: GameMeta[] = [
       {
         title: 'Ties',
         items: [
-          'Every board prints its tie rule above the slots. On a count, the bigger career earner ranks higher.',
-          'If 10th and 11th are still level after the tie rule, the board is not offered.',
-          'Naming the 11th is a near miss: it is called out, and it never costs a life.',
+          'Every board shows its tie rule above the slots. On most boards that count something, players level on the count are split by career earnings.',
+          'If 10th and 11th are still level after that, either one fills 10th, and the board says so.',
+          'Naming the player in 11th is a near miss: the game tells you, and it costs no life.',
         ],
       },
     ],
@@ -453,14 +453,14 @@ export const GAMES: GameMeta[] = [
       'A player who fits no open cell costs a life.',
       'Each player can be used once.',
       'No player fits the whole grid: at most 4 cells on Easy, 3 on Medium, 2 on Hard.',
-      'The grid never offers a cell that would leave another with nobody left to fill it.',
+      'The grid only offers cells that leave every other cell still possible to fill.',
     ],
     daily: {
       rules: [
         '3 lives: a player who fits no open cell costs one.',
         'Each player can be used once.',
-        'Every cell has at least two of the scene’s regulars, and no player fits more than 3 cells.',
-        'The grid never offers a cell that would leave another with nobody left to fill it.',
+        'Every cell has at least two well-known answers, and no player fits more than 3 cells.',
+        'The grid only offers cells that leave every other cell still possible to fill.',
       ],
     },
     sections: [
@@ -478,9 +478,9 @@ export const GAMES: GameMeta[] = [
         title: 'Categories',
         items: [
           'Won EU FNCS, Won FNCS in 2023 — the regional FNCS finals. A Globals is not an FNCS win.',
-          'Won FNCS with Peterbot — was on one of his FNCS-winning teams: Cold, Ritual, Pollo or Bylah.',
-          'Top 3 at a LAN — a podium finish at any LAN in “What the words mean”.',
-          'Won FNCS back to back — won two FNCS in a row, in any region.',
+          'Won FNCS with a famous player, like Peterbot — was on one of their FNCS-winning teams.',
+          'Top 3 at a LAN — a podium finish at any LAN, as defined below.',
+          'Won FNCS back to back — won two FNCS finals in a row, in any region.',
           'Played at an event — was in its field, whatever the result.',
         ],
       },
@@ -818,15 +818,6 @@ export const GAMES: GameMeta[] = [
   },
 ];
 
-/**
- * A game by its URL slug or its id.
- *
- * Both, because they can differ: a rename changes `slug` and leaves `id` alone
- * so local best scores survive it, and the game components ask for themselves
- * by id (`getGame('wordle')` inside Fortnitedle). Slug wins on a tie, so the
- * router always resolves to the game whose URL was actually requested, and a
- * link to a game's old slug — which is still its id — keeps working.
- */
 /** The line every daily puzzle's rules open with. */
 export const DAILY_LINE =
   'One puzzle a day, the same for everyone. A new one at midnight, Central European time.';
@@ -854,6 +845,15 @@ export const VISIBLE_GAMES: GameMeta[] = GAMES.filter((game) => !game.hidden);
 /** Whether a hidden game's page opens at all: on a dev server, yes; on the live site, no. */
 export const OPEN_HIDDEN = import.meta.env?.DEV === true;
 
+/**
+ * A game by its URL slug or its id.
+ *
+ * Both, because they can differ: a rename changes `slug` and leaves `id` alone
+ * so local best scores survive it, and the game components ask for themselves
+ * by id (`getGame('wordle')` inside Fortnitedle). Slug wins on a tie, so the
+ * router always resolves to the game whose URL was actually requested, and a
+ * link to a game's old slug — which is still its id — keeps working.
+ */
 export function getGame(key: string): GameMeta | undefined {
   return GAMES.find((game) => game.slug === key) ?? GAMES.find((game) => game.id === key);
 }

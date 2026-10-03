@@ -8,7 +8,7 @@ import { loadJson } from './files';
  *
  * It was generated before anything read it. This is what now reads it: every
  * criteria game wrote a "plays for NRG" rule and none of them could ever fire,
- * because the old Wikipedia import knew of seventeen organisations with one or
+ * because the old 316-player import knew of seventeen organisations with one or
  * two players each — under every threshold the generators used. Griefer's own
  * rules panel advertised a rule the data could not produce.
  *

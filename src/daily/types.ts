@@ -24,8 +24,9 @@ export interface DailyPuzzles {
   'career-path': { secret: string; clues: string[] };
   /** `clues` are teammate ids, in the order they are revealed. */
   'who-are-ya': { secret: string; clues: string[] };
-  tenaball: { board: string };
-  list: { list: string };
+  /** `sig` fingerprints who was on the board that day (`reuse.ts`), so a changed board can come back. */
+  tenaball: { board: string; sig?: string };
+  list: { list: string; sig?: string };
   'tic-tac-toe': { rows: string[]; cols: string[] };
 }
 

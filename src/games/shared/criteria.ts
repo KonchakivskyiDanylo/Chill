@@ -12,8 +12,8 @@ import { moneyShort } from '@/lib/format';
  * players, which is what lets the puzzle generators reject impossible boards
  * before showing them.
  *
- * Rebuilt on the Liquipedia export. The previous version ran on the 316-player
- * Wikipedia import and could only really answer two questions — of the 21
+ * Rebuilt on the Liquipedia export. The previous version ran on an older
+ * 316-player import and could only really answer two questions — of the 21
  * criteria it produced, 16 were a country or a region. That is why a Griefer
  * board reading "every player here competes in Brazil" was solvable without
  * knowing a single player: the cards carried flags, and the flags were the

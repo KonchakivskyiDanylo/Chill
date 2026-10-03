@@ -7,9 +7,8 @@ import { PlayerAvatar } from './PlayerAvatar';
 /**
  * Everything the shared player UI renders: an avatar, a name and a flag.
  *
- * Structural rather than `Player`, because the Wikipedia import and the
- * Liquipedia roster are two different row shapes and both are rendered by
- * these components.
+ * Structural rather than a row type, so anything with a name and a flag — a
+ * roster player, a teammate clue — renders with these components.
  */
 export interface Displayable extends Nameable {
   country: string | null;

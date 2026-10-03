@@ -419,7 +419,9 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL): Promise
     const game = String(url.searchParams.get('game'));
     if (!DAILY_GAMES.includes(game as DailyGame)) throw new HttpError(400, 'No such game');
     const { data } = await dailyEnv();
-    return send(res, 200, (await import('@/daily/admin')).optionsFor(game as DailyGame, data));
+    // Every day kept, so a board or a list says where it has already been used.
+    const sets = await store.dailies(addDays(dayKey(), -DAILY_HISTORY));
+    return send(res, 200, (await import('@/daily/admin')).optionsFor(game as DailyGame, data, sets, firstEditable()));
   }
   const dailyEdit = /^POST \/api\/admin\/daily\/(swap|choose|redraw)$/.exec(route);
   if (dailyEdit) {
@@ -445,12 +447,30 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL): Promise
       return send(res, 204);
     }
     const day = String(body.day);
-    await editDay(day, (set, others) => {
-      const puzzle =
-        dailyEdit[1] === 'choose'
-          ? admin.puzzleForChoice(game, String(body.id), day, data)
-          : admin.redraw(game, set, others, data);
-      return puzzle ? { ...set, puzzles: { ...set.puzzles, [game]: puzzle } } : null;
+    if (dailyEdit[1] === 'redraw') {
+      await editDay(day, (set, others) => {
+        const puzzle = admin.redraw(game, set, others, data);
+        return puzzle ? { ...set, puzzles: { ...set.puzzles, [game]: puzzle } } : null;
+      });
+      return send(res, 204);
+    }
+    // Choose. A board already played with the same top 10 is refused; one on a
+    // coming day moves here, and that day takes this day's board in its place.
+    if (!isDayKey(day) || day < firstEditable()) throw new HttpError(400, 'That day can no longer change');
+    await serially(async () => {
+      const set = await dailySet(day);
+      const others = (await store.dailies(addDays(day, -DAILY_HISTORY))).filter((other) => other.day !== day);
+      const { past, coming } = admin.sameElsewhere(game, String(body.id), others, data, firstEditable());
+      if (past.length) {
+        throw new HttpError(409, `Already played on ${past.join(', ')}, and its answers have not changed since.`);
+      }
+      const puzzle = admin.puzzleForChoice(game, String(body.id), day, data);
+      if (!puzzle) throw new HttpError(422, 'Could not make that puzzle');
+      for (const from of coming) {
+        const other = others.find((candidate) => candidate.day === from)!;
+        await store.setDaily({ ...other, puzzles: { ...other.puzzles, [game]: set.puzzles[game] } });
+      }
+      await store.setDaily({ ...set, puzzles: { ...set.puzzles, [game]: puzzle } });
     });
     return send(res, 204);
   }

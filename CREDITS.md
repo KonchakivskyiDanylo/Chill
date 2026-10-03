@@ -16,22 +16,17 @@ fetched through the Liquipedia API (never scraped) and used under
 **Modified:** filtered to players with a competitive record (players recorded as
 deceased are left out), nationalities mapped to country codes, team pages to team
 names, and ages, difficulty tiers, rankings, facts and puzzle answers derived by
-this project. Errors in those are ours. No Liquipedia images are used — they are
+this project — FNCS title counts included, counted from Liquipedia's results.
+Errors in those are ours. No Liquipedia images are used — they are
 licensed separately.
-
-## Wikipedia
-
-FNCS title counts are from
-[Competitive Fortnite records and statistics](https://en.wikipedia.org/wiki/Competitive_Fortnite_records_and_statistics),
-used under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 
 ## Reusing the data
 
-Credit Liquipedia (and Wikipedia for FNCS counts) with a link, say what you
+Credit Liquipedia with a link, say what you
 changed, and share under the same licence. Provided as is, without warranty.
 
 ## Trademarks
 
 OffSpawn is unofficial and not affiliated with or endorsed by Epic
-Games, Liquipedia, Team Liquid, Wikipedia or any team or player. Fortnite is a
+Games, Liquipedia, Team Liquid or any team or player. Fortnite is a
 trademark of Epic Games, Inc. Wrong data or a rights issue? Open an issue.

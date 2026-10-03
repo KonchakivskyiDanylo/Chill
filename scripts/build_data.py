@@ -26,8 +26,8 @@ Only then are the files in liquipedia_data/clean_data/fortnite/ replaced, all
 together - a step that fails leaves the site's data exactly as it was. Other
 files in that folder are never touched.
 
-Content from Liquipedia (https://liquipedia.net/fortnite), CC-BY-SA 3.0; FNCS
-titles from Wikipedia, CC-BY-SA 4.0. See CREDITS.md.
+Content from Liquipedia (https://liquipedia.net/fortnite), CC-BY-SA 3.0. See
+CREDITS.md.
 """
 
 import argparse

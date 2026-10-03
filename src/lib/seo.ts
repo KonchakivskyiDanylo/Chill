@@ -30,14 +30,15 @@ export const HOME_META: PageMeta = {
 
 export const PRIVACY_META: PageMeta = {
   title: `Privacy | ${SITE_NAME}`,
-  description: 'What OffSpawn keeps: your results stay in your browser, finished rounds are counted anonymously, and follower counts come from YouTube and Twitch.',
+  description:
+    'What OffSpawn keeps: no accounts or tracking, your results stay in your browser, and finished rounds are counted anonymously.',
   path: '/privacy',
 };
 
 export const CREDITS_META: PageMeta = {
   title: `Credits & licence | ${SITE_NAME}`,
   description:
-    'Where OffSpawn’s competitive Fortnite data comes from — Liquipedia and Wikipedia — and the licence it is shared under.',
+    'Where OffSpawn’s competitive Fortnite data comes from — Liquipedia — and the licence it is shared under.',
   path: '/credits',
 };
 

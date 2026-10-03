@@ -2,6 +2,7 @@ import type { Board, Rankings } from '@/data/liquipedia/rankings';
 import { membersOf } from '@/data/liquipedia/rankings';
 import type { Roster } from '@/data/liquipedia/roster';
 import { knownPlayers } from '@/daily/fame';
+import { answerSig, resting, spaced } from '@/daily/reuse';
 import type { Socials } from '@/data/socials';
 import { DAILY_SOCIAL, SOCIAL_GROUP, socialBoards } from './social-boards';
 import type { DailyContext, DailyPuzzles, DailyResult } from '@/daily/types';
@@ -38,11 +39,24 @@ const KINDS: { kind: string; groups: RegExp }[] = [
 /** Rows on a player board that must hold a famous name or a regular. */
 const FAMOUS_ROWS = 6;
 
-/** A board is not offered again for this long, while others are left. */
-const REST_DAYS = [180, 60, 7];
+/**
+ * A board is never offered again while its top 10 is the same people
+ * (`daily/reuse.ts`); these are the fallbacks if every board ever ran out.
+ */
+const REST_DAYS = [Infinity, 180, 60, 7];
 
-function kindOf(board: Board): string | null {
+/** Who is on a board, for telling a changed top 10 from the same one. */
+export function boardSig(board: Board): string {
+  return answerSig(board.rows.flatMap((row) => membersOf(row).map((member) => member.key)));
+}
+
+export function kindOf(board: Board): string | null {
   return KINDS.find((entry) => entry.groups.test(board.group))?.kind ?? null;
+}
+
+/** One board split by region or by year: "…average FNCS finish in 2021 — NA East" is "…in #". */
+export function familyOf(board: Board): string {
+  return board.title.replace(/ — .*$/, '').replace(/\b\d{4}\b/g, '#');
 }
 
 /**
@@ -52,6 +66,14 @@ function kindOf(board: Board): string | null {
  */
 function teamBoard(board: Board): boolean {
   return board.rows.some((row) => membersOf(row).length > 1);
+}
+
+/**
+ * A board that counts only players Liquipedia lists as active. Liquipedia rarely
+ * marks a retirement (the user, 28 Sep 2026), so its answer key can be wrong.
+ */
+function onStatus(board: Board): boolean {
+  return /(^|[-:])active([-:]|$)/.test(board.id);
 }
 
 /** Whether the board is about players people know: six of the ten rows hold one (`daily/fame.ts`). */
@@ -68,22 +90,27 @@ function boardsWith(rankings: Rankings, roster: Roster, socials: Socials | null)
 
 export function pickDaily(roster: Roster, rankings: Rankings, socials: Socials | null, ctx: DailyContext): Puzzle | null {
   const known = knownPlayers(roster);
+  const all = boardsWith(rankings, roster, socials);
+  const byId = new Map(all.map((board) => [board.id, board]));
   // A follower board is famous by what it ranks, so it skips the fame test — but
   // only the big ones: the world, Europe, North America, the FNCS champions.
-  const offered = boardsWith(rankings, roster, socials).filter((board) =>
+  const offered = all.filter((board) =>
     board.group === SOCIAL_GROUP
       ? DAILY_SOCIAL(board.id)
-      : kindOf(board) !== null && !teamBoard(board) && famousEnough(board, known),
+      : kindOf(board) !== null && !teamBoard(board) && !onStatus(board) && famousEnough(board, known),
   );
   const rng = ctx.rng('tenaball');
-  const recent = ctx.recent('tenaball');
+  const sigs = new Map(offered.map((board) => [board.id, boardSig(board)]));
+  const uses = ctx.recent('tenaball').map(({ daysAgo, puzzle }) => ({ daysAgo, id: puzzle.board, sig: puzzle.sig }));
   for (const rest of [...REST_DAYS, 0]) {
-    const resting = new Set(recent.filter((entry) => entry.daysAgo <= rest).map((entry) => entry.puzzle.board));
-    const left = offered.filter((board) => !resting.has(board.id));
-    if (left.length === 0) continue;
+    const out = resting(uses, (id) => sigs.get(id) ?? null, rest);
+    const fresh = offered.filter((board) => !out.has(board.id));
+    if (fresh.length === 0) continue;
+    const left = spaced(fresh, uses, (id) => byId.get(id), kindOf, familyOf);
     const kinds = [...new Set(left.map(kindOf))];
     const kind = pick(rng, kinds);
-    return { board: pick(rng, left.filter((board) => kindOf(board) === kind)).id };
+    const board = pick(rng, left.filter((candidate) => kindOf(candidate) === kind));
+    return { board: board.id, sig: sigs.get(board.id) };
   }
   return null;
 }

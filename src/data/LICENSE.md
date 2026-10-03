@@ -6,7 +6,6 @@ wiki text, so it is shared under
 without warranty.
 
 To reuse it: credit Liquipedia with a link (*"Some content from Liquipedia,
-https://liquipedia.net/fortnite"*; FNCS counts also need Wikipedia's
-"Competitive Fortnite records and statistics"), say what you changed (see
+https://liquipedia.net/fortnite"*), say what you changed (see
 [CREDITS.md](../../CREDITS.md) for what we changed), and share your version
 under the same licence.

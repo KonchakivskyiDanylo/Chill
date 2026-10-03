@@ -2,7 +2,9 @@ import type { Board } from '@/data/liquipedia/rankings';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 import { puzzleFor as careerPuzzle, dailyPool as careerPool } from '@/games/career-path/daily';
 import { buildCriteria, type Criterion } from '@/games/list/criteria';
+import { listSig } from '@/games/list/daily';
 import { levelPlayers } from '@/games/shared/levels';
+import { boardSig } from '@/games/tenaball/daily';
 import { socialBoards } from '@/games/tenaball/social-boards';
 import { boardRules } from '@/games/tic-tac-toe/engine';
 import { dailyPools } from '@/games/tic-tac-toe/daily';
@@ -26,6 +28,12 @@ export interface Option {
   id: string;
   label: string;
   group?: string;
+  /**
+   * The days a board or a list is already on, and whether its answers have
+   * changed since each — a changed one may be chosen again (`daily/reuse.ts`).
+   * `past` is a day already played; a coming day's board can be moved instead.
+   */
+  used?: { day: string; changed: boolean; past: boolean }[];
 }
 
 export interface Described {
@@ -93,8 +101,56 @@ export function describe(game: DailyGame, puzzle: DailyPuzzles[DailyGame] | unde
   return { label: puzzle.rows.map(name).join(' · '), detail: `× ${puzzle.cols.map(name).join(' · ')}` };
 }
 
+/** The days `id` is on in `sets`, and whether its answers have changed since. */
+function usesOf(game: 'tenaball' | 'list', id: string, sets: readonly DailySet[], now: string | null) {
+  return sets
+    .filter((set) => {
+      const puzzle = set.puzzles[game] as { board?: string; list?: string } | undefined;
+      return (puzzle?.board ?? puzzle?.list) === id;
+    })
+    .map((set) => {
+      const sig = (set.puzzles[game] as { sig?: string }).sig;
+      return { day: set.day, changed: Boolean(sig && now && sig !== now) };
+    });
+}
+
+/**
+ * Where a board or a list already is, with the same answers, for choosing it
+ * for another day: `past` days block the choice — that puzzle was played —
+ * and `coming` days are where it moves from (`server/index.ts` swaps them).
+ */
+export function sameElsewhere(
+  game: DailyGame,
+  id: string,
+  others: readonly DailySet[],
+  data: DailyData,
+  firstEditable: string,
+): { past: string[]; coming: string[] } {
+  if (game !== 'tenaball' && game !== 'list') return { past: [], coming: [] };
+  const same = usesOf(game, id, others, sigOf(game, id, data)).filter((use) => !use.changed);
+  return {
+    past: same.filter((use) => use.day < firstEditable).map((use) => use.day),
+    coming: same.filter((use) => use.day >= firstEditable).map((use) => use.day),
+  };
+}
+
+function sigOf(game: 'tenaball' | 'list', id: string, data: DailyData): string | null {
+  const { boards, lists } = lookup(data);
+  if (game === 'tenaball') {
+    const board = boards.get(id);
+    return board ? boardSig(board) : null;
+  }
+  const list = lists.get(id);
+  return list ? listSig(list) : null;
+}
+
 /** What a game's puzzle may be set to by hand. Tic Tac Toe has no list: its six rules are drawn together. */
-export function optionsFor(game: DailyGame, data: DailyData): Option[] {
+export function optionsFor(
+  game: DailyGame,
+  data: DailyData,
+  sets: readonly DailySet[] = [],
+  firstEditable = '',
+): Option[] {
   const { roster, majors, teammates, facts } = data;
   const { byId, boards, lists } = lookup(data);
   const players = (pool: readonly RosterPlayer[]): Option[] =>
@@ -109,9 +165,19 @@ export function optionsFor(game: DailyGame, data: DailyData): Option[] {
     case 'who-are-ya':
       return players(whoPool(roster, teammates, facts, byId));
     case 'tenaball':
-      return [...boards.values()].map((board) => ({ id: board.id, label: board.title, group: board.group }));
+      return [...boards.values()].map((board) => ({
+        id: board.id,
+        label: board.title,
+        group: board.group,
+        used: usesOf('tenaball', board.id, sets, boardSig(board)).map((use) => ({ ...use, past: use.day < firstEditable })),
+      }));
     case 'list':
-      return [...lists.values()].map((list) => ({ id: list.id, label: list.title, group: `${list.answers.length} answers` }));
+      return [...lists.values()].map((list) => ({
+        id: list.id,
+        label: list.title,
+        group: `${list.answers.length} answers`,
+        used: usesOf('list', list.id, sets, listSig(list)).map((use) => ({ ...use, past: use.day < firstEditable })),
+      }));
     default:
       return [];
   }
@@ -134,10 +200,14 @@ export function puzzleForChoice(game: DailyGame, id: string, day: string, data: 
       const player = byId.get(id);
       return player ? whoPuzzle(player, data.teammates, byId, seed) : null;
     }
-    case 'tenaball':
-      return boards.has(id) ? { board: id } : null;
-    case 'list':
-      return lists.has(id) ? { list: id } : null;
+    case 'tenaball': {
+      const board = boards.get(id);
+      return board ? { board: id, sig: boardSig(board) } : null;
+    }
+    case 'list': {
+      const list = lists.get(id);
+      return list ? { list: id, sig: listSig(list) } : null;
+    }
     default:
       return null;
   }
@@ -186,15 +256,18 @@ export function warningFor(game: DailyGame, set: DailySet, all: readonly DailySe
     const twin = SECRET_GAMES.find((other) => other !== game && key(set.puzzles[other]) === mine);
     if (twin) out.push(`also the answer in ${twin} that day`);
   }
-  const near = all
-    .filter((other) => other.day !== set.day && Math.abs(daysBetween(other.day, set.day)) <= REPEAT_WINDOW)
-    .filter((other) =>
-      SECRET_GAMES.includes(game)
-        ? SECRET_GAMES.some((g) => key(other.puzzles[g]) === mine)
-        : key(other.puzzles[game]) === mine,
-    )
-    .map((other) => other.day);
-  if (near.length) out.push(`also on ${near.join(', ')}`);
+  if (game === 'tenaball' || game === 'list') {
+    // A board or a list is a repeat on any day while its answers are the same people.
+    const now = sigOf(game, mine ?? '', data);
+    const same = usesOf(game, mine ?? '', all.filter((other) => other.day !== set.day), now).filter((use) => !use.changed);
+    if (same.length) out.push(`also on ${same.map((use) => use.day).join(', ')}, with the same answers`);
+  } else {
+    const near = all
+      .filter((other) => other.day !== set.day && Math.abs(daysBetween(other.day, set.day)) <= REPEAT_WINDOW)
+      .filter((other) => SECRET_GAMES.some((g) => key(other.puzzles[g]) === mine))
+      .map((other) => other.day);
+    if (near.length) out.push(`also on ${near.join(', ')}`);
+  }
   if (!out.length) return null;
   return `${describe(game, puzzle, data).label}: ${out.join('; ')}`;
 }

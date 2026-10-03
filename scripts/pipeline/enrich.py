@@ -5,12 +5,9 @@ its order.
 
 FNCS titles
 -----------
-Liquipedia publishes no per-player FNCS title count, so the count has always
-come from Wikipedia's "Competitive Fortnite records and statistics", as it was
-imported into this repo (wikipedia_fncs.json, read out of git before dce12ea).
-That table stops at FNCS 2026 Major 2. Every regional grand final after it is
-counted from Liquipedia's own results instead - the 1st-placed team of each
-final - so new titles land without waiting on anyone to update a table.
+Counted from Liquipedia's own results: every player on the 1st-placed team of
+every regional FNCS grand final, PC only. Liquipedia is the only source (the
+user, 3 Oct 2026: "keep only Liquipedia data").
 
 Tiers
 -----
@@ -21,63 +18,13 @@ have passed away are `unused` and never reach a game.
 
 import json
 import re
-import unicodedata
 from collections import Counter, defaultdict
 from datetime import date
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-
 EASY_PCT, MEDIUM_PCT = 0.02, 0.20
 
-# The last round wikipedia_fncs.json covers, as Liquipedia dates it: the FNCS
-# 2026 Major 2 grand finals, 1 August 2026. Finals starting after it count
-# from Liquipedia.
-WIKIPEDIA_THROUGH = "2026-08-01"
-
-
 # ------------------------------------------------------------- FNCS titles --
-
-def norm(s):
-    """Match key for a handle: fold accents, keep a-z0-9."""
-    s = unicodedata.normalize("NFKD", s or "")
-    s = "".join(c for c in s if not unicodedata.combining(c))
-    return re.sub(r"[^a-z0-9]", "", s.lower())
-
-
-def base(s):
-    """'Speedy (BH)' -> 'speedy'"""
-    return norm(re.sub(r"[_ ]*\(.*", "", (s or "").replace("_", " ")))
-
-
-CODE_TO_NAT = {
-    "US": "United States", "CA": "Canada", "GB": "United Kingdom", "AU": "Australia",
-    "JP": "Japan", "BR": "Brazil", "FR": "France", "DE": "Germany", "SA": "Saudi Arabia",
-    "MX": "Mexico", "PL": "Poland", "RU": "Russia", "AT": "Austria", "SE": "Sweden",
-    "DK": "Denmark", "NL": "Netherlands", "NO": "Norway", "IE": "Ireland", "IT": "Italy",
-    "ES": "Spain", "PT": "Portugal", "LT": "Lithuania", "LV": "Latvia", "SI": "Slovenia",
-    "RS": "Serbia", "HR": "Croatia", "BA": "Bosnia and Herzegovina", "UA": "Ukraine",
-    "KR": "South Korea", "SG": "Singapore", "MY": "Malaysia", "IN": "India",
-    "ID": "Indonesia", "PK": "Pakistan", "AE": "United Arab Emirates", "BH": "Bahrain",
-    "KW": "Kuwait", "JO": "Jordan", "OM": "Oman", "SY": "Syria", "CL": "Chile",
-    "AR": "Argentina", "CU": "Cuba", "NZ": "New Zealand",
-}
-
-# Wikipedia names that Liquipedia spells differently, checked by hand.
-ALIASES = {
-    "Kalgamer": "Kalgamer710",
-    "Kiryache": "Kiryache32",
-    "Speedy (AU)": "SpeedyND",  # the Oceania Speedy; without it both Speedys landed on the Bahraini page
-    "Speedy (BH)": "Speedy",
-    "Bobi": "Bobik1ng",         # id is 'BOBY', page is 'Bobik1ng'
-    "Buyuriro": "Buyuriru",
-    "Drobban": "Drobbаn",       # NB: Cyrillic 'а'
-    "Kucha": "Kocha",
-    "Mansoor": "Mansour",
-    "Murlox": "Murloc",
-    "Takamura": "Ruri",
-}
-
 
 def is_epic(t):
     return any("epic games" in str(o).lower() for o in (t.get("organizers") or []))
@@ -89,7 +36,11 @@ def is_fncs_final(t):
 
 
 def is_regional_final(t):
-    """An FNCS title: a regional grand final, not a LAN or a Global Championship."""
+    """An FNCS title: a regional grand final, not a LAN or a Global Championship.
+
+    PC only. The console FNCS of 2020 (Chapter 2 Seasons 2-4) was its own
+    competition and is not counted (the user, 3 Oct 2026: "No, PC FNCS only").
+    """
     return (is_fncs_final(t) and t.get("type") != "Offline"
             and "Global Championship" not in t["name"]
             and not re.search(r"challenge", t["name"], re.I))
@@ -100,77 +51,37 @@ def won_first(row):
 
 
 def fncs_titles(rows, tournaments, placements):
-    """pagename -> the finals they won, and a report of anything that needs a look."""
+    """pagename -> the regional finals they won, and a report of anything that needs a look.
+
+    Every player on the 1st-placed team of every regional final, from
+    Liquipedia's own results. A winner the results name without a page this
+    file knows is reported rather than guessed at.
+    """
     page_of = {r["pagename"].replace("_", " "): r["pagename"] for r in rows}
     by_id = {}
     for r in rows:
         by_id.setdefault(r["id"], r["pagename"])
 
-    def page_for(name):
-        return page_of.get(name) or by_id.get(name)
-
-    fncs_names = {t["name"] for t in tournaments if is_fncs_final(t)}
-    # Who Liquipedia itself has winning an FNCS - the tiebreak between namesakes.
-    # Both FHDs are Saudi, so nationality could not split them.
-    lp_winners = set()
+    finals = {t["name"] for t in tournaments if is_regional_final(t)}
+    titles, won_by, unnamed = defaultdict(set), defaultdict(set), []
     for row in placements:
-        if row.get("tournament") in fncs_names and won_first(row):
-            lp_winners.update(page_for(p.get("player") or "") for p in row.get("participants") or [])
+        if row.get("tournament") not in finals or not won_first(row):
+            continue
+        for p in row.get("participants") or []:
+            name = p.get("player") or ""
+            page = page_of.get(name) or by_id.get(name)
+            if page:
+                titles[page].add(row["tournament"])
+                won_by[row["tournament"]].add(page)
+            else:
+                unnamed.append(f"{name} ({row['tournament']})")
 
-    index = defaultdict(list)
-    for r in rows:
-        for k in {norm(r["id"]), norm(r["pagename"]), *(norm(a) for a in (r.get("alternateid_list") or []))}:
-            if k:
-                index[k].append(r)
-
-    def resolve(handle, country=None):
-        hits = index.get(norm(handle)) or index.get(base(handle))
-        if not hits:
-            return None
-        if len(hits) > 1 and country:
-            same = [r for r in hits if CODE_TO_NAT.get(country) in (r.get("nationalities") or [])]
-            if same:
-                hits = same
-        if len(hits) > 1:
-            won = [r for r in hits if r["pagename"] in lp_winners]
-            if won:
-                hits = won
-        return max(hits, key=lambda r: r.get("earnings") or 0)
-
-    wikipedia = json.loads((HERE / "wikipedia_fncs.json").read_text(encoding="utf-8"))
-    titles, landed, unmatched = defaultdict(set), defaultdict(list), []
-    for winner in wikipedia["winners"]:
-        handle = winner["handle"]
-        r = resolve(ALIASES.get(handle, handle), winner["country"])
-        if r is None:
-            unmatched.append(handle)
-        else:
-            titles[r["pagename"]] |= set(winner["events"])
-            landed[r["pagename"]].append(handle)
-
-    # After the Wikipedia table: Liquipedia's regional finals, winners by page.
-    later = {t["name"] for t in tournaments
-             if is_regional_final(t) and str(t.get("startdate") or "") > WIKIPEDIA_THROUGH}
-    added = defaultdict(set)
-    for row in placements:
-        if row.get("tournament") in later and won_first(row):
-            for p in row.get("participants") or []:
-                page = page_for(p.get("player") or "")
-                if page:
-                    titles[page].add(row["tournament"])
-                    added[row["tournament"]].add(page)
-
-    report = []
-    if unmatched:
-        report.append("Wikipedia names with no Liquipedia page: " + ", ".join(sorted(unmatched)))
-    for page, handles in sorted(landed.items()):
-        # Two Wikipedia names on one page is either one person under two handles
-        # (Takamura/Ruri, in ALIASES) or two people the matching confused.
-        # Anything here that is not in ALIASES needs a look.
-        if len(handles) > 1:
-            report.append(f"one page, several Wikipedia names: {page} <- {handles}")
-    for final, pages in sorted(added.items()):
-        report.append(f"new title from Liquipedia: {final} -> {', '.join(sorted(pages))}")
+    report = [f"{len(won_by)} of {len(finals)} regional finals have a winner"]
+    missing = sorted(finals - set(won_by))
+    if missing:
+        report.append("finals with no winner in the results: " + ", ".join(missing))
+    if unnamed:
+        report.append("winners with no player page: " + ", ".join(sorted(unnamed)))
     return titles, report
 
 

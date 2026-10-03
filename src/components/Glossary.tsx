@@ -72,7 +72,7 @@ function EventNames({ term }: { term: Term }) {
     };
   }, []);
 
-  if (failed) return <p className="tiny faint">The event list comes from facts.json, which is not there.</p>;
+  if (failed) return <p className="tiny faint">The event list did not load. Try again later.</p>;
   if (!facts || !term.events) return <p className="tiny faint">Loading…</p>;
   const list = term.events(facts);
   return (

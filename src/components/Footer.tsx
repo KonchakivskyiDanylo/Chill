@@ -50,28 +50,31 @@ export function Footer() {
 
         <hr className="divider" />
 
+        {/*
+          The main things only — the full wording is on /credits and /privacy.
+          The Liquipedia credit has to be here: its licence asks for it wherever
+          the data is shown.
+        */}
         <p className="small faint">
-          Data from{' '}
+          Player and tournament data from{' '}
           <a className="link" href={SOURCE.url} target="_blank" rel="noreferrer noopener">
             Liquipedia
-          </a>{' '}
-          and Wikipedia, modified, under{' '}
-          <a className="link" href={SOURCE.licenseUrl} target="_blank" rel="noreferrer noopener">
-            CC BY-SA
           </a>
-          ; our data files are shared under the same licence. Where the sources say nothing, neither do
-          we — nothing is estimated.
+          , changed by OffSpawn, under{' '}
+          <a className="link" href={SOURCE.licenseUrl} target="_blank" rel="noreferrer noopener">
+            CC BY-SA 3.0
+          </a>
+          . Follower counts from YouTube and Twitch.
         </p>
 
         <p className="small faint">
-          OffSpawn is unofficial and not affiliated with or endorsed by Epic Games, Liquipedia or any team.
-          Fortnite is a trademark of Epic Games, Inc.
+          OffSpawn is unofficial and not connected to Epic Games, Liquipedia or any team. Fortnite is a
+          trademark of Epic Games, Inc.
         </p>
 
-        {/* The site sends one thing about you: how each round you finish went. Say so. */}
         <p className="small faint">
-          Your scores and progress stay in your browser. Finished rounds are counted anonymously to tune
-          the puzzles — no accounts, no tracking cookies.
+          No accounts and no tracking: your results stay in your browser, and finished rounds are counted
+          anonymously.
         </p>
 
         <nav className="site-footer__links" aria-label="Site information">

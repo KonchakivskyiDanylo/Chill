@@ -102,7 +102,7 @@ export const TERMS: Record<TermId, Term> = {
     id: 'fncs-title',
     name: 'FNCS win',
     text:
-      'A regional FNCS grand final won — Europe, North America, Brazil and the rest, every season since 2019. The count is Wikipedia’s. The Global Championships, the 2022 Invitational and the 2026 Summit carry the FNCS name but are not FNCS wins, and “won an FNCS in 2026” means a regional final that year.',
+      'A regional FNCS grand final won — Europe, North America, Brazil and the rest, every season since 2019. PC finals only: the 2020 console FNCS is not counted. The Global Championships, the 2022 Invitational and the 2026 Summit carry the FNCS name but are not FNCS wins, and “won an FNCS in 2026” means a regional final that year.',
   },
   'fncs-final': {
     id: 'fncs-final',

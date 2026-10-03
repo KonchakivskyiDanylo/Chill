@@ -158,7 +158,7 @@ const NONE: PlayerFacts = {
  * Not a Global Championship, the 2022 Invitational or the 2026 Summit, though
  * all three carry the FNCS name. A Globals is its own title, and counting it
  * here made Cooper an "FNCS winner in 2023" when the FNCS count every game
- * shows — Wikipedia's, in `players.json` — has him on none. This keeps "Won
+ * shows (`players.json`, counted from the same finals) has him on none. This keeps "Won
  * FNCS in 2023" and "Won EU FNCS" about the same finals that count does.
  */
 function isRegionalFinal(event: RawEvent): boolean {
