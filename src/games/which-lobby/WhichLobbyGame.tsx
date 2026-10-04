@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { useRoundRecorder } from '@/analytics/client';
+import { sendStart, useRoundRecorder } from '@/analytics/client';
 import { ClueActions } from '@/components/ClueControls';
 import { GameShell } from '@/components/GameShell';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
@@ -72,6 +72,7 @@ function Game({ roster, majors }: { roster: Roster; majors: Majors }) {
     }
     setError(null);
     setDealt(level);
+    sendStart('which-lobby', false);
     setGame(createGame(lobby, majors, byId, level));
   }, [majors, level, byId]);
 

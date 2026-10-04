@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRoundRecorder } from '@/analytics/client';
+import { sendStart, useRoundRecorder } from '@/analytics/client';
 import { ClueActions, GuessChips } from '@/components/ClueControls';
 import { GameShell } from '@/components/GameShell';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
@@ -80,6 +80,7 @@ function Game({ roster, bios }: { roster: Roster; bios: Bios }) {
       return;
     }
     setError(null);
+    sendStart('irl', false);
     setGame(createGame(pick, bios, { orgs, teammates, majors, socials }, byId));
   }, [roster, bios, level, orgs, teammates, majors, socials, byId]);
 

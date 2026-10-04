@@ -155,11 +155,14 @@
   flex-wrap: wrap;
 }
 
-.home-today__streak {
-  padding: 4px 12px;
+/* A daily game's own streak, under its tagline on the home page card. */
+.game-card__streak {
+  width: fit-content;
+  margin-top: 4px;
+  padding: 1px 8px;
   border-radius: 999px;
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.76rem;
   background: rgba(249, 115, 22, 0.14);
   border: 1px solid rgba(249, 115, 22, 0.35);
 }

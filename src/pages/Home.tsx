@@ -1,10 +1,11 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useOpen } from '@/analytics/client';
 import { ModePicker } from '@/components/EventMode';
 import { loadDailySet } from '@/daily/client';
 import { DAILY_START, puzzleLabel, puzzleNumber } from '@/daily/day';
-import { statsOf, useDailyLogs } from '@/daily/progress';
-import { DAILY_GAMES, type DailyGame } from '@/daily/types';
+import { gameStats, useDailyLogs } from '@/daily/progress';
+import { isLiveDaily, type DailyGame } from '@/daily/types';
 import { useCountdown, useToday } from '@/daily/useDay';
 import { usePlayMode } from '@/daily/useDailyRound';
 import { loadRoster } from '@/data/liquipedia/roster';
@@ -36,7 +37,7 @@ function usePrefetch(today: string, daily: boolean) {
   }, [today, daily]);
 }
 
-const isDaily = (game: GameMeta) => (DAILY_GAMES as readonly string[]).includes(game.id);
+const isDaily = (game: GameMeta) => isLiveDaily(game.id);
 const won = (outcome: string) => outcome === 'won' || outcome === 'cleared';
 
 /** "Monday 5 October" — the launch day, for the line on the home page before it. */
@@ -49,6 +50,7 @@ const LAUNCH = new Date(`${DAILY_START}T12:00:00Z`).toLocaleDateString('en-GB', 
 
 export function Home() {
   usePageMeta(HOME_META);
+  useOpen('home');
   const today = useToday();
   const [daily] = usePlayMode();
   usePrefetch(today, daily);
@@ -60,10 +62,6 @@ export function Home() {
   const all = useDailyLogs();
   const logs = dailies.map((game) => [game, all[game.id as DailyGame]] as const);
   const doneToday = logs.filter(([, log]) => log[today]).length;
-  const streak = statsOf(
-    logs.flatMap(([, log]) => Object.keys(log)),
-    today,
-  ).streak;
 
   // Before the dailies start (or on a dev server in practice): every game, as the site always was.
   if (!daily) {
@@ -117,11 +115,6 @@ export function Home() {
             </div>
           </div>
           <div className="home-today__side">
-            {streak > 0 ? (
-              <span className="home-today__streak">
-                🔥 {streak} day{streak === 1 ? '' : 's'}
-              </span>
-            ) : null}
             <span className="home-today__next">
               Next in <strong>{countdown}</strong>
             </span>
@@ -131,6 +124,9 @@ export function Home() {
         <div className="game-grid">
           {logs.map(([game, log]) => {
             const done = log[today];
+            // Each game keeps its own streak (the user, 4 Oct 2026: "if player played
+            // fortnitedle today, it will show on fortnitedle 1 day streak but not for other games").
+            const { streak } = gameStats(log, today);
             return (
               <Link
                 key={game.id}
@@ -143,6 +139,11 @@ export function Home() {
                 <span className="game-card__body">
                   <span className="game-card__title">{game.title}</span>
                   <span className="game-card__tagline">{game.tagline}</span>
+                  {streak > 0 ? (
+                    <span className="game-card__streak">
+                      🔥 {streak}-day streak
+                    </span>
+                  ) : null}
                 </span>
                 {done ? (
                   <span

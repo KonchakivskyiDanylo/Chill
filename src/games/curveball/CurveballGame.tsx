@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { useRoundRecorder } from '@/analytics/client';
+import { sendStart, useRoundRecorder } from '@/analytics/client';
 import { ClueActions, GuessChips } from '@/components/ClueControls';
 import { GameShell } from '@/components/GameShell';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
@@ -63,6 +63,7 @@ function Game({ roster }: { roster: Roster }) {
       return;
     }
     setError(null);
+    sendStart('curveball', false);
     setGame(createGame(pick));
   }, [roster, level]);
 

@@ -1,5 +1,7 @@
 import {
   GAME_IDS,
+  type FunnelCount,
+  type FunnelStep,
   type GameId,
   type GamePayloads,
   type Outcome,
@@ -229,11 +231,50 @@ export interface RunRow {
   best: number;
 }
 
+/** One slice's way from arriving to a finished round. */
+export interface FunnelTotals {
+  /** Page loads — someone arriving, from a link, a bookmark or a reload. */
+  visits: number;
+  /** Game pages opened; the home page is not counted. */
+  opens: number;
+  /** Game-page opens that led to at least one round. */
+  engaged: number;
+  /** Rounds started: a deal in unlimited play, the first move on a daily. */
+  starts: number;
+  /** Rounds finished — the recorded rounds. */
+  finished: number;
+  /** Of those, won or cleared. */
+  won: number;
+}
+
+/**
+ * Opens, starts and finishes. Counts of page loads and opens, never of
+ * people: one person opening Tenaball three times is three opens.
+ *
+ * Only the range, the game and daily-or-not apply here. The other filters are
+ * about how a finished round was set up, which an open or a start does not
+ * know, so they are left out rather than half-applied.
+ */
+export interface Traffic {
+  totals: FunnelTotals;
+  /** The period of the same length just before, for the deltas; null for all time. */
+  previous: FunnelTotals | null;
+  /** Per day, oldest first, on the same days as `Dashboard.series`. */
+  days: ({ day: string } & FunnelTotals)[];
+  /** Per game, busiest first, with its daily and unlimited halves. */
+  games: { game: GameId; all: FunnelTotals; daily: FunnelTotals; unlimited: FunnelTotals }[];
+  /** Where page loads land: `home` or a game's id. */
+  landing: Count[];
+  /** Page opens by weekday (0 = Monday) and hour, Berlin time: `hours[weekday][hour]`. */
+  hours: number[][];
+}
+
 export interface Dashboard {
   generated: string;
   /** The range the numbers cover, in days; 0 for all time. */
   range: number;
   filter: Filter;
+  traffic: Traffic;
   /** Rounds in range that pass the filter. */
   rounds: number;
   outcomes: Record<Outcome, number>;
@@ -702,11 +743,142 @@ function readable(rounds: Stored<RoundRecord>[]): Stored<RoundRecord>[] {
 }
 
 /**
- * How far back the server has to read for a range: the range itself, and never
- * less than the 30 days the daily chart shows. 0 means everything.
+ * How far back the server has to read for a range: twice the range, for the
+ * period before it that the deltas compare with, and never less than the 30
+ * days the daily chart shows. 0 means everything.
  */
 export function readSince(days: number, now: Date = new Date()): Date | undefined {
-  return days > 0 ? new Date(now.getTime() - Math.max(days, 30) * DAY) : undefined;
+  return days > 0 ? new Date(now.getTime() - Math.max(days * 2, 30) * DAY) : undefined;
+}
+
+// ----------------------------------------------------------------- traffic --
+
+const emptyTotals = (): FunnelTotals => ({ visits: 0, opens: 0, engaged: 0, starts: 0, finished: 0, won: 0 });
+
+const STEP_TOTAL: Record<FunnelStep, keyof FunnelTotals | undefined> = {
+  open: 'opens',
+  entry: 'visits',
+  start: 'starts',
+  'first-start': 'engaged',
+};
+
+const BERLIN = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Europe/Berlin',
+  weekday: 'short',
+  hour: '2-digit',
+  hourCycle: 'h23',
+});
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+/** A UTC hour key's weekday (0 = Monday) and hour in Berlin, where the dailies turn over. */
+function berlinSlot(hour: string): [number, number] {
+  const parts = BERLIN.formatToParts(new Date(`${hour}:00:00Z`));
+  const weekday = WEEKDAYS.indexOf(parts.find((p) => p.type === 'weekday')?.value ?? '');
+  const h = Number(parts.find((p) => p.type === 'hour')?.value);
+  return [Math.max(0, weekday), Number.isFinite(h) ? h % 24 : 0];
+}
+
+/** The mode a source filter narrows opens and starts to: a daily, or any unlimited setup. */
+function modeOf(filter: Filter): 'daily' | 'unlimited' | null {
+  if (!filter.source) return null;
+  return filter.source === 'daily' ? 'daily' : 'unlimited';
+}
+
+export function traffic(
+  counts: FunnelCount[],
+  rounds: Stored<RoundRecord>[],
+  { now, days, filter, span }: { now: Date; days: number; filter: Filter; span: string[] },
+): Traffic {
+  const end = now.getTime();
+  const start = days > 0 ? end - days * DAY : -Infinity;
+  const before = days > 0 ? end - 2 * days * DAY : -Infinity;
+  const fromHour = days > 0 ? new Date(start).toISOString().slice(0, 13) : '';
+  const prevHour = days > 0 ? new Date(before).toISOString().slice(0, 13) : '';
+  const mode = modeOf(filter);
+
+  const totals = emptyTotals();
+  const previous = days > 0 ? emptyTotals() : null;
+  const byDay = new Map(span.map((day) => [day, { day, ...emptyTotals() }]));
+  const games = new Map<GameId, Traffic['games'][number]>();
+  const landing = new Map<string, number>();
+  const hours = WEEKDAYS.map(() => Array.from({ length: 24 }, () => 0));
+  const gameRow = (game: GameId) => {
+    let row = games.get(game);
+    if (!row) games.set(game, (row = { game, all: emptyTotals(), daily: emptyTotals(), unlimited: emptyTotals() }));
+    return row;
+  };
+  const add = (into: FunnelTotals[], key: keyof FunnelTotals, n: number) => {
+    for (const t of into) t[key] += n;
+  };
+
+  for (const count of counts) {
+    if (!count || typeof count.n !== 'number') continue;
+    const isGame = (GAME_IDS as readonly string[]).includes(count.page);
+    if (count.page !== 'home' && !isGame) continue;
+    if (filter.game && count.page !== filter.game) continue;
+    // The home page has no mode; it belongs to neither half when one is chosen.
+    if (mode && count.mode !== mode) continue;
+    // A home-page open is not a game open; its entry still counts as a visit.
+    const key = STEP_TOTAL[count.step] === 'opens' && count.page === 'home' ? null : STEP_TOTAL[count.step];
+    if (!key) {
+      if (count.step === 'open' && count.hour >= fromHour) {
+        const [weekday, hour] = berlinSlot(count.hour);
+        hours[weekday][hour] += count.n;
+      }
+      continue;
+    }
+    // The chart shows a month whatever the range.
+    const day = byDay.get(count.hour.slice(0, 10));
+    if (day) day[key] += count.n;
+    if (count.hour < fromHour) {
+      if (previous && count.hour >= prevHour) previous[key] += count.n;
+      continue;
+    }
+    const targets: FunnelTotals[] = [totals];
+    if (isGame) {
+      const row = gameRow(count.page as GameId);
+      targets.push(row.all, count.mode === 'daily' ? row.daily : row.unlimited);
+    }
+    add(targets, key, count.n);
+    if (count.step === 'entry') tally(landing, count.page, count.n);
+    if (count.step === 'open') {
+      const [weekday, hour] = berlinSlot(count.hour);
+      hours[weekday][hour] += count.n;
+    }
+  }
+
+  for (const round of rounds) {
+    const body = round.body;
+    if (filter.game && body.game !== filter.game) continue;
+    const daily = sourceOf(body.setup) === 'daily';
+    if (mode && (mode === 'daily') !== daily) continue;
+    const at = Date.parse(round.at);
+    const won = body.outcome === 'won' || body.outcome === 'cleared' ? 1 : 0;
+    const day = byDay.get(String(round.at).slice(0, 10));
+    if (day) {
+      day.finished++;
+      day.won += won;
+    }
+    if (at >= start || !round.at) {
+      const row = gameRow(body.game);
+      for (const t of [totals, row.all, daily ? row.daily : row.unlimited]) {
+        t.finished++;
+        t.won += won;
+      }
+    } else if (previous && at >= before) {
+      previous.finished++;
+      previous.won += won;
+    }
+  }
+
+  return {
+    totals,
+    previous,
+    days: [...byDay.values()],
+    games: [...games.values()].sort((a, b) => b.all.opens + b.all.finished - (a.all.opens + a.all.finished)),
+    landing: top(landing, 20),
+    hours,
+  };
 }
 
 function series(rounds: Stored<RoundRecord>[], now: Date, allTime: boolean): Dashboard['series'] {
@@ -744,21 +916,28 @@ function options(rounds: Stored<RoundRecord>[]): Dashboard['options'] {
  */
 export function aggregate(
   rounds: Stored<RoundRecord>[],
-  { now = new Date(), days = 0, filter = {} }: { now?: Date; days?: number; filter?: Filter } = {},
+  {
+    now = new Date(),
+    days = 0,
+    filter = {},
+    funnel = [],
+  }: { now?: Date; days?: number; filter?: Filter; funnel?: FunnelCount[] } = {},
 ): Dashboard {
   const since = days > 0 ? now.getTime() - days * DAY : -Infinity;
   const readableRounds = readable(rounds);
   const inRange = readableRounds.filter((round) => Date.parse(round.at) >= since || !round.at);
   const passes = (round: Stored<RoundRecord>) => matches(round.body, filter);
   const valid = inRange.filter(passes);
+  const daily = series(readableRounds.filter(passes), now, days <= 0);
 
   return {
     generated: now.toISOString(),
     range: days,
     filter,
+    traffic: traffic(funnel, readableRounds, { now, days, filter, span: daily.map((d) => d.day) }),
     rounds: valid.length,
     outcomes: outcomesOf(valid),
-    series: series(readableRounds.filter(passes), now, days <= 0),
+    series: daily,
     mix: mix(valid),
     options: options(inRange),
     games: overview(valid),

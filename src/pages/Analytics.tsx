@@ -63,7 +63,7 @@ export default function Analytics() {
 
   return (
     <div className="page stack an-page">
-      <h1 style={{ margin: 0 }}>Analytics</h1>
+      {session !== 'in' ? <h1 style={{ margin: 0 }}>Analytics</h1> : null}
       {session === 'checking' ? <p className="muted">Checking…</p> : null}
       {session === 'offline' ? (
         <p className="muted">
@@ -131,41 +131,35 @@ function Pages({ onReload, onOut }: { onReload: () => void; onOut: () => void })
   const { pathname } = useLocation();
   const { pools } = usePools();
   // The overview's numbers, and the filter dropdowns' options on every page.
-  const { data } = useAdminData<Dashboard>(`dashboard?${query({ game: undefined })}`);
+  const { data, loading } = useAdminData<Dashboard>(`dashboard?${query({ game: undefined })}`);
   const { data: tickets } = useAdminData<StoredSupport[]>('support');
   const { data: errors } = useAdminData<Stored<ClientError>[]>('errors');
+  const [showHidden, setShowHidden] = useState(false);
 
   const fresh = (tickets ?? []).filter((ticket) => ticket.status === 'new').length;
   // The inbox, the daily schedule and the followers page are not filtered by the dashboard's bar.
   const inbox = /\/analytics\/(support|errors|daily|socials)/.test(pathname);
   const on = (path: string) => ({ pathname: path, search: search ? `?${search}` : '' });
   const tab = ({ isActive }: { isActive: boolean }) => `an-tab${isActive ? ' is-active' : ''}`;
+  // The live games first; the hidden ones behind a toggle, unless one is open.
+  const live = GAME_IDS.filter((id) => !getGame(id)?.hidden);
+  const hidden = GAME_IDS.filter((id) => getGame(id)?.hidden);
+  const openHidden = hidden.some((id) => pathname.endsWith(`/game/${id}`));
+  const chips = showHidden || openHidden ? [...live, ...hidden] : live;
+  const opens = (id: string) => data?.traffic.games.find((g) => g.game === id)?.all.opens;
 
   return (
     <div className="stack">
-      <nav className="row-between an-bar" aria-label="Analytics">
-        <div className="an-tabs">
-          <NavLink end to={on('/analytics')} className={tab}>
-            Overview
-          </NavLink>
-          <NavLink to={on('/analytics/players')} className={tab}>
-            Players
-          </NavLink>
-          <NavLink to={on('/analytics/support')} className={tab}>
-            Support{fresh ? ` (${fresh} new)` : ''}
-          </NavLink>
-          <NavLink to={on('/analytics/errors')} className={tab}>
-            Errors{errors ? ` (${errors.length})` : ''}
-          </NavLink>
-          <NavLink to={on('/analytics/daily')} className={tab}>
-            Daily
-          </NavLink>
-          <NavLink to={on('/analytics/socials')} className={tab}>
-            Followers
-          </NavLink>
+      <header className="an-head">
+        <div>
+          <h1 className="an-title">Analytics</h1>
+          <p className="tiny faint" style={{ margin: 0 }}>
+            {data ? `Updated ${new Date(data.generated).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : 'Loading…'}
+            {' · '}counts, never people
+          </p>
         </div>
         <div className="row">
-          <button type="button" className="btn" onClick={onReload} aria-label="Reload">
+          <button type="button" className="btn" onClick={onReload} aria-label="Reload" title="Reload">
             ↻
           </button>
           <button
@@ -179,24 +173,55 @@ function Pages({ onReload, onOut }: { onReload: () => void; onOut: () => void })
             Log out
           </button>
         </div>
+      </header>
+
+      <nav className="an-tabs" aria-label="Analytics">
+        <NavLink end to={on('/analytics')} className={tab}>
+          Overview
+        </NavLink>
+        <NavLink to={on('/analytics/players')} className={tab}>
+          Players
+        </NavLink>
+        <NavLink to={on('/analytics/daily')} className={tab}>
+          Daily
+        </NavLink>
+        <NavLink to={on('/analytics/socials')} className={tab}>
+          Followers
+        </NavLink>
+        <NavLink to={on('/analytics/support')} className={tab}>
+          Support{fresh ? <span className="an-badge">{fresh}</span> : null}
+        </NavLink>
+        <NavLink to={on('/analytics/errors')} className={tab}>
+          Errors{errors?.length ? <span className="an-badge an-badge--quiet">{errors.length}</span> : null}
+        </NavLink>
       </nav>
 
       {inbox ? null : (
         <>
           <div className="an-games" aria-label="Games">
-            {GAME_IDS.map((id) => (
-              <NavLink key={id} to={on(`/analytics/game/${id}`)} className={({ isActive }) => `an-game${isActive ? ' is-active' : ''}`}>
+            {chips.map((id) => (
+              <NavLink
+                key={id}
+                to={on(`/analytics/game/${id}`)}
+                className={({ isActive }) => `an-game${isActive ? ' is-active' : ''}${getGame(id)?.hidden ? ' an-game--hidden' : ''}`}
+                title={`${opens(id) ?? 0} opens, ${data?.games.find((g) => g.game === id)?.rounds ?? 0} rounds in this range`}
+              >
                 <span aria-hidden="true">{getGame(id)?.icon}</span> {gameTitle(id)}
                 <span className="an-game__n">{data?.games.find((g) => g.game === id)?.rounds ?? '·'}</span>
               </NavLink>
             ))}
+            {openHidden ? null : (
+              <button type="button" className="an-game an-game--more" onClick={() => setShowHidden(!showHidden)}>
+                {showHidden ? 'Hide the hidden games' : `+ ${hidden.length} hidden`}
+              </button>
+            )}
           </div>
           <FilterBar options={data?.options ?? null} pools={pools} />
         </>
       )}
 
       <Routes>
-        <Route index element={<Overview data={data} pools={pools} />} />
+        <Route index element={<Overview data={data} pools={pools} loading={loading} />} />
         <Route path="game/:id" element={<GamePage pools={pools} />} />
         <Route path="players" element={<Players />} />
         <Route path="players/:id" element={<PlayerPage />} />

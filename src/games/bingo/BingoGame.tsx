@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRoundRecorder } from '@/analytics/client';
+import { sendStart, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
@@ -127,6 +127,7 @@ function Game({ roster, facts, orgs }: { roster: Roster; facts: Facts; orgs: Org
     }
     setError(null);
     setFeedback(null);
+    sendStart('bingo', false);
     setGame(createGame(board, difficulty));
   }, [facts, orgs, socials, teammates, roster, answers, difficulty]);
 

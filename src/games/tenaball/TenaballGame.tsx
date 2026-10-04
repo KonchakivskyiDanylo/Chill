@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRoundRecorder } from '@/analytics/client';
+import { sendStart, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
@@ -83,7 +83,7 @@ function Game({
   const [difficulty, setDifficulty] = useState<Difficulty>('easy');
   /** Follower counts: a daily may be a follower board, so the daily waits for them. */
   const socials = useSocials();
-  const [dailyOn, setDailyOn] = usePlayMode();
+  const [dailyOn, setDailyOn] = usePlayMode('tenaball');
   const daily = useDailyRound('tenaball', {
     on: dailyOn,
     ready: socials !== null,
@@ -188,6 +188,7 @@ function Game({
     (board: Board | null) => {
       if (!board) return;
       setFeedback(null);
+      sendStart('tenaball', false);
       setPractice(createGame(board, difficulty));
     },
     [difficulty],

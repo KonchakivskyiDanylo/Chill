@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { poolSetup, useRoundRecorder } from '@/analytics/client';
+import { poolSetup, sendStart, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
@@ -99,6 +99,7 @@ function Game({
       return;
     }
     setError(null);
+    sendStart('connections', false);
     setGame(createGame(puzzle));
   }, [players, facts, orgs, socials, pools, event, choice.mode]);
 

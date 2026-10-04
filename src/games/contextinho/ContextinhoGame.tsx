@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { useRoundRecorder } from '@/analytics/client';
+import { sendStart, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
@@ -96,6 +96,7 @@ function Game({ roster, teammates, orgs }: { roster: Roster; teammates: Teammate
       return;
     }
     setError(null);
+    sendStart('contextinho', false);
     setGame(createGame(pick));
   }, [roster, teammates, level]);
 

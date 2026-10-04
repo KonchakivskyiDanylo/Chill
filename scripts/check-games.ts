@@ -2388,13 +2388,13 @@ if (socials.platforms.length > 0) {
     let day = daily.DAILY_START;
     const DAYS = 30;
     for (let i = 0; i < DAYS; i++, day = daily.addDays(day, 1)) {
-      const set = generateDaily(day, data, history);
+      const set = generateDaily(day, data, history, DAILY_GAMES);
       history.push(set);
       const p = set.puzzles;
       const missing = DAILY_GAMES.filter((game) => !p[game]);
       check(missing.length === 0, `daily ${day}: no puzzle for ${missing.join(', ')}`);
       if (i === 0) {
-        check(JSON.stringify(generateDaily(day, data, [])) === JSON.stringify(set), `daily ${day}: two makings of the same day differ`);
+        check(JSON.stringify(generateDaily(day, data, [], DAILY_GAMES)) === JSON.stringify(set), `daily ${day}: two makings of the same day differ`);
       }
 
       // Fortnitedle: the answer typed straight away wins in one, and shares one row.

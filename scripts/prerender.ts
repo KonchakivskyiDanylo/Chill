@@ -23,7 +23,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { brotliCompress, constants, gzip } from 'node:zlib';
 import { SOURCE } from '@/data/liquipedia/roster';
-import { DAILY_GAMES } from '@/daily/types';
+import { isLiveDaily } from '@/daily/types';
 import { rulesFor, VISIBLE_GAMES, type GameMeta } from '@/games/registry';
 import { CREDITS_META, gameMeta, HOME_META, metaTags, PRIVACY_META, SITE_URL, type PageMeta } from '@/lib/seo';
 
@@ -53,8 +53,8 @@ function homeBody(): string {
 }
 
 function gameBody(game: GameMeta): string {
-  // The live site plays the daily puzzle, so its rules are the ones to index.
-  const { intro, rules, sections } = rulesFor(game, (DAILY_GAMES as readonly string[]).includes(game.id));
+  // A daily game plays the daily puzzle on the live site, so its rules are the ones to index.
+  const { intro, rules, sections } = rulesFor(game, isLiveDaily(game.id));
   return [
     `<h1>${esc(game.title)}</h1>`,
     `<p>${esc(game.tagline)}</p>`,

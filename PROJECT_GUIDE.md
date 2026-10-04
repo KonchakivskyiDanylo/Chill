@@ -30,7 +30,7 @@ The site is React, Vite and TypeScript. Every game splits in two: a pure `engine
 | Transfer Window | Name the player from the organisations they have played for | `transfer-window` |
 | Which Lobby? | Name the tournament from its leaderboard, revealed from the bottom up | `which-lobby` |
 
-**Hidden for now: Guess the Player, Connections and Griefer (26 Sep 2026), Pyramid and Bingo (new, 30 Sep 2026), and the seven October games (new, 2 Oct 2026 — see their section).** A `hidden` flag in the registry takes a game off the home page and the side nav, and the live site sends its address home. A dev server still opens it by URL, and `check:games` still plays it. Guess the Player needs more than it has. Of the three rule-grid games only one is kept, Tic Tac Toe: every board builds at every level and none repeats over 200 deals. Its Easy level is the thin one, with 30 distinct rules, and "won the EU FNCS" and "$1M+ earner" each sit on 41% of Easy boards. Delete the flag to bring a game back.
+**Hidden for now: Guess the Player, Connections and Griefer (26 Sep 2026), Pyramid and Bingo (new, 30 Sep 2026), the seven October games (new, 2 Oct 2026 — see their section), and List (4 Oct 2026: too close to Tenaball, back in about a month).** A `hidden` flag in the registry takes a game off the home page and the side nav, and the live site sends its address home. A dev server still opens it by URL, and `check:games` still plays it. Guess the Player needs more than it has. Of the three rule-grid games only one is kept, Tic Tac Toe: every board builds at every level and none repeats over 200 deals. Its Easy level is the thin one, with 30 distinct rules, and "won the EU FNCS" and "$1M+ earner" each sit on 41% of Easy boards. Delete the flag to bring a game back.
 
 Two folders keep old names: Fortnitedle lives in `wordle` and Griefer in `impostor`. The ids stay unchanged because best scores are stored under them.
 
@@ -39,7 +39,7 @@ How it runs:
 - **Locally:** `npm run dev:all` starts the site on port 5173 and the API on port 3000. The analytics page opens without a password, and rounds you play are recorded to `server/.data` on your machine.
 - **In production:** Heroku, live since the end of September 2026. `npm start` serves the built site and the API from one Node process, stores records in Postgres, and puts `/analytics` behind `ADMIN_PASSWORD`.
 - **No accounts yet.** Best scores, daily progress and streaks live in each browser's local storage.
-- **Daily only on the live site** (3 Oct 2026). See "Daily puzzles" below.
+- **Daily puzzles on the live site** for Fortnitedle and Tenaball; the other live games play unlimited (4 Oct 2026). See "Daily puzzles" below.
 
 ## The data
 
@@ -688,25 +688,31 @@ The site has its own small server (`server/index.ts`): plain Node HTTP with one 
 
 | Record | When | What it holds |
 | --- | --- | --- |
+| Page open | the home page or a game's page opened (`useOpen`, counted in `App.tsx` before the game's data loads) | only a count per UTC hour, page, and daily or unlimited; also whether it was the first page of the page load (a visit) |
+| Round start | a new deal in unlimited play (each game's `start`), or the first move on a daily (`useDailyRound`) | only a count per hour, as above; also whether it was the first round since the page was opened |
 | Round | once per finished round, from a production build, or locally under `npm run dev:all` | game, setup, outcome, and per-game detail such as the pairs, guesses and cards |
 | Support request | when someone sends the 💬 form | kind (bug, wrong data, suggestion, category, other), message, and optionally the round just played |
 | Error | an uncaught browser error, production only | message and stack; at most 5 per page load, each message once |
 
-**Privacy.** There are no cookies for players, no device id and no stored IP addresses, and every total is global. Records are shaped so a user id can be attached later if accounts arrive.
+Opens and starts go to `POST /api/funnel` and are kept in the `funnel` table as `(hour, page, step, mode) → n`, never as rows per visit (added 4 Oct 2026, the user: "I want people to play to see response"). They are counts of page loads and opens, not of people — a reload is another visit.
+
+**Privacy.** There are no cookies for players, no device id, nothing stored in the browser for the analytics, and no stored IP addresses, and every total is global. Records are shaped so a user id can be attached later if accounts arrive.
 
 **Spam.** The support form has a hidden trap field. When a bot fills it, the server accepts the request and throws it away.
 
 ### The dashboard
 
-`/analytics` is linked from nowhere and computed live from the stored rounds on every load (`aggregate.ts`). It has a page per question (`src/pages/analytics/`):
+`/analytics` is linked from nowhere and computed live from the stored rounds and funnel counts on every load (`aggregate.ts`, `traffic()` for the funnel). It has a page per question (`src/pages/analytics/`):
 
 | Page | Shows |
 | --- | --- |
-| `/analytics` | every game: rounds, won / lost / gave up, rounds per day, how rounds were set up, and a by-game table |
-| `/analytics/game/<id>` | one game: the same numbers narrowed to it, then its own tables with a search box. Examples: which clue solved a Career Path, which Tenaball answers nobody finds, which Griefer cards get misread, which Tic Tac Toe cells stay empty, which Higher or Lower pairs trip people up |
+| `/analytics` | five tiles (visits, game opens, rounds started, rounds finished, won) each against the period before with a sparkline; traffic per day as lines; conversion (opens that started a round, rounds finished, rounds won); where visits land; a games table with each game's funnel and how its rounds ended; page opens by weekday and hour (Berlin time); how rounds were set up |
+| `/analytics/game/<id>` | one game: the same tiles, traffic and conversion narrowed to it, its daily and unlimited halves side by side, how its rounds ended, then its own tables with a search box. Examples: which clue solved a Career Path, which Tenaball answers nobody finds, which Griefer cards get misread, which Tic Tac Toe cells stay empty, which Higher or Lower pairs trip people up |
 | `/analytics/players` | a search over every player the rounds mention |
 | `/analytics/players/<id>` | one player across every game: what they were (the secret, a card, an answer, a tile…), how often, how often people got them right, and their latest appearances |
 | `/analytics/support`, `/errors` | the inbox, with status tabs and a search, and the error table |
+
+**The charts** (`src/pages/analytics/charts.tsx`) are hand-drawn SVG and HTML, no library: thin marks, hairline axes, a legend for two or more series, hover and keyboard on every chart, and an "As a table" view under each. Their colours are the `--viz-*` tokens in `analytics.css`, one set per theme, checked for colour-blind separation and contrast against the site's own surfaces. The funnel numbers follow only the range, the game and daily-or-not: an open or a start does not know a round's region, level or outcome, so those filters narrow the tables and the page says so.
 
 **How rounds were set up** splits the rounds four ways by where the players came from. Each breakdown under it counts only the rounds it applies to:
 
@@ -772,13 +778,15 @@ It plays every game with a perfect player, generating the random games many time
 - **Who Are Ya:** the number one teammate is last in the ramped orders and never in Random's first four; a two-clue hand lasts five wrong guesses.
 - **Whole field:** every secret-player game deals all of an event field that its data allows, and Griefer, Connections and Tic Tac Toe build boards from the whole field.
 - **Analytics:** one real round per game, recorded and aggregated the way the dashboard reads it; the filters narrow every table, and the player view finds its player.
-- **Daily puzzles:** midnight in Berlin on both sides of a clock change; 30 days in a row each with all six puzzles, no secret player, board or list twice, no kind of board or list on days 2 apart or board family 7 apart, no board on active status, three different secrets a day, all well known; every puzzle rebuilds, a saved round comes back, and the answer wins. `check:server` asks the endpoint for today twice and gets the same set.
+- **Daily puzzles:** midnight in Berlin on both sides of a clock change; 30 days in a row each with all six built dailies (served or not), no secret player, board or list twice, no kind of board or list on days 2 apart or board family 7 apart, no board on active status, three different secrets a day, all well known; every puzzle rebuilds, a saved round comes back, and the answer wins. `check:server` asks the endpoint for today twice and gets the same set.
 
 A generated data file that is missing makes its games report SKIPPED and the suite still passes, so a fresh clone is testable before the notebook runs.
 
 ## Daily puzzles
 
-From **5 October 2026** (`DAILY_START`) the live site is **daily puzzles only** — before that day it plays as it always did, with a line on the home page saying when the dailies start, and it switches by itself at midnight in Berlin: one puzzle per game per day, the same for everyone, for the six live games other than Higher or Lower (which stays an endless run). The setup screens — the pool picker, levels, modes, the board and list pickers — are still there on a dev server, behind a **🛠 Practice** button in each game's toolbar (`usePlayMode`, `DAILY_ONLY` in `src/daily/useDailyRound.ts`).
+From **5 October 2026** (`DAILY_START`) the live site is **daily puzzles only** — before that day it plays as it always did, with a line on the home page saying when the dailies start, and it switches by itself at midnight in Berlin: one puzzle per game per day, the same for everyone. The setup screens — the pool picker, levels, modes, the board and list pickers — are still there on a dev server, behind a **🛠 Practice** button in each game's toolbar (`usePlayMode` in `src/daily/useDailyRound.ts`).
+
+**Which games are a daily** is `LIVE_DAILY` in `src/daily/types.ts`: Fortnitedle and Tenaball. Six games have a daily built (`DAILY_GAMES`); on 4 Oct 2026 the user moved Career Path, Who Are Ya? and Tic Tac Toe to unlimited "for now" and hid List. A built daily not in `LIVE_DAILY` keeps its code and its checks, but no puzzle is made for it, its page plays unlimited with the setup screens everywhere (no chip, no 🛠 toggle), and the home page lists it under **Unlimited** with Higher or Lower. To make one a daily again, add it to `LIVE_DAILY`; days the editor already made ahead have no puzzle for it, so draw them with **↻ New**.
 
 | Piece | Where | What it does |
 | --- | --- | --- |
@@ -803,7 +811,7 @@ From **5 October 2026** (`DAILY_START`) the live site is **daily puzzles only** 
 
 **Boards and lists come back only when they change** (`src/daily/reuse.ts`). Each Tenaball and List daily keeps a fingerprint of who its answers are (`sig`). A board is never a daily again while its top 10 is the same people; once a big event changes it ("Top 10 by career earnings" after a World Cup), it is a new puzzle and may come back, but not within 30 days (`CHANGED_REST`). Neighbouring days are kept apart too: no kind of board or list twice within 2 days (`KIND_GAP`), and no family — one board split by region or year, like "average FNCS finish — NA East" and "— NA West" — within 7 (`FAMILY_GAP`). Boards that count only players Liquipedia lists as active are never a daily, since its retired status is rarely updated.
 
-**A streak** is days in a row with that game's daily played, win or lose — a hard day does not break a month. The home page's 🔥 counts days with any daily played.
+**A streak** is days in a row with that game's daily played, win or lose — a hard day does not break a month. Every streak is per game, on the home page too: each daily's card shows its own 🔥 (4 Oct 2026, the user: "if player played fortnitedle today, it will show on fortnitedle 1 day streak but not for other games").
 
 **Analytics:** a daily round's setup is `{ daily: '<day>' }`, which the dashboard counts as its own source, Daily.
 

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { EXPORT_DATE } from '@/data/liquipedia/roster';
-import { poolSetup, useRoundRecorder } from '@/analytics/client';
+import { poolSetup, sendStart, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { CountryBadge } from '@/components/CountryBadge';
@@ -160,6 +160,7 @@ function Game({
     }
     writeLocal(key, drawn.seen);
     setError(null);
+    sendStart('guess-the-player', false);
     setGame(gameFor(drawn.pick, mode, extras));
   }, [players, pools, event, choice, mode, extras]);
 

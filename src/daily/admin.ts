@@ -12,7 +12,7 @@ import { puzzleFor as whoPuzzle, dailyPool as whoPool } from '@/games/who-are-ya
 import { eligible as wordleEligible } from '@/games/wordle/engine';
 import { daysBetween } from './day';
 import { dailyContext, pickPuzzle, type DailyData } from './generate';
-import { DAILY_GAMES, type DailyGame, type DailyPuzzles, type DailySet } from './types';
+import { LIVE_DAILY, type DailyGame, type DailyPuzzles, type DailySet } from './types';
 
 /**
  * The daily schedule editor's half on the server: what each day's puzzle is
@@ -276,7 +276,7 @@ export function rowsFor(sets: readonly DailySet[], all: readonly DailySet[], dat
   return sets.map((set) => ({
     day: set.day,
     puzzles: Object.fromEntries(
-      DAILY_GAMES.map((game) => [
+      LIVE_DAILY.map((game) => [
         game,
         { ...describe(game, set.puzzles[game], data), warning: warningFor(game, set, all, data) },
       ]),

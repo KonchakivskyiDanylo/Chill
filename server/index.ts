@@ -19,11 +19,12 @@ import { addDays, DAILY_START, dayKey, isDayKey, puzzleNumber } from '@/daily/da
 import { DAILY_GAMES, type DailyGame, type DailySet } from '@/daily/types';
 import { Socials } from '@/data/socials';
 import { refreshSocials, scheduleSocials, servedSocials, socialsStatus, startTwitchLogin } from './socials';
-import { openStore, type PageChange } from './store';
+import { hourKey, openStore, type PageChange } from './store';
 
 /**
  * The site's server: the built app from `dist/`, and a handful of endpoints.
  *
+ *   POST /api/funnel    a page opened or a round started, counted per hour (anyone)
  *   POST /api/rounds    a finished round (anyone)
  *   POST /api/support   a support request (anyone)
  *   POST /api/errors    a browser error (anyone)
@@ -283,6 +284,37 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL): Promise
     return send(res, 204);
   }
 
+  // A page opened or a round started: one more in this hour's count, nothing else kept.
+  if (route === 'POST /api/funnel') {
+    if (!allowed(req, 'funnel', 300, 10)) return send(res, 204);
+    const body = await readJson(req, 1_024);
+    const flag = (value: unknown) => value === undefined || typeof value === 'boolean';
+    if (
+      !isObject(body) ||
+      (body.step !== 'open' && body.step !== 'start') ||
+      !(body.page === 'home' || GAME_IDS.includes(body.page as never)) ||
+      (body.step === 'start' && body.page === 'home') ||
+      !flag(body.daily) ||
+      !flag(body.entry) ||
+      !flag(body.first)
+    ) {
+      throw new HttpError(400, 'Not a page open or a round start');
+    }
+    const key = {
+      hour: hourKey(new Date()),
+      page: body.page as string,
+      mode: body.page === 'home' ? ('' as const) : body.daily ? ('daily' as const) : ('unlimited' as const),
+    };
+    if (body.step === 'open') {
+      await store.addFunnel({ ...key, step: 'open' });
+      if (body.entry) await store.addFunnel({ ...key, step: 'entry' });
+    } else {
+      await store.addFunnel({ ...key, step: 'start' });
+      if (body.first) await store.addFunnel({ ...key, step: 'first-start' });
+    }
+    return send(res, 204);
+  }
+
   if (route === 'POST /api/support') {
     if (!allowed(req, 'support', 5, 10)) throw new HttpError(429, 'Too many messages — try again in a few minutes');
     const body = await readJson(req, MAX_RECORD_BYTES + 8_192);
@@ -399,7 +431,8 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL): Promise
   const scope = { days, filter: parseFilter(url.searchParams) };
 
   if (route === 'GET /api/admin/dashboard') {
-    return send(res, 200, aggregate(await store.rounds(readSince(days)), scope));
+    const since = readSince(days);
+    return send(res, 200, aggregate(await store.rounds(since), { ...scope, funnel: await store.funnel(since) }));
   }
   if (route === 'GET /api/admin/players') {
     const since = days > 0 ? new Date(Date.now() - days * 86_400_000) : undefined;

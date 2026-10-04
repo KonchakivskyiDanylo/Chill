@@ -1,46 +1,82 @@
 import { useState, type ReactNode } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
-import type { BoardRow, ClueRow, Count, Dashboard, SecretRow } from '@/analytics/aggregate';
+import type { BoardRow, ClueRow, Count, Dashboard, SecretRow, Traffic } from '@/analytics/aggregate';
 import { GAME_IDS, type GameId } from '@/analytics/types';
 import type { Pools } from '@/data/liquipedia/pools';
 import { getGame } from '@/games/registry';
 import { useAdminData, useScope } from './api';
+import { compact, LineChart, OutcomeBar, OutcomeLegend, Refreshing } from './charts';
 import { categoryLabel, gameTitle, pct, words } from './labels';
-import { Headline, MixCard } from './Overview';
-import { Card, DataTable, DayColumns, matchesText, RowSearch } from './ui';
+import { Conversion, FilterNote, Kpis, MixCard, splitOf } from './Overview';
+import { Card, DataTable, matchesText, RowSearch } from './ui';
 
 /**
- * `/analytics/game/<id>` — one game on its own: the same headline, chart and
- * setup breakdown as the overview, narrowed to it, then the tables that are
- * about this game alone. A search box narrows those tables by name.
+ * `/analytics/game/<id>` — one game on its own: the same tiles, traffic and
+ * conversion as the overview, narrowed to it, how its daily and unlimited
+ * halves compare, how its rounds ended, then the tables that are about this
+ * game alone. A search box narrows those tables by name.
  */
 export function GamePage({ pools }: { pools: Pools | null }) {
   const { id } = useParams<{ id: string }>();
   const game = (GAME_IDS as readonly string[]).includes(id ?? '') ? (id as GameId) : null;
   const { query, search } = useScope();
-  const { data } = useAdminData<Dashboard>(game ? `dashboard?${query({ game })}` : null);
+  const { data, loading } = useAdminData<Dashboard>(game ? `dashboard?${query({ game })}` : null);
   const [text, setText] = useState('');
 
   if (!game) return <Navigate to={{ pathname: '/analytics', search: `?${search}` }} replace />;
   const meta = getGame(game);
+  const ready = data && data.filter.game === game;
+  const days = data?.traffic.days ?? [];
+  const halves = data?.traffic.games.find((g) => g.game === game);
 
   return (
     <div className="stack">
       <div className="row-between">
         <h2 style={{ margin: 0 }}>
           <span aria-hidden="true">{meta?.icon}</span> {gameTitle(game)}
+          {meta?.hidden ? <span className="an-tag">hidden</span> : null}
         </h2>
         <Link className="small" to={{ pathname: '/analytics', search: `?${search}` }}>
           ← All games
         </Link>
       </div>
-      {!data || data.filter.game !== game ? (
+      {!ready ? (
         <p className="muted">Loading…</p>
       ) : (
-        <>
-          <Headline data={data} />
-          <Card title="Rounds per day">
-            <DayColumns series={data.series} />
+        <Refreshing loading={loading}>
+          <Kpis data={data} oneGame />
+          <FilterNote data={data} />
+          <Card title="Traffic" aside={<span className="tiny faint">per day, UTC</span>}>
+            <LineChart
+              label={`${gameTitle(game)}: opens, rounds started and rounds finished per day`}
+              days={days.map((d) => d.day)}
+              series={[
+                { key: 'opens', label: 'Opens', color: 'var(--viz-1)', values: days.map((d) => d.opens) },
+                { key: 'starts', label: 'Rounds started', color: 'var(--viz-2)', values: days.map((d) => d.starts) },
+                { key: 'finished', label: 'Rounds finished', color: 'var(--viz-3)', values: days.map((d) => d.finished) },
+              ]}
+            />
+          </Card>
+          <div className="an-grid-2">
+            <Card title="Conversion">
+              <Conversion totals={data.traffic.totals} />
+            </Card>
+            <Card title="Daily and unlimited">
+              {halves ? <Halves halves={halves} /> : <p className="small muted">Nothing in this range yet.</p>}
+            </Card>
+          </div>
+          <Card title="How rounds ended" aside={<OutcomeLegend />}>
+            {data.rounds ? (
+              <div className="stack-sm">
+                <OutcomeBar split={splitOf(data.outcomes)} wide />
+                <p className="tiny faint" style={{ margin: 0 }}>
+                  {data.rounds} round{data.rounds === 1 ? '' : 's'}: {data.outcomes.won + data.outcomes.cleared} won,{' '}
+                  {data.outcomes.lost} lost, {data.outcomes['gave-up']} given up.
+                </p>
+              </div>
+            ) : (
+              <p className="small muted">No rounds in this view.</p>
+            )}
           </Card>
           <MixCard mix={data.mix} pools={pools} oneGame />
           <Card
@@ -49,9 +85,29 @@ export function GamePage({ pools }: { pools: Pools | null }) {
           >
             <Detail game={game} data={data} text={text} />
           </Card>
-        </>
+        </Refreshing>
       )}
     </div>
+  );
+}
+
+/** The game's daily puzzle against its unlimited play, side by side. */
+function Halves({ halves }: { halves: Traffic['games'][number] }) {
+  const rows = [
+    { name: 'Daily', t: halves.daily },
+    { name: 'Unlimited', t: halves.unlimited },
+  ];
+  return (
+    <DataTable
+      columns={[
+        { head: '', cell: (row) => row.name },
+        { head: 'Opens', cell: (row) => compact(row.t.opens), align: 'right' },
+        { head: 'Started', cell: (row) => pct(row.t.engaged, row.t.opens), align: 'right' },
+        { head: 'Rounds', cell: (row) => compact(row.t.finished), align: 'right' },
+        { head: 'Won', cell: (row) => pct(row.t.won, row.t.finished), align: 'right' },
+      ]}
+      rows={rows}
+    />
   );
 }
 

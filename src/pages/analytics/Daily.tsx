@@ -1,6 +1,6 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { puzzleLabel } from '@/daily/day';
-import { DAILY_GAMES, type DailyGame } from '@/daily/types';
+import { LIVE_DAILY, type DailyGame } from '@/daily/types';
 import { getGame } from '@/games/registry';
 import { AdminContext, api } from './api';
 import { Card } from './ui';
@@ -15,7 +15,8 @@ interface Row {
   day: string;
   number: number;
   editable: boolean;
-  puzzles: Record<DailyGame, Cell>;
+  /** The dailies being served (`LIVE_DAILY`). */
+  puzzles: Partial<Record<DailyGame, Cell>>;
 }
 
 interface Schedule {
@@ -98,7 +99,7 @@ export function Daily() {
       </Card>
 
       <div className="an-tabs" role="tablist" aria-label="Game">
-        {DAILY_GAMES.map((id) => (
+        {LIVE_DAILY.map((id) => (
           <button
             key={id}
             type="button"

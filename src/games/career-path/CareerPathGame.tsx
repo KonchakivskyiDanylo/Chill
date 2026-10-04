@@ -1,12 +1,11 @@
 import { useCallback, useMemo, useState } from 'react';
-import { poolSetup, useRoundRecorder } from '@/analytics/client';
+import { poolSetup, sendStart, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
-import { CountryBadge } from '@/components/CountryBadge';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
-import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { PlayerSearch } from '@/components/PlayerSearch';
 import { PoolSetup } from '@/components/PoolSetup';
+import { SecretCard } from '@/components/SecretCard';
 import { DailyEnd, DailyPending } from '@/components/DailyEnd';
 import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
 import { clueGrid, clueResult, snapClues } from '@/daily/clue-round';
@@ -14,14 +13,14 @@ import { useDailyRound, usePlayMode } from '@/daily/useDailyRound';
 import { restoreDaily } from './daily';
 import type { MajorResult, Majors } from '@/data/liquipedia/majors';
 import type { Pools } from '@/data/liquipedia/pools';
-import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
+import type { Roster } from '@/data/liquipedia/roster';
 import { useMajors } from '@/data/liquipedia/useMajors';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import { rotationKey } from '@/games/shared/rotation';
 import { activePool, useEventMode } from '@/games/shared/mode';
 import { dealSecret, poolPlayers, poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
-import { moneyShort, ordinal, playerMoney, plural } from '@/lib/format';
+import { moneyShort, ordinal, plural } from '@/lib/format';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { getGame } from '@/games/registry';
 import {
@@ -70,7 +69,7 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
   const [event] = useEventMode();
   const [mode, setMode] = useState<Mode>('order');
   const byId = useMemo(() => new Map(roster.players.map((player) => [player.id, player])), [roster]);
-  const [dailyOn, setDailyOn] = usePlayMode();
+  const [dailyOn, setDailyOn] = usePlayMode('career-path');
   const daily = useDailyRound('career-path', {
     on: dailyOn,
     ready: true,
@@ -126,6 +125,7 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
     }
     writeLocal(key, drawn.seen);
     setError(null);
+    sendStart('career-path', false);
     setPractice(createGame(drawn.pick, majors.resultsFor(drawn.pick.id), mode, majors));
   }, [players, pools, event, choice, majors, mode, field]);
 
@@ -388,22 +388,6 @@ function ResultCard({
         {tournament.year}
         {tournament.prizePool ? ` · ${moneyShort(tournament.prizePool)}` : ''}
       </span>
-    </div>
-  );
-}
-
-function SecretCard({ player }: { player: RosterPlayer }) {
-  return (
-    <div className="card row" style={{ gap: 14 }}>
-      <PlayerAvatar player={player} size={54} />
-      <div>
-        <div className="bold">{player.name}</div>
-        <div className="small muted">
-          <CountryBadge code={player.country} name={player.countryName} /> {player.countryName ?? 'Unknown'}
-          {player.team ? ` · ${player.team}` : ''} · {playerMoney(player)} ·{' '}
-          {plural(player.fncsWins, 'FNCS win')}
-        </div>
-      </div>
     </div>
   );
 }

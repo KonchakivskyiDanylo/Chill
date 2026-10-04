@@ -82,6 +82,22 @@ try {
   check((await post('/api/rounds', huge)).status === 413, 'an oversized round was accepted');
 
   const ticket = { kind: 'wrong-data', message: 'FHD has the wrong title count', contact: 'me@example.com', context: { page: '/game/career-path', round } };
+  // The funnel: a visit landing on the home page, Fortnitedle's daily opened and
+  // its first move, Tenaball opened and two rounds dealt there.
+  const hits = [
+    { step: 'open', page: 'home', entry: true },
+    { step: 'open', page: 'wordle', daily: true },
+    { step: 'start', page: 'wordle', daily: true, first: true },
+    { step: 'open', page: 'tenaball', daily: false },
+    { step: 'start', page: 'tenaball', daily: false, first: true },
+    { step: 'start', page: 'tenaball', daily: false, first: false },
+  ];
+  for (const hit of hits) check((await post('/api/funnel', hit)).status === 204, `a funnel hit was refused: ${JSON.stringify(hit)}`);
+  check((await post('/api/funnel', { step: 'open', page: 'chess' })).status === 400, 'a funnel hit for no page was accepted');
+  check((await post('/api/funnel', { step: 'start', page: 'home' })).status === 400, 'a round start on the home page was accepted');
+  check((await post('/api/funnel', { step: 'click', page: 'wordle' })).status === 400, 'a funnel step that does not exist was accepted');
+  check((await post('/api/funnel', { step: 'open', page: 'wordle', daily: 'yes' })).status === 400, 'a funnel hit with a non-boolean flag was accepted');
+
   check((await post('/api/support', ticket)).status === 204, 'a valid support request was not accepted');
   check((await post('/api/support', { ...ticket, website: 'http://spam' })).status === 204, 'the honeypot did not answer like a success');
   check((await post('/api/support', { ...ticket, message: '   ' })).status === 400, 'an empty support message was accepted');
@@ -121,8 +137,30 @@ try {
   check((await request('/api/admin/me', {}, `${cookie}0`)).status === 401, 'a tampered admin cookie was accepted');
 
   const dash = await request('/api/admin/dashboard?days=7', {}, cookie);
-  const data = dash.body as { rounds: number; wordle: { name: string; solved: number }[] };
+  const data = dash.body as {
+    rounds: number;
+    wordle: { name: string; solved: number }[];
+    traffic: {
+      totals: Record<string, number>;
+      landing: { label: string; count: number }[];
+      games: { game: string; daily: { opens: number }; unlimited: { opens: number; starts: number } }[];
+      hours: number[][];
+    };
+  };
   check(dash.status === 200 && data.rounds === 1, `the dashboard counts ${data?.rounds} rounds, expected 1`);
+
+  // The funnel read back: totals, the landing page, the halves, the hours.
+  const t = data.traffic?.totals ?? {};
+  check(
+    t.visits === 1 && t.opens === 2 && t.starts === 3 && t.engaged === 2 && t.finished === 1 && t.won === 1,
+    `the funnel totals read ${JSON.stringify(t)}`,
+  );
+  check(data.traffic?.landing[0]?.label === 'home', 'the visit did not land on the home page');
+  const tenaball = data.traffic?.games.find((g) => g.game === 'tenaball');
+  check(tenaball?.unlimited.opens === 1 && tenaball.unlimited.starts === 2 && tenaball.daily.opens === 0, `Tenaball's halves read ${JSON.stringify(tenaball)}`);
+  check(data.traffic?.hours.flat().reduce((a, b) => a + b, 0) === 3, 'the hours do not hold the three page opens');
+  const daily = (await request('/api/admin/dashboard?days=7&source=daily', {}, cookie)).body as typeof data;
+  check(daily?.traffic?.totals.opens === 1 && daily.traffic.totals.starts === 1, `the daily filter reads ${JSON.stringify(daily?.traffic?.totals)}`);
 
   // The daily schedule editor: made ahead, two days swapped, a past day refused.
   check((await request('/api/admin/daily?days=7')).status === 401, 'the schedule answered without a login');

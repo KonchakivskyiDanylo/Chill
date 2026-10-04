@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { poolSetup, useRoundRecorder } from '@/analytics/client';
+import { poolSetup, sendStart, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { CountryBadge } from '@/components/CountryBadge';
@@ -7,6 +7,7 @@ import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { PlayerSearch } from '@/components/PlayerSearch';
 import { PoolSetup } from '@/components/PoolSetup';
+import { SecretCard } from '@/components/SecretCard';
 import { DailyEnd, DailyPending } from '@/components/DailyEnd';
 import { Banner, OptionCard, OptionGrid, Stat } from '@/components/ui';
 import { clueGrid, clueResult, snapClues } from '@/daily/clue-round';
@@ -24,7 +25,7 @@ import { rotationKey } from '@/games/shared/rotation';
 import { activePool, useEventMode } from '@/games/shared/mode';
 import { dealSecret, poolPlayers, poolScope, resolvePool, usePoolChoice } from '@/games/shared/pool';
 import { guessesLeft, MIN_GUESSES } from '@/games/career-path/engine';
-import { playerMoney, plural } from '@/lib/format';
+import { plural } from '@/lib/format';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { getGame } from '@/games/registry';
 import {
@@ -94,7 +95,7 @@ function Game({
   const [event] = useEventMode();
   const [mode, setMode] = useState<Mode>('easy');
   const byId = useMemo(() => new Map(roster.players.map((player) => [player.id, player])), [roster]);
-  const [dailyOn, setDailyOn] = usePlayMode();
+  const [dailyOn, setDailyOn] = usePlayMode('who-are-ya');
   const daily = useDailyRound('who-are-ya', {
     on: dailyOn,
     ready: true,
@@ -170,6 +171,7 @@ function Game({
     }
     writeLocal(key, drawn.seen);
     setError(null);
+    sendStart('who-are-ya', false);
     setPractice(createGame(drawn.pick, cluesFor(drawn.pick.id), mode));
   }, [players, pools, event, choice, cluesFor, mode, field]);
 
@@ -341,17 +343,7 @@ function Game({
             >
               The player was <strong>{game.secret.name}</strong>.
             </Banner>
-            <div className="card row" style={{ gap: 14 }}>
-              <PlayerAvatar player={game.secret} size={54} />
-              <div>
-                <div className="bold">{game.secret.name}</div>
-                <div className="small muted">
-                  <CountryBadge code={game.secret.country} name={game.secret.countryName} />{' '}
-                  {game.secret.countryName ?? 'Unknown'}
-                  {game.secret.team ? ` · ${game.secret.team}` : ''} · {playerMoney(game.secret)}
-                </div>
-              </div>
-            </div>
+            <SecretCard player={game.secret} />
 
             {dailyOn ? (
               <DailyEnd

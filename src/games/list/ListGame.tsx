@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRoundRecorder } from '@/analytics/client';
+import { sendStart, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
@@ -127,7 +127,7 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
    * far the bonuses and penalties moved it (`daily.ts`), and a reload works
    * out the real time left from that.
    */
-  const [dailyOn, setDailyOn] = usePlayMode();
+  const [dailyOn, setDailyOn] = usePlayMode('list');
   const today = useToday();
   const { set, error: dailyError } = useDailySet(dailyOn ? today : null);
   // The day's list may be a follower list, so the daily waits for the counts too.
@@ -247,9 +247,11 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
     setGaveUp(false);
     setTimeLeft(START_SECONDS);
     deadlineRef.current = now + START_SECONDS * 1000;
+    // List's own clock start is its round start, on the daily list too.
+    sendStart('list', dailyOn);
     setRunning(true);
     persistRef.current({ ...FRESH, started: now });
-  }, [criterion]);
+  }, [criterion, dailyOn]);
 
   const adjustTime = (seconds: number) => {
     deadlineRef.current += seconds * 1000;

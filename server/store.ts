@@ -5,6 +5,7 @@ import type { DailySet } from '@/daily/types';
 import type { Platform } from '@/data/socials';
 import type {
   ClientError,
+  FunnelCount,
   RoundRecord,
   Stored,
   StoredSupport,
@@ -37,6 +38,10 @@ export interface Store {
   addRound(body: RoundRecord): Promise<void>;
   /** Oldest first. `since` limits it, for the dashboard's day filter. */
   rounds(since?: Date): Promise<Stored<RoundRecord>[]>;
+  /** Adds one to an hour's count of page opens or round starts — totals only, never a row per visit. */
+  addFunnel(key: Omit<FunnelCount, 'n'>): Promise<void>;
+  /** The counts from the hour `since` falls in on. */
+  funnel(since?: Date): Promise<FunnelCount[]>;
   addSupport(body: SupportRequest): Promise<void>;
   /** Newest first. */
   support(): Promise<StoredSupport[]>;
@@ -70,6 +75,9 @@ export interface SocialCounts {
   fetched: string;
   counts: Record<string, number>;
 }
+
+/** The UTC hour a moment falls in, "YYYY-MM-DDTHH" — the funnel's key, and sortable as text. */
+export const hourKey = (at: Date): string => at.toISOString().slice(0, 13);
 
 export async function openStore(): Promise<Store> {
   const url = process.env.DATABASE_URL;
@@ -125,6 +133,14 @@ class PostgresStore implements Store {
         key text primary key,
         body jsonb not null
       );
+      create table if not exists funnel (
+        hour text not null,
+        page text not null,
+        step text not null,
+        mode text not null,
+        n integer not null,
+        primary key (hour, page, step, mode)
+      );
     `);
     return new PostgresStore(pool);
   }
@@ -139,6 +155,21 @@ class PostgresStore implements Store {
       [since ?? new Date(0)],
     );
     return rows.map((row) => ({ id: Number(row.id), at: new Date(row.at).toISOString(), body: row.body }));
+  }
+
+  async addFunnel({ hour, page, step, mode }: Omit<FunnelCount, 'n'>): Promise<void> {
+    await this.pool.query(
+      `insert into funnel (hour, page, step, mode, n) values ($1, $2, $3, $4, 1)
+       on conflict (hour, page, step, mode) do update set n = funnel.n + 1`,
+      [hour, page, step, mode],
+    );
+  }
+
+  async funnel(since?: Date): Promise<FunnelCount[]> {
+    const { rows } = await this.pool.query('select hour, page, step, mode, n from funnel where hour >= $1', [
+      hourKey(since ?? new Date(0)),
+    ]);
+    return rows.map((row) => ({ ...row, n: Number(row.n) }));
   }
 
   async addSupport(body: SupportRequest): Promise<void> {
@@ -249,6 +280,8 @@ class FileStore implements Store {
   private faults: Stored<ClientError>[] = [];
   private changes: Stored<PageChange>[] = [];
   private days = new Map<string, DailySet>();
+  /** The funnel's counts by `hour|page|step|mode`. On disk, one line per increment. */
+  private counts = new Map<string, FunnelCount>();
 
   private constructor(private readonly dir: string) {}
 
@@ -262,7 +295,15 @@ class FileStore implements Store {
     for (const set of await store.read<DailySet>('daily')) {
       if (!store.days.has(set.day)) store.days.set(set.day, set);
     }
+    for (const key of await store.read<Omit<FunnelCount, 'n'>>('funnel')) store.count(key);
     return store;
+  }
+
+  private count(key: Omit<FunnelCount, 'n'>): void {
+    const id = `${key.hour}|${key.page}|${key.step}|${key.mode}`;
+    const row = this.counts.get(id) ?? { ...key, n: 0 };
+    row.n++;
+    this.counts.set(id, row);
   }
 
   private file(name: string): string {
@@ -294,6 +335,16 @@ class FileStore implements Store {
 
   async rounds(since?: Date): Promise<Stored<RoundRecord>[]> {
     return since ? this.rows.filter((row) => new Date(row.at) >= since) : [...this.rows];
+  }
+
+  async addFunnel(key: Omit<FunnelCount, 'n'>): Promise<void> {
+    this.count(key);
+    await this.append('funnel', key);
+  }
+
+  async funnel(since?: Date): Promise<FunnelCount[]> {
+    const from = hourKey(since ?? new Date(0));
+    return [...this.counts.values()].filter((row) => row.hour >= from).map((row) => ({ ...row }));
   }
 
   async addSupport(body: SupportRequest): Promise<void> {

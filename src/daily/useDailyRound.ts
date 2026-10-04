@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { sendStart } from '@/analytics/client';
 import { useLocalState } from '@/lib/storage';
 import { useDailySet } from './client';
 import { DAILY_START, puzzleNumber } from './day';
 import { logResult, savedRound, saveRound } from './progress';
-import type { DailyGame, DailyPuzzles, DailyResult } from './types';
+import { isLiveDaily, type DailyGame, type DailyPuzzles, type DailyResult } from './types';
 import { useToday } from './useDay';
 
 /**
@@ -15,14 +16,19 @@ import { useToday } from './useDay';
  * the day (the user: "let's start it actually on 5th October"). A dev server
  * keeps the setup screens behind a toggle in each game's toolbar, for working
  * on the games; the choice is remembered in the browser.
+ *
+ * With a `game`, whether that game's page plays its daily: never for a game
+ * not served as one (`LIVE_DAILY`), which plays unlimited everywhere. Without,
+ * whether the site is in daily mode at all — the home page.
  */
 export const DEV_TOGGLE = import.meta.env?.DEV === true;
 
-export function usePlayMode(): [daily: boolean, setDaily: (daily: boolean) => void] {
+export function usePlayMode(game?: DailyGame): [daily: boolean, setDaily: (daily: boolean) => void] {
   const [mode, setMode] = useLocalState<'daily' | 'practice'>('dev:play-mode', 'daily');
   const today = useToday();
   const set = useCallback((daily: boolean) => setMode(daily ? 'daily' : 'practice'), [setMode]);
-  return [DEV_TOGGLE ? mode === 'daily' : today >= DAILY_START, set];
+  const on = DEV_TOGGLE ? mode === 'daily' : today >= DAILY_START;
+  return [on && (game === undefined || isLiveDaily(game)), set];
 }
 
 export interface DailyRound<S> {
@@ -88,6 +94,8 @@ export function useDailyRound<G extends DailyGame, S, Snap>(
       const { snapshot, finished, result } = latest.current;
       const was = shown.current;
       if (was && !finished(was) && finished(next)) setEndedHere(true);
+      // Nothing saved yet today: this is the first move, the daily's "started".
+      if (savedRound(game, day, puzzle) === null) sendStart(game, true);
       shown.current = next;
       setRound({ day, state: next });
       saveRound(game, day, puzzle, snapshot(next));

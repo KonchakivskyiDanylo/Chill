@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { useRoundRecorder } from '@/analytics/client';
+import { sendStart, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { WhatCounts } from '@/components/Glossary';
@@ -104,6 +104,7 @@ function Game({ roster, facts }: { roster: Roster; facts: Facts }) {
     setError(null);
     setFeedback(null);
     setSelected(null);
+    sendStart('pyramid', false);
     setGame(createGame(puzzle, difficulty));
   }, [roster, facts, rankings, majors, socials, difficulty, game]);
 

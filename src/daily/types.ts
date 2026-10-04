@@ -13,10 +13,24 @@ import type { RosterPlayer } from '@/data/liquipedia/roster';
  * from the descriptor (`games/<game>/daily.ts`).
  */
 
-/** The games with a daily puzzle. Higher or Lower stays an endless run. */
+/** The games with a daily puzzle built. Higher or Lower stays an endless run. */
 export const DAILY_GAMES = ['wordle', 'career-path', 'who-are-ya', 'tenaball', 'list', 'tic-tac-toe'] as const;
 
 export type DailyGame = (typeof DAILY_GAMES)[number];
+
+/**
+ * The ones served as a daily: made each day, played once a day on the live
+ * site, listed under "Today's puzzles". The rest keep their daily code but play
+ * unlimited, setup screens and all, like Higher or Lower — Career Path, Who Are
+ * Ya? and Tic Tac Toe (the user, 4 Oct 2026: "having who are ya and career path
+ * unlimited for now", "tic tac toe maybe unlimited as well") — or are hidden:
+ * List, back in about a month. Add a game here to make it a daily again; days
+ * the schedule editor already made ahead have no puzzle for it, so draw one
+ * with New there.
+ */
+export const LIVE_DAILY: readonly DailyGame[] = ['wordle', 'tenaball'];
+
+export const isLiveDaily = (game: string): game is DailyGame => (LIVE_DAILY as readonly string[]).includes(game);
 
 export interface DailyPuzzles {
   wordle: { secret: string };

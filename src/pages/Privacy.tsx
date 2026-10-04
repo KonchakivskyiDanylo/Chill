@@ -37,7 +37,7 @@ export function Privacy() {
         <ul className="small stack-sm" style={{ margin: 0, paddingLeft: 18 }}>
           <li>No accounts, no ads, no tracking cookies, nothing loaded from other sites.</li>
           <li>Your results and streaks stay in your browser.</li>
-          <li>When you finish a round, the site counts how it went — without knowing who you are.</li>
+          <li>The site counts which games are opened, started and finished, and how rounds went — without knowing who you are.</li>
         </ul>
       </section>
 
@@ -56,6 +56,11 @@ export function Privacy() {
           When you finish a round, the site sends a short record of it: the game, the puzzle, how you set it up,
           your answers and whether you won. It is used to see which puzzles are too hard or too easy. Nothing in
           it says who you are: there is no account, no device id and no cookie, and IP addresses are not saved.
+        </p>
+        <p className="small">
+          It also counts when a page is opened and when a round is started, to see which games people open and
+          how many go on to play. These are kept only as totals per hour — “Tenaball was opened 40 times between
+          six and seven” — never as a record of a visit, and nothing is stored in your browser for them.
         </p>
         <p className="small">
           If a page breaks, the site may send the error message and the page it happened on, so it can be
@@ -84,14 +89,6 @@ export function Privacy() {
           By using the parts of OffSpawn that show these counts, you agree to be bound by the{' '}
           <Ext href={YOUTUBE_TERMS}>YouTube Terms of Service</Ext>. Google’s handling of YouTube data is
           described in the <Ext href={GOOGLE_PRIVACY}>Google Privacy Policy</Ext>.
-        </p>
-      </section>
-
-      <section className="card stack-sm">
-        <div className="card__title">Hosting</div>
-        <p className="small">
-          The site runs on Heroku. Like any web host, it may keep short-lived technical logs of the requests
-          it serves.
         </p>
       </section>
 

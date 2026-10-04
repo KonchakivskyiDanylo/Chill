@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRoundRecorder } from '@/analytics/client';
+import { sendStart, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { RosterNote } from '@/components/LiquipediaGate';
 import { GiveUpButton } from '@/components/GiveUpButton';
@@ -173,6 +173,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
       return;
     }
     setError(null);
+    sendStart('higher-lower', false);
     setGame(created);
   }, [players, category, difficulty, pools, event, facts, factsFailed]);
 

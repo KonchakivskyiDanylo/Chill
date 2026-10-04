@@ -9,10 +9,11 @@ import { CREDITS_META, usePageMeta } from '@/lib/seo';
  * The long form the footer points to: plain headings, nothing a reader has to
  * decode. It holds everything Liquipedia's licence and API terms ask for —
  * credit with a link back, the licence and its link, that the data was
- * changed and how, the same licence on what we share (as is, without
- * warranty), and no implied endorsement. Liquipedia's images are licensed
- * separately, which is why none are used. The code's repository is public, as
- * the API terms ask, but not linked (the user, 30 Sep 2026).
+ * changed (one clause — the list of changes was cut, the user, 4 Oct 2026),
+ * the same licence on what we share (as is, without warranty), and no implied
+ * endorsement. Liquipedia's images are licensed separately, which is why none
+ * are used. The code's repository is public, as the API terms ask, but not
+ * linked (the user, 30 Sep 2026).
  */
 
 const Ext = ({ href, children }: { href: string; children: ReactNode }) => (
@@ -40,28 +41,13 @@ export function Credits() {
         <p className="small">
           Every player, team, tournament, result and transfer on OffSpawn comes from the{' '}
           <Ext href={SOURCE.url}>Liquipedia Fortnite wiki</Ext>, written by its contributors. We get it
-          through the Liquipedia API and use it under the{' '}
+          through the Liquipedia API, adapt it for the games and use it under the{' '}
           <Ext href={SOURCE.licenseUrl}>{SOURCE.license}</Ext> licence, as set out in{' '}
           <Ext href="https://liquipedia.net/commons/Liquipedia:Copyrights">Liquipedia’s copyright page</Ext>.
         </p>
         <p className="small">
           There is no other source. Where Liquipedia says nothing — a birthday, an earnings figure — the site
           shows nothing rather than a guess.
-        </p>
-      </section>
-
-      <section className="card stack-sm">
-        <div className="card__title">What we changed</div>
-        <ul className="small stack-sm" style={{ margin: 0, paddingLeft: 18 }}>
-          <li>Kept only players with prize money on record, and left out players who have died.</li>
-          <li>Turned nationalities into flags and team pages into team names.</li>
-          <li>
-            Worked out ages, difficulty levels, rankings, FNCS title counts (from the results of every regional
-            FNCS grand final) and every puzzle’s answers.
-          </li>
-        </ul>
-        <p className="small muted" style={{ margin: 0 }}>
-          Any mistake in those is ours, not Liquipedia’s. No images from Liquipedia are used.
         </p>
       </section>
 

@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { puzzleLabel } from '@/daily/day';
+import { isLiveDaily } from '@/daily/types';
 import { DEV_TOGGLE } from '@/daily/useDailyRound';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { rulesFor, type GameMeta } from '@/games/registry';
@@ -19,13 +20,15 @@ export function GameShell({
   toolbar,
   dataNote,
   examples,
-  daily,
+  daily: dailyProp,
   children,
 }: {
   game: GameMeta;
   /**
    * The game's daily state: on with today's number, or off (practice, on a dev
-   * server only). Absent for a game with no daily puzzle — Higher or Lower.
+   * server only). Absent for a game with no daily puzzle — Higher or Lower —
+   * and ignored for one whose daily is not served now (`LIVE_DAILY`), so it
+   * gets no chip and no toggle either.
    */
   daily?: { on: boolean; number: number; setOn: (on: boolean) => void };
   /** Optional controls rendered on the right of the title row (e.g. New game). */
@@ -43,6 +46,7 @@ export function GameShell({
   examples?: ReactNode;
   children: ReactNode;
 }) {
+  const daily = isLiveDaily(game.id) ? dailyProp : undefined;
   const seenKey = `seen-rules:${game.id}`;
   const [showRules, setShowRules] = useState(() => !readLocal(seenKey, false));
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { gameStats, logKey, useDailyLog, type DailyLog } from '@/daily/progress';
-import { DAILY_GAMES, type DailyGame, type DailyResult } from '@/daily/types';
+import { LIVE_DAILY, type DailyGame, type DailyResult } from '@/daily/types';
 import { useCountdown } from '@/daily/useDay';
 import { puzzleLabel } from '@/daily/day';
 import { getGame, type GameMeta } from '@/games/registry';
@@ -150,7 +150,7 @@ function DailyStat({ label, value }: { label: string; value: string | number }) 
 
 /** The other dailies, ticked when done today — the way on to the next one. */
 function MoreDailies({ current, day }: { current: DailyGame; day: string }) {
-  const others = DAILY_GAMES.filter((game) => game !== current && !getGame(game)?.hidden);
+  const others = LIVE_DAILY.filter((game) => game !== current && !getGame(game)?.hidden);
   return (
     <div className="stack-sm">
       <div className="tiny faint center">More daily puzzles</div>

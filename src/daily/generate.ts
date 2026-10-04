@@ -15,7 +15,7 @@ import { pickDaily as wordle } from '@/games/wordle/daily';
 import { makeRng } from '@/lib/rng';
 import { DAILY_START, daysBetween } from './day';
 import { knownPlayers } from './fame';
-import { DAILY_GAMES, type DailyContext, type DailyGame, type DailyPuzzles, type DailySet } from './types';
+import { LIVE_DAILY, type DailyContext, type DailyGame, type DailyPuzzles, type DailySet } from './types';
 
 /**
  * Makes a day's puzzles.
@@ -152,11 +152,21 @@ function aroundDay(day: string, history: readonly DailySet[]): DailySet[] {
   return history.filter((set) => set.day !== day && (day < DAILY_START || set.day >= DAILY_START));
 }
 
-export function generateDaily(day: string, data: DailyData, history: readonly DailySet[]): DailySet {
+/**
+ * `games` is the dailies being served: a game played unlimited for now gets no
+ * puzzle, so it uses up no board or player nobody plays. `check:games` passes
+ * every built one, to keep them all tested.
+ */
+export function generateDaily(
+  day: string,
+  data: DailyData,
+  history: readonly DailySet[],
+  games: readonly DailyGame[] = LIVE_DAILY,
+): DailySet {
   const ctx = dailyContext(day, data, aroundDay(day, history));
   const puzzles: Partial<DailyPuzzles> = {};
   // Each on its own: a game whose data is missing is left out, not the whole day.
-  for (const game of DAILY_GAMES) {
+  for (const game of games) {
     try {
       const puzzle = pickPuzzle(game, data, ctx);
       if (puzzle) (puzzles as Record<string, unknown>)[game] = puzzle;

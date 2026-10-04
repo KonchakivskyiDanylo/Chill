@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { useRoundRecorder } from '@/analytics/client';
+import { sendStart, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
@@ -112,7 +112,7 @@ function Game({
   const socials = useSocials();
   const [difficulty, setDifficulty] = useState<Difficulty>('easy');
   const byId = useMemo(() => new Map(roster.players.map((player) => [player.id, player])), [roster]);
-  const [dailyOn, setDailyOn] = usePlayMode();
+  const [dailyOn, setDailyOn] = usePlayMode('tic-tac-toe');
   const daily = useDailyRound('tic-tac-toe', {
     on: dailyOn,
     ready: socials !== null,
@@ -167,6 +167,7 @@ function Game({
     setError(null);
     setFeedback(null);
     setChoosing(null);
+    sendStart('tic-tac-toe', false);
     setPractice(createGame(board, difficulty));
   }, [answers, accepted, facts, orgs, socials, difficulty, recent, setRecent]);
 

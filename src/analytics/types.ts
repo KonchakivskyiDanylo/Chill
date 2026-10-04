@@ -1,15 +1,18 @@
 /**
  * What the site records, and in what shape.
  *
- * One record per *finished round* — never per click, never per page view. The
- * site had no telemetry at all before this, and the reason to add some is
- * narrow: to see which games and boards people play and where the puzzles are
- * too hard or too easy. Everything below is chosen for that and nothing else.
+ * One record per *finished round*, and two counts on the way to one: a page
+ * opened and a round started (`FunnelHit`), kept only as hourly totals — never
+ * one row per visit, never per click. The reason to record anything is narrow:
+ * to see which games people open, which they start and finish, and where the
+ * puzzles are too hard or too easy. Everything below is chosen for that and
+ * nothing else.
  *
  * Nothing identifies a person. There is no device id, no account, no cookie
- * for players (the only cookie is the admin login on `/analytics`), and the
- * server does not keep IP addresses. Totals are global: "Tenaball was played
- * 300 times", never "this device played 30 of them".
+ * for players (the only cookie is the admin login on `/analytics`), nothing is
+ * stored in the browser for it, and the server does not keep IP addresses.
+ * Totals are global: "Tenaball was played 300 times", never "this device
+ * played 30 of them".
  *
  * Shared by the browser (which sends records), the server (which stores
  * them) and `aggregate.ts` (which turns them into the dashboard), so the three
@@ -169,6 +172,51 @@ export interface RoundRecord<G extends GameId = GameId> {
   setup: Setup;
   outcome: Outcome;
   r: GamePayloads[G];
+}
+
+/**
+ * One step on the way to a finished round, as the browser sends it: a page was
+ * opened, or a round was started. No id and no time — the server files it under
+ * the current hour and keeps only the count.
+ */
+export interface FunnelHit {
+  step: 'open' | 'start';
+  /** `home`, or the game's id. */
+  page: 'home' | GameId;
+  /** The game was on its daily puzzle. Never set for the home page. */
+  daily?: boolean;
+  /**
+   * An open: the first page of this page load — someone arriving, from a link,
+   * a bookmark or a reload, rather than moving around the site.
+   */
+  entry?: boolean;
+  /**
+   * A start: the first round started since the page was opened, so "opens that
+   * led to a round" can be told from "rounds per open". A daily's start is the
+   * first move of the day, which is always first.
+   */
+  first?: boolean;
+}
+
+/**
+ * What the server keeps: a count per hour, page, step and mode.
+ *
+ *   open         a page opened
+ *   entry        of those, the first page of a page load
+ *   start        a round started — a deal in unlimited play, the first move on a daily
+ *   first-start  of those, the first since the page was opened
+ */
+export const FUNNEL_STEPS = ['open', 'entry', 'start', 'first-start'] as const;
+export type FunnelStep = (typeof FUNNEL_STEPS)[number];
+
+export interface FunnelCount {
+  /** UTC hour, "YYYY-MM-DDTHH". */
+  hour: string;
+  page: string;
+  step: FunnelStep;
+  /** `daily` or `unlimited` for a game; empty for the home page. */
+  mode: '' | 'daily' | 'unlimited';
+  n: number;
 }
 
 /** What the support form sends. */

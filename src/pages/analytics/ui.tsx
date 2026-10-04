@@ -16,69 +16,12 @@ import {
 /**
  * The pieces every dashboard page is built from.
  *
- * Charts are one hue — the site's primary — because each one answers "how
- * many", never "which series": the label beside a bar says what it is, and a
- * number beside it says how much. Nothing here needs a legend.
+ * The share bars are one hue — the site's primary — because each one answers
+ * "how many", never "which series": the label beside a bar says what it is, and
+ * a number beside it says how much. The charts with series are in charts.tsx.
  */
 
 // ------------------------------------------------------------------ charts --
-
-function shortDay(day: string): string {
-  return new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-}
-
-/** Rounds per day as columns, with the day and count on hover and a table beneath. */
-export function DayColumns({ series }: { series: Dashboard['series'] }) {
-  const [hover, setHover] = useState<number | null>(null);
-  if (series.length === 0) return null;
-  const peak = Math.max(1, ...series.map((d) => d.rounds));
-  const total = series.reduce((n, d) => n + d.rounds, 0);
-  const first = series[0].day;
-  const last = series[series.length - 1].day;
-  const shown = hover === null ? null : series[hover];
-
-  return (
-    <figure className="an-cols">
-      <div
-        className="an-cols__plot"
-        role="img"
-        aria-label={`Rounds per day from ${shortDay(first)} to ${shortDay(last)}: ${total} in all, ${peak} on the busiest day`}
-        onMouseLeave={() => setHover(null)}
-      >
-        <span className="an-cols__max tiny faint">{peak}</span>
-        {series.map((d, i) => (
-          <div key={d.day} className="an-cols__col" onMouseEnter={() => setHover(i)}>
-            <span
-              className={`an-cols__bar${hover === i ? ' is-hover' : ''}`}
-              style={{ height: d.rounds ? `${(d.rounds / peak) * 100}%` : 0 }}
-            />
-          </div>
-        ))}
-        {shown ? (
-          <div className="an-tip" style={{ left: `${((hover! + 0.5) / series.length) * 100}%` }}>
-            <strong>{shown.rounds}</strong> round{shown.rounds === 1 ? '' : 's'} · {shortDay(shown.day)}
-          </div>
-        ) : null}
-      </div>
-      <div className="an-cols__axis tiny faint">
-        <span>{shortDay(first)}</span>
-        <span>{total} rounds</span>
-        <span>{shortDay(last)}</span>
-      </div>
-      <details className="tiny">
-        <summary className="muted">As a table</summary>
-        <DataTable
-          columns={[
-            { head: 'Day', cell: (d) => d.day, sort: (d) => d.day },
-            { head: 'Rounds', cell: (d) => d.rounds, sort: (d) => d.rounds, align: 'right' },
-          ]}
-          rows={[...series].reverse().filter((d) => d.rounds > 0)}
-          empty="No rounds in these days."
-        />
-      </details>
-    </figure>
-  );
-}
 
 export interface ShareItem {
   key: string;

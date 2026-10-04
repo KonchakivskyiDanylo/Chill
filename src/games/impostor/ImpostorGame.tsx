@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { poolSetup, useRoundRecorder } from '@/analytics/client';
+import { poolSetup, sendStart, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
@@ -110,6 +110,7 @@ function Game({
     }
     setError(null);
     setPending(null);
+    sendStart('impostor', false);
     setGame(createGame(round, mode));
   }, [players, facts, orgs, socials, mode]);
 

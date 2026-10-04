@@ -1,80 +1,214 @@
 import { Link } from 'react-router-dom';
-import type { Dashboard, GameOverview, Mix } from '@/analytics/aggregate';
-import { Stat } from '@/components/ui';
+import type { Dashboard, FunnelTotals, GameOverview, Mix, Traffic } from '@/analytics/aggregate';
+import { GAME_IDS, type GameId } from '@/analytics/types';
 import type { Pools } from '@/data/liquipedia/pools';
+import { getGame } from '@/games/registry';
 import { useScope } from './api';
+import {
+  change,
+  compact,
+  Heatmap,
+  LineChart,
+  Meter,
+  OutcomeBar,
+  OutcomeLegend,
+  Refreshing,
+  StatTile,
+  type Delta,
+  type OutcomeSplit,
+} from './charts';
 import { categoryLabel, eventLabel, gameTitle, pct, regionLabel, words } from './labels';
-import { Card, countItems, DataTable, DayColumns, ShareBars, sourceItems } from './ui';
+import { Card, countItems, DataTable, ShareBars, sourceItems } from './ui';
 
 /**
- * `/analytics` — every game at once: how much is played, how it goes, and
- * how people set their rounds up.
+ * `/analytics` — the whole site at once: how many come, what they open, how
+ * many rounds they start and finish, when, and how each game is doing.
  */
-export function Overview({ data, pools }: { data: Dashboard | null; pools: Pools | null }) {
-  const { search } = useScope();
+export function Overview({ data, pools, loading }: { data: Dashboard | null; pools: Pools | null; loading: boolean }) {
   if (!data) return <p className="muted">Loading…</p>;
-
-  const share = (game: GameOverview, source: string) =>
-    pct(game.mix.source.find((s) => s.label === source)?.count ?? 0, game.rounds);
+  const { traffic } = data;
+  const landing = traffic.landing.map((count) => ({
+    key: count.label,
+    label: count.label === 'home' ? 'Home page' : gameTitle(count.label),
+    count: count.count,
+  }));
 
   return (
-    <div className="stack">
-      <Headline data={data} />
+    <Refreshing loading={loading}>
+      <Kpis data={data} />
+      <FilterNote data={data} />
 
-      <Card title="Rounds per day">
-        <DayColumns series={data.series} />
+      <Card title="Traffic" aside={<span className="tiny faint">per day, UTC</span>}>
+        <LineChart
+          label="Visits, rounds started and rounds finished per day"
+          days={traffic.days.map((d) => d.day)}
+          series={[
+            { key: 'visits', label: 'Visits', color: 'var(--viz-1)', values: traffic.days.map((d) => d.visits) },
+            { key: 'starts', label: 'Rounds started', color: 'var(--viz-2)', values: traffic.days.map((d) => d.starts) },
+            { key: 'finished', label: 'Rounds finished', color: 'var(--viz-3)', values: traffic.days.map((d) => d.finished) },
+          ]}
+        />
+      </Card>
+
+      <div className="an-grid-2">
+        <Card title="Conversion">
+          <Conversion totals={traffic.totals} />
+        </Card>
+        <Card title="Where visits land">
+          <ShareBars items={landing} empty="No visits in this range yet." />
+          <p className="tiny faint" style={{ margin: 0 }}>
+            The page a visit started on. A game here means a shared link or a bookmark brought someone straight to it.
+          </p>
+        </Card>
+      </div>
+
+      <Card title="Games" aside={<OutcomeLegend />}>
+        <GamesTable data={data} />
+      </Card>
+
+      <Card title="When people come">
+        <Heatmap grid={traffic.hours} unit="page opens" />
       </Card>
 
       <MixCard mix={data.mix} pools={pools} />
-
-      <Card title="By game">
-        <DataTable
-          columns={[
-            {
-              head: 'Game',
-              cell: (g) => (
-                <Link to={{ pathname: `/analytics/game/${g.game}`, search: `?${search}` }}>{gameTitle(g.game)}</Link>
-              ),
-              sort: (g) => gameTitle(g.game),
-            },
-            { head: 'Rounds', cell: (g) => g.rounds, sort: (g) => g.rounds, align: 'right' },
-            {
-              head: 'Won',
-              cell: (g) => pct(g.outcomes.won + g.outcomes.cleared, g.rounds),
-              sort: (g) => (g.rounds ? (g.outcomes.won + g.outcomes.cleared) / g.rounds : -1),
-              align: 'right',
-            },
-            {
-              head: 'Gave up',
-              cell: (g) => pct(g.outcomes['gave-up'], g.rounds),
-              sort: (g) => (g.rounds ? g.outcomes['gave-up'] / g.rounds : -1),
-              align: 'right',
-            },
-            { head: 'Daily', cell: (g) => share(g, 'daily'), align: 'right' },
-            { head: 'Random', cell: (g) => share(g, 'random'), align: 'right' },
-            { head: 'Chosen', cell: (g) => share(g, 'chosen'), align: 'right' },
-            { head: 'Event', cell: (g) => share(g, 'event'), align: 'right' },
-            { head: 'Own setup', cell: (g) => share(g, 'own'), align: 'right' },
-          ]}
-          rows={[...data.games].sort((a, b) => b.rounds - a.rounds)}
-        />
-      </Card>
-    </div>
+    </Refreshing>
   );
 }
 
-/** The four numbers a page leads with. */
-export function Headline({ data }: { data: Dashboard }) {
-  const won = data.outcomes.won + data.outcomes.cleared;
+// -------------------------------------------------------------------- tiles --
+
+const against = (range: number) => (range === 1 ? 'the 24 hours before' : `the ${range} days before`);
+
+function rateDelta(now: FunnelTotals, before: FunnelTotals | null, range: number): Delta | null {
+  if (!before || !before.finished || !now.finished) return null;
+  return {
+    value: Math.round((now.won / now.finished - before.won / before.finished) * 100),
+    unit: 'pts',
+    against: against(range),
+  };
+}
+
+/** The five numbers every page leads with, each against the period before it. */
+export function Kpis({ data, oneGame }: { data: Dashboard; oneGame?: boolean }) {
+  const { totals, previous, days } = data.traffic;
+  const range = data.range;
+  const delta = (key: keyof FunnelTotals) => (previous ? change(totals[key], previous[key], against(range)) : null);
+  const trend = (key: keyof FunnelTotals) => days.slice(-14).map((d) => d[key]);
   return (
-    <div className="stats">
-      <Stat label="Rounds" value={data.rounds} />
-      <Stat label="Won" value={pct(won, data.rounds)} />
-      <Stat label="Lost" value={pct(data.outcomes.lost, data.rounds)} />
-      <Stat label="Gave up" value={pct(data.outcomes['gave-up'], data.rounds)} />
+    <div className="viz-stats">
+      <StatTile
+        label="Visits"
+        value={compact(totals.visits)}
+        delta={delta('visits')}
+        trend={trend('visits')}
+        hint={oneGame ? 'Page loads landing here' : 'Page loads'}
+      />
+      <StatTile label="Game opens" value={compact(totals.opens)} delta={delta('opens')} trend={trend('opens')} hint="Game pages opened" />
+      <StatTile label="Rounds started" value={compact(totals.starts)} delta={delta('starts')} trend={trend('starts')} hint="Deals and first daily moves" />
+      <StatTile label="Rounds finished" value={compact(totals.finished)} delta={delta('finished')} trend={trend('finished')} hint="Played to the end" />
+      <StatTile label="Won" value={pct(totals.won, totals.finished)} delta={rateDelta(totals, previous, range)} hint="Of the rounds finished" />
     </div>
   );
 }
+
+/** Says which numbers a filter on how rounds were set up does not reach. */
+export function FilterNote({ data }: { data: Dashboard }) {
+  const f = data.filter;
+  const narrowing = [f.event && 'event', f.region && 'region', f.difficulty && 'difficulty', f.level && 'level', f.outcome && 'outcome'].filter(Boolean);
+  if (!narrowing.length) return null;
+  return (
+    <p className="tiny faint an-note">
+      Visits, opens and starts cannot tell how a round was set up, so the tiles, the traffic and the conversion
+      leave out the {narrowing.join(' and ')} filter{narrowing.length === 1 ? '' : 's'}. The tables below use it.
+    </p>
+  );
+}
+
+/** Opens that led to a round, rounds that were finished, rounds that were won. */
+export function Conversion({ totals }: { totals: FunnelTotals }) {
+  return (
+    <div className="stack">
+      <Meter label="Game opens that started a round" part={totals.engaged} whole={totals.opens} note="game opens" />
+      <Meter label="Rounds started that were finished" part={totals.finished} whole={totals.starts} note="rounds started" />
+      <Meter label="Rounds finished that were won" part={totals.won} whole={totals.finished} note="rounds finished" />
+    </div>
+  );
+}
+
+// -------------------------------------------------------------------- games --
+
+export function splitOf(outcomes: GameOverview['outcomes']): OutcomeSplit {
+  return { won: outcomes.won + outcomes.cleared, lost: outcomes.lost, gaveUp: outcomes['gave-up'] };
+}
+
+interface GameRow {
+  game: GameId;
+  traffic: Traffic['games'][number] | undefined;
+  rounds: GameOverview | undefined;
+}
+
+/**
+ * One row per game: its funnel from the opens (range and game only), and how
+ * its rounds ended (every filter). The live games are always listed, at zero
+ * if need be; a hidden one only once it has numbers.
+ */
+function GamesTable({ data }: { data: Dashboard }) {
+  const { search } = useScope();
+  const rows: GameRow[] = GAME_IDS.map((game) => ({
+    game,
+    traffic: data.traffic.games.find((g) => g.game === game),
+    rounds: data.games.find((g) => g.game === game),
+  })).filter((row) => !getGame(row.game)?.hidden || row.traffic || row.rounds?.rounds);
+  const t = (row: GameRow) => row.traffic?.all;
+
+  return (
+    <DataTable
+      columns={[
+        {
+          head: 'Game',
+          cell: (row) => (
+            <Link to={{ pathname: `/analytics/game/${row.game}`, search: `?${search}` }} className="an-game-link">
+              <span aria-hidden="true">{getGame(row.game)?.icon}</span> {gameTitle(row.game)}
+              {getGame(row.game)?.hidden ? <span className="an-tag">hidden</span> : null}
+            </Link>
+          ),
+          sort: (row) => gameTitle(row.game),
+        },
+        { head: 'Opens', cell: (row) => compact(t(row)?.opens ?? 0), sort: (row) => t(row)?.opens ?? 0, align: 'right' },
+        {
+          head: 'Started',
+          cell: (row) => pct(t(row)?.engaged ?? 0, t(row)?.opens ?? 0),
+          sort: (row) => ratio(t(row)?.engaged, t(row)?.opens),
+          align: 'right',
+        },
+        { head: 'Rounds', cell: (row) => compact(t(row)?.finished ?? 0), sort: (row) => t(row)?.finished ?? 0, align: 'right' },
+        {
+          head: 'Finished',
+          cell: (row) => pct(t(row)?.finished ?? 0, t(row)?.starts ?? 0),
+          sort: (row) => ratio(t(row)?.finished, t(row)?.starts),
+          align: 'right',
+        },
+        {
+          head: 'Daily',
+          cell: (row) => pct(row.traffic?.daily.finished ?? 0, t(row)?.finished ?? 0),
+          sort: (row) => ratio(row.traffic?.daily.finished, t(row)?.finished),
+          align: 'right',
+        },
+        {
+          head: 'How rounds ended',
+          cell: (row) => (row.rounds ? <OutcomeBar split={splitOf(row.rounds.outcomes)} /> : <span className="tiny faint">—</span>),
+          sort: (row) => (row.rounds?.rounds ? (row.rounds.outcomes.won + row.rounds.outcomes.cleared) / row.rounds.rounds : -1),
+        },
+      ]}
+      rows={rows.sort((a, b) => (t(b)?.opens ?? 0) + (t(b)?.finished ?? 0) - ((t(a)?.opens ?? 0) + (t(a)?.finished ?? 0)))}
+      empty="No games yet."
+    />
+  );
+}
+
+const ratio = (part = 0, whole = 0) => (whole ? part / whole : -1);
+
+// ---------------------------------------------------------------------- mix --
 
 /**
  * How the rounds were set up, one question at a time.

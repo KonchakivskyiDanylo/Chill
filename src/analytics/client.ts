@@ -3,6 +3,7 @@ import { effective, type PoolChoice } from '@/games/shared/pool';
 import {
   RECORD_VERSION,
   type ClientError,
+  type FunnelHit,
   type GameId,
   type GamePayloads,
   type Outcome,
@@ -12,8 +13,8 @@ import {
 } from './types';
 
 /**
- * The browser half of the analytics: sending finished rounds, support
- * requests and errors to the site's own server.
+ * The browser half of the analytics: sending page opens, round starts,
+ * finished rounds, support requests and errors to the site's own server.
  *
  * Rounds are only sent from a production build, so playing on `npm run dev`
  * does not fill the dashboard with test games — set `VITE_RECORD=1` to send
@@ -27,8 +28,8 @@ export const APP_BUILD = typeof __APP_BUILD__ === 'string' ? __APP_BUILD__ : 'de
 
 /**
  * `keepalive`, so a record sent as the player closes the tab still arrives.
- * The endpoints are called rounds/support/errors rather than anything with
- * "analytics" in it, because blockers match on that word.
+ * The endpoints are called funnel/rounds/support/errors rather than anything
+ * with "analytics" or "track" in it, because blockers match on those words.
  */
 async function post(path: string, body: unknown): Promise<boolean> {
   try {
@@ -60,6 +61,43 @@ export function lastRound(): { record: RoundRecord; title: string } | null {
 export function sendRound(record: RoundRecord, title: string): void {
   last = { record, title };
   if (SEND_ROUNDS) void post('rounds', record);
+}
+
+/**
+ * The page open right now, and whether a round has been started on it — held
+ * in memory for this page load only, never stored.
+ */
+let opened: { page: string; at: number; started: boolean } | null = null;
+let entered = false;
+
+/** A page opened: the home page or a game's. */
+export function sendOpen(page: FunnelHit['page'], daily?: boolean): void {
+  const now = Date.now();
+  // React's development double-run of effects, not a second visit.
+  if (opened?.page === page && now - opened.at < 1000) return;
+  opened = { page, at: now, started: false };
+  const entry = !entered;
+  entered = true;
+  if (SEND_ROUNDS) void post('funnel', { step: 'open', page, daily: page === 'home' ? undefined : Boolean(daily), entry } satisfies FunnelHit);
+}
+
+/**
+ * A round started: a new deal in unlimited play, or the first move on the
+ * day's puzzle (`useDailyRound`). The finish is `useRoundRecorder`'s record.
+ */
+export function sendStart(game: GameId, daily: boolean): void {
+  const first = opened?.page === game && !opened.started;
+  if (opened?.page === game) opened.started = true;
+  if (SEND_ROUNDS) void post('funnel', { step: 'start', page: game, daily, first } satisfies FunnelHit);
+}
+
+/** Counts the page as opened once per visit to it — on arriving, not on every render. */
+export function useOpen(page: FunnelHit['page'] | null, daily?: boolean): void {
+  useEffect(() => {
+    if (page) sendOpen(page, daily);
+    // Only a new page is a new open; the mode is read as it was on arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
 }
 
 /**

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { useRoundRecorder } from '@/analytics/client';
+import { sendStart, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
@@ -79,6 +79,7 @@ function Game({ roster, facts, bios, orgs }: { roster: Roster; facts: Facts; bio
     setError(null);
     setFeedback(null);
     setSelected(null);
+    sendStart('rewind', false);
     setGame(createGame(hand, level, seed));
   }, [moments, level]);
 

@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { EXPORT_DATE } from '@/data/liquipedia/roster';
-import { poolSetup, useRoundRecorder } from '@/analytics/client';
+import { poolSetup, sendStart, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
-import { CountryBadge } from '@/components/CountryBadge';
 import { GiveUpButton } from '@/components/GiveUpButton';
-import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PoolSetup } from '@/components/PoolSetup';
+import { SecretCard } from '@/components/SecretCard';
 import { DailyEnd, DailyPending } from '@/components/DailyEnd';
 import { Banner } from '@/components/ui';
 import { useDailyRound, usePlayMode } from '@/daily/useDailyRound';
@@ -18,7 +17,7 @@ import type { Pools } from '@/data/liquipedia/pools';
 import { type Roster } from '@/data/liquipedia/roster';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
-import { playerMoney, plural } from '@/lib/format';
+import { plural } from '@/lib/format';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { getGame } from '@/games/registry';
 import {
@@ -117,7 +116,7 @@ export default function WordleGame() {
 function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   const [choice, setChoice] = usePoolChoice();
   const [event] = useEventMode();
-  const [dailyOn, setDailyOn] = usePlayMode();
+  const [dailyOn, setDailyOn] = usePlayMode('wordle');
   const daily = useDailyRound('wordle', {
     on: dailyOn,
     ready: true,
@@ -169,6 +168,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
     const key = rotationKey(meta.id, ...poolScope(event, choice));
     const drawn = dealSecret(players, readLocal<string[]>(key, []), pools, event, choice);
     if (drawn) writeLocal(key, drawn.seen);
+    if (drawn) sendStart('wordle', false);
     setPractice(drawn ? gameFor(drawn.pick, chosenLevel(event, choice)) : null);
     setWrapped(drawn?.wrapped ?? false);
     setDraft('');
@@ -329,18 +329,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
             >
               The player was <strong>{game.secret.name}</strong>.
             </Banner>
-            <div className="card row" style={{ gap: 14 }}>
-              <PlayerAvatar player={game.secret} size={54} />
-              <div>
-                <div className="bold">{game.secret.name}</div>
-                <div className="small muted">
-                  <CountryBadge code={game.secret.country} name={game.secret.countryName} />{' '}
-                  {game.secret.countryName ?? 'Unknown'}
-                  {game.secret.team ? ` · ${game.secret.team}` : ''} · {playerMoney(game.secret)} ·{' '}
-                  {plural(game.secret.fncsWins, 'FNCS win')}
-                </div>
-              </div>
-            </div>
+            <SecretCard player={game.secret} />
             {dailyOn ? (
               <DailyEnd game="wordle" number={daily.number} day={daily.day} result={dailyResult(game)} grid={shareGrid(game)} />
             ) : (

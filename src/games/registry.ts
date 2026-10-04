@@ -386,6 +386,8 @@ export const GAMES: GameMeta[] = [
       'earnings',
       'teammates',
     ],
+    // Hidden 4 Oct 2026: too close to Tenaball for now, back in about a month.
+    hidden: true,
     Component: lazy(() => import('./list/ListGame')),
   },
   {

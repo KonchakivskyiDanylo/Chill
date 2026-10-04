@@ -1,6 +1,10 @@
 import { lazy, Suspense } from 'react';
 import { Link, Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { useOpen } from '@/analytics/client';
+import type { GameId } from '@/analytics/types';
 import { Layout } from '@/components/Layout';
+import { isLiveDaily } from '@/daily/types';
+import { usePlayMode } from '@/daily/useDailyRound';
 import { getGame, OPEN_HIDDEN } from '@/games/registry';
 import { gameMeta, HOME_META, NOT_FOUND_META, usePageMeta } from '@/lib/seo';
 import { Credits } from '@/pages/Credits';
@@ -26,6 +30,10 @@ function GamePage() {
   // A hidden game is not on the live site at all, address included.
   const game = found && (!found.hidden || OPEN_HIDDEN) ? found : undefined;
   usePageMeta(game ? gameMeta(game) : HOME_META);
+  // Counted here, before the game's data loads, so someone who leaves while it
+  // loads is still an open.
+  const [siteDaily] = usePlayMode();
+  useOpen(game ? (game.id as GameId) : null, siteDaily && isLiveDaily(game?.id ?? ''));
 
   if (!game) return <Navigate to="/" replace />;
 
