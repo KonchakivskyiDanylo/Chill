@@ -23,12 +23,12 @@ export type DailyGame = (typeof DAILY_GAMES)[number];
  * site, listed under "Today's puzzles". The rest keep their daily code but play
  * unlimited, setup screens and all, like Higher or Lower — Career Path, Who Are
  * Ya? and Tic Tac Toe (the user, 4 Oct 2026: "having who are ya and career path
- * unlimited for now", "tic tac toe maybe unlimited as well") — or are hidden:
- * List, back in about a month. Add a game here to make it a daily again; days
+ * unlimited for now", "tic tac toe maybe unlimited as well"), and Fortnitedle
+ * from 5 Oct 2026 — or are hidden: List, back in about a month. Add a game here to make it a daily again; days
  * the schedule editor already made ahead have no puzzle for it, so draw one
  * with New there.
  */
-export const LIVE_DAILY: readonly DailyGame[] = ['wordle', 'tenaball'];
+export const LIVE_DAILY: readonly DailyGame[] = ['tenaball'];
 
 export const isLiveDaily = (game: string): game is DailyGame => (LIVE_DAILY as readonly string[]).includes(game);
 

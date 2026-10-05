@@ -39,7 +39,7 @@ How it runs:
 - **Locally:** `npm run dev:all` starts the site on port 5173 and the API on port 3000. The analytics page opens without a password, and rounds you play are recorded to `server/.data` on your machine.
 - **In production:** Heroku, live since the end of September 2026. `npm start` serves the built site and the API from one Node process, stores records in Postgres, and puts `/analytics` behind `ADMIN_PASSWORD`.
 - **No accounts yet.** Best scores, daily progress and streaks live in each browser's local storage.
-- **Daily puzzles on the live site** for Fortnitedle and Tenaball; the other live games play unlimited (4 Oct 2026). See "Daily puzzles" below.
+- **Daily puzzles on the live site** for Tenaball only; the other live games play unlimited (Fortnitedle since 5 Oct 2026, the rest since 4 Oct). See "Daily puzzles" below.
 
 ## The data
 
@@ -786,7 +786,7 @@ A generated data file that is missing makes its games report SKIPPED and the sui
 
 From **5 October 2026** (`DAILY_START`) the live site is **daily puzzles only** — before that day it plays as it always did, with a line on the home page saying when the dailies start, and it switches by itself at midnight in Berlin: one puzzle per game per day, the same for everyone. The setup screens — the pool picker, levels, modes, the board and list pickers — are still there on a dev server, behind a **🛠 Practice** button in each game's toolbar (`usePlayMode` in `src/daily/useDailyRound.ts`).
 
-**Which games are a daily** is `LIVE_DAILY` in `src/daily/types.ts`: Fortnitedle and Tenaball. Six games have a daily built (`DAILY_GAMES`); on 4 Oct 2026 the user moved Career Path, Who Are Ya? and Tic Tac Toe to unlimited "for now" and hid List. A built daily not in `LIVE_DAILY` keeps its code and its checks, but no puzzle is made for it, its page plays unlimited with the setup screens everywhere (no chip, no 🛠 toggle), and the home page lists it under **Unlimited** with Higher or Lower. To make one a daily again, add it to `LIVE_DAILY`; days the editor already made ahead have no puzzle for it, so draw them with **↻ New**.
+**Which games are a daily** is `LIVE_DAILY` in `src/daily/types.ts`: Tenaball only. Six games have a daily built (`DAILY_GAMES`); on 4 Oct 2026 the user moved Career Path, Who Are Ya? and Tic Tac Toe to unlimited "for now" and hid List, and on 5 Oct moved Fortnitedle to unlimited too. A built daily not in `LIVE_DAILY` keeps its code and its checks, but no puzzle is made for it, its page plays unlimited with the setup screens everywhere (no chip, no 🛠 toggle), and the home page lists it under **Unlimited** with Higher or Lower. To make one a daily again, add it to `LIVE_DAILY`; days the editor already made ahead have no puzzle for it, so draw them with **↻ New**.
 
 | Piece | Where | What it does |
 | --- | --- | --- |

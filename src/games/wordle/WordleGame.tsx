@@ -77,6 +77,21 @@ const EXAMPLES: { word: string; states: (TileState | null)[]; note: string }[] =
   },
 ];
 
+/**
+ * The tile character a physical key press stands for, or null.
+ *
+ * `key` first, so AZERTY and other Latin layouts type what is printed on the
+ * key. When `key` is not a Latin letter or digit — a Cyrillic layout left on,
+ * an IME, a digit behind Shift on AZERTY — fall back to `code`, the physical
+ * key read as US QWERTY. Without the fallback, a Ukrainian layout typed digits
+ * (the same on both layouts) and no letters at all.
+ */
+function keyChar(stroke: KeyboardEvent): string | null {
+  if (/^[a-zA-Z0-9]$/.test(stroke.key)) return stroke.key.toUpperCase();
+  const physical = /^(?:Key([A-Z])|Digit([0-9]))$/.exec(stroke.code);
+  return physical ? (physical[1] ?? physical[2]) : null;
+}
+
 function Examples() {
   return (
     <div className="stack-sm">
@@ -211,14 +226,23 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   // event mode everywhere else in this file.
   useEffect(() => {
     const onKey = (stroke: KeyboardEvent) => {
+      if (!game || game.status !== 'playing') return;
       if (stroke.metaKey || stroke.ctrlKey || stroke.altKey) return;
-      if (stroke.key === 'Enter') press('ENTER');
-      else if (stroke.key === 'Backspace') press('DEL');
-      else if (/^[a-zA-Z0-9]$/.test(stroke.key)) press(stroke.key.toUpperCase());
+      // Not while something else has the keyboard. The 💬 report form opens
+      // over this page, and a message typed into it used to fill the grid
+      // behind it — Enter in the message box submitted that as a guess.
+      if (document.querySelector('[aria-modal="true"]')) return;
+      if (stroke.target instanceof Element && stroke.target.closest('input, textarea, select, [contenteditable]')) return;
+      const key = stroke.key === 'Enter' ? 'ENTER' : stroke.key === 'Backspace' ? 'DEL' : keyChar(stroke);
+      // Space is swallowed too: like Enter, it clicks whichever button has
+      // focus — the last on-screen key tapped, which left a stray letter in
+      // the next row, or Give up.
+      if (key || stroke.key === ' ') stroke.preventDefault();
+      if (key) press(key);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [press]);
+  }, [game, press]);
 
   if (!game && dailyOn) {
     return (
