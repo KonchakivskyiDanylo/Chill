@@ -12,23 +12,25 @@ export const MAX_GUESSES = 6;
 /**
  * What a digit gives away when its turn comes (see `revealSchedule`).
  *
- *   digit      the digit itself, in place, and its key goes green — Easy
- *   position   a # where a digit sits, and not which one — Medium
+ *   digit      the digit itself, in place, and its key goes green
+ *   position   a # where a digit sits, and not which one
  *   exists     only that the name has at least one digit — not how many,
- *              which or where — any round with no difficulty chosen: Random,
- *              Choose → Any, an event field
- *   none       nothing; find it yourself — Hard
+ *              which or where
+ *   none       nothing; find it yourself
  *
- * Random used to give nothing, like Hard, and a digit nobody thinks to try
- * made those rounds impossible (the user, 2 Oct 2026: "at least tell that
- * there is a number"). It arrives with the first reveal, after guess three.
+ * Every round is `exists` now, every level and the daily (the user, 8 Oct
+ * 2026: "just tell that there is a number but don't tell which one and
+ * where"). Until then Easy gave the digit, Medium and the daily a #, Hard
+ * nothing, and only Random said there was one (2 Oct 2026: "at least tell
+ * that there is a number"). It arrives after guess three. The other kinds are
+ * kept: one line in `DIGIT_HELP` brings a level's back.
  */
 export type DigitHelp = 'digit' | 'position' | 'exists' | 'none';
 
 export const DIGIT_HELP: Readonly<Record<Difficulty, DigitHelp>> = {
-  easy: 'digit',
-  medium: 'position',
-  hard: 'none',
+  easy: 'exists',
+  medium: 'exists',
+  hard: 'exists',
 };
 
 /** What a position-only reveal shows in place of the digit. */
@@ -138,8 +140,9 @@ export function revealSchedule(answer: string): Map<number, number> {
 
 /**
  * The digits the player can see right now, as position -> what the strip shows
- * there: the digit on Easy, `HIDDEN_DIGIT` on Medium. Always empty on Hard and
- * on Random, which only says there is one (`digitAnnounced`).
+ * there: the digit for `digit` help, `HIDDEN_DIGIT` for `position`. Always
+ * empty for `none` and for `exists`, which only says there is one
+ * (`digitAnnounced`) — every round today.
  *
  * Empty for the great majority of rounds, whose answers are all letters.
  */
@@ -157,10 +160,10 @@ export function revealedDigits(state: GameState): Map<number, string> {
 }
 
 /**
- * Whether Random may now say the answer has a digit: from guess `FIRST_REVEAL`,
- * the same moment Easy and Medium hand their first one over. Never how many —
+ * Whether the round may now say the answer has a digit: from guess
+ * `FIRST_REVEAL`, the moment a digit's first reveal is due. Never how many —
  * "at least one" is the whole hint (the user, 2 Oct 2026). False before then,
- * on every other level, and for an answer with no digit.
+ * for any help but `exists`, and for an answer with no digit.
  */
 export function digitAnnounced(state: GameState): boolean {
   return digitHelp(state) === 'exists' && state.guesses.length >= FIRST_REVEAL && hasDigits(state.answer);

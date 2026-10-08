@@ -1,7 +1,39 @@
 import { useEffect, useState } from 'react';
-import { dayKey, isDayKey, msUntilNextDay } from './day';
+import { useSearchParams } from 'react-router-dom';
+import { dayKey, isDayKey, msUntilNextDay, puzzleDay, puzzleNumber } from './day';
 
 const pad = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * The archive: an earlier day's puzzle, from `?puzzle=N` on a daily game's
+ * page (the user, 8 Oct 2026: play previous days, but only ones not played
+ * before in this browser — a played one shows its result, never a new round).
+ * Only a day from #1 to yesterday; anything else is today's.
+ */
+export const PUZZLE_PARAM = 'puzzle';
+
+/** The day a daily game's page is on: today's, or an earlier one from the archive. */
+export function usePuzzleDay(): { day: string; today: string; past: boolean } {
+  const today = useToday();
+  const [params] = useSearchParams();
+  const asked = Number(params.get(PUZZLE_PARAM));
+  const past = Number.isInteger(asked) && asked >= 1 && asked < puzzleNumber(today);
+  return { day: past ? puzzleDay(asked) : today, today, past };
+}
+
+/**
+ * The address of puzzle #`number` of a game, or of today's without one. A dev
+ * server's pretend day (`?day=`) comes along, so the archive of a pretend day
+ * stays on it.
+ */
+export function puzzleHref(slug: string, number?: number): string {
+  const params = new URLSearchParams();
+  const pretend = devDay();
+  if (pretend) params.set('day', pretend);
+  if (number !== undefined) params.set(PUZZLE_PARAM, String(number));
+  const query = params.toString();
+  return `/game/${slug}${query ? `?${query}` : ''}`;
+}
 
 /**
  * A day to pretend it is, from `?day=YYYY-MM-DD` — dev builds only, for

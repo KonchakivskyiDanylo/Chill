@@ -1,13 +1,15 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { puzzleLabel } from '@/daily/day';
-import { isLiveDaily } from '@/daily/types';
+import { puzzleLabel, shortDate } from '@/daily/day';
+import { isLiveDaily, type DailyGame } from '@/daily/types';
+import { puzzleHref, usePuzzleDay } from '@/daily/useDay';
 import { DEV_TOGGLE } from '@/daily/useDailyRound';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { rulesFor, type GameMeta } from '@/games/registry';
 import './daily.css';
 import { Glossary } from './Glossary';
 import { RosterNote } from './LiquipediaGate';
+import { PastPuzzlesButton } from './PastPuzzles';
 import { SocialsNote } from './SocialsNote';
 import { Modal } from './ui';
 
@@ -47,6 +49,7 @@ export function GameShell({
   children: ReactNode;
 }) {
   const daily = isLiveDaily(game.id) ? dailyProp : undefined;
+  const puzzle = usePuzzleDay();
   const seenKey = `seen-rules:${game.id}`;
   const [showRules, setShowRules] = useState(() => !readLocal(seenKey, false));
 
@@ -84,6 +87,7 @@ export function GameShell({
             </p>
           </div>
           <div className="row">
+            {daily?.on ? <PastPuzzlesButton games={[game.id as DailyGame]} label="📅 Earlier" /> : null}
             {daily && DEV_TOGGLE ? (
               <button
                 type="button"
@@ -100,6 +104,12 @@ export function GameShell({
             </button>
           </div>
         </div>
+        {daily?.on && puzzle.past ? (
+          <p className="daily-past-note">
+            📅 The puzzle from {shortDate(puzzle.day)} — played late, it does not count towards your streak.{' '}
+            <Link to={puzzleHref(game.slug)}>Today’s puzzle →</Link>
+          </p>
+        ) : null}
       </div>
 
       {children}

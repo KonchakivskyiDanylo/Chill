@@ -247,7 +247,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   if (!game && dailyOn) {
     return (
       <GameShell {...shell}>
-        <DailyPending status={daily.status} error={daily.error} />
+        <DailyPending status={daily.status} error={daily.error} game="wordle" played={daily.played} />
       </GameShell>
     );
   }
@@ -399,7 +399,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
 }
 
 /**
- * Random's digit help: that the name has at least one digit, and nothing more.
+ * The digit help: that the name has at least one digit, and nothing more.
  * Announced on the guess it arrives, like a reveal, then kept as a line.
  */
 function DigitNotice({ justNow }: { justNow: boolean }) {

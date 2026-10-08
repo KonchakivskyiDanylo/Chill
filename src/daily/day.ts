@@ -88,6 +88,21 @@ export function puzzleNumber(day: string): number {
   return daysBetween(DAILY_START, day) + 1;
 }
 
+/** The day of puzzle #`number`. */
+export function puzzleDay(number: number): string {
+  return addDays(DAILY_START, number - 1);
+}
+
+/** "Tue 6 Oct" — a day as the archive names it. */
+export function shortDate(day: string): string {
+  return new Date(`${day}T12:00:00Z`).toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  });
+}
+
 /** "#12", or "preview" for a day before the first puzzle (a dev server, or a site up before the launch). */
 export function puzzleLabel(number: number): string {
   return number >= 1 ? `#${number}` : 'preview';

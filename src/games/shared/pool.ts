@@ -252,8 +252,8 @@ export function poolScope(event: string | null, choice: PoolChoice): (string | n
 
 /**
  * The difficulty somebody picked on Choose, or null — Random, Choose → Any and
- * an event field have none. Fortnitedle's digit help hangs off it, and gives
- * nothing when there is no difficulty to go by.
+ * an event field have none. Fortnitedle's digit help can hang off it
+ * (`DIGIT_HELP`); today every level gets the same.
  */
 export function chosenLevel(event: string | null, choice: PoolChoice): Difficulty | null {
   if (event) return null;

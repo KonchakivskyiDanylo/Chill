@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { gameStats, logKey, useDailyLog, type DailyLog } from '@/daily/progress';
 import { LIVE_DAILY, type DailyGame, type DailyResult } from '@/daily/types';
-import { useCountdown } from '@/daily/useDay';
-import { puzzleLabel } from '@/daily/day';
+import { puzzleHref, useCountdown, usePuzzleDay } from '@/daily/useDay';
+import type { DailyStatus } from '@/daily/useDailyRound';
+import { puzzleLabel, puzzleNumber, shortDate } from '@/daily/day';
 import { getGame, type GameMeta } from '@/games/registry';
 import { SITE_URL } from '@/lib/seo';
 import { readLocal } from '@/lib/storage';
 import './daily.css';
+import { MissedPuzzles } from './PastPuzzles';
 
 /**
  * The text a Share button puts on the clipboard: Wordle's shape, so it reads
@@ -67,7 +69,9 @@ export function DailyEnd({
 }) {
   const meta = getGame(game)!;
   const log = useDailyLog(game);
-  const stats = gameStats(log, day);
+  const { today } = usePuzzleDay();
+  const past = day < today;
+  const stats = gameStats(log, today);
   const countdown = useCountdown();
   const [shared, setShared] = useState<'shared' | 'copied' | 'failed' | null>(null);
   const text = shareText(meta, number, result, grid);
@@ -79,6 +83,7 @@ export function DailyEnd({
         <div>
           <div className="card__title" style={{ marginBottom: 2 }}>
             Daily {puzzleLabel(number)}
+            {past ? ` · ${shortDate(day)}` : ''}
           </div>
           <div className="daily-end__score">{result.score}</div>
         </div>
@@ -105,21 +110,45 @@ export function DailyEnd({
         <DailyStat label="Best" value={stats.best} />
       </div>
 
-      <p className="daily-end__next">
-        Next puzzle in <strong className="daily-end__clock">{countdown}</strong>
-      </p>
+      {past && !log[today] ? (
+        <Link to={puzzleHref(meta.slug)} className="btn btn--primary btn--block">
+          Play today’s puzzle {puzzleLabel(puzzleNumber(today))}
+        </Link>
+      ) : (
+        <p className="daily-end__next">
+          Next puzzle in <strong className="daily-end__clock">{countdown}</strong>
+        </p>
+      )}
 
-      <MoreDailies current={game} day={day} />
+      <MissedPuzzles game={game} />
+
+      <MoreDailies current={game} day={today} />
     </section>
   );
 }
 
-/** What a daily game shows while its round is not there: loading, none today, or a failure. */
-export function DailyPending({ status, error }: { status: 'off' | 'loading' | 'ready' | 'missing' | 'error'; error: string | null }) {
+/**
+ * What a daily game shows while its round is not there: loading, no puzzle
+ * that day, a failure — or, for a day this browser has played and no longer
+ * keeps the board of, how it went (a puzzle is played once).
+ */
+export function DailyPending({
+  status,
+  error,
+  game,
+  played,
+}: {
+  status: DailyStatus;
+  error: string | null;
+  game?: DailyGame;
+  played?: DailyResult | null;
+}) {
+  const { day, today, past } = usePuzzleDay();
+  const which = past ? `Puzzle ${puzzleLabel(puzzleNumber(day))}` : 'Today’s puzzle';
   if (status === 'error') {
     return (
       <section className="card stack-sm center">
-        <div className="bold">Today’s puzzle did not load</div>
+        <div className="bold">{which} did not load</div>
         <p className="small muted" style={{ margin: 0 }}>
           {error} Check your connection and reload the page.
         </p>
@@ -129,14 +158,35 @@ export function DailyPending({ status, error }: { status: 'off' | 'loading' | 'r
   if (status === 'missing') {
     return (
       <section className="card stack-sm center">
-        <div className="bold">No puzzle here today</div>
+        <div className="bold">No puzzle here {past ? 'that day' : 'today'}</div>
         <p className="small muted" style={{ margin: 0 }}>
-          This game’s daily could not be made today. The other daily puzzles are on the home page.
+          This game’s daily could not be made {past ? `on ${shortDate(day)}` : 'today'}. The other daily puzzles are on
+          the home page.
         </p>
       </section>
     );
   }
-  return <div className="page center muted">Loading today’s puzzle…</div>;
+  if (status === 'played' && played && game) {
+    const meta = getGame(game)!;
+    return (
+      <section className="daily-end card stack">
+        <div className="stack-sm center">
+          <div className="bold">You have played {which.toLowerCase()} already</div>
+          <div className="daily-end__score">{played.score}</div>
+          <p className="small muted" style={{ margin: 0 }}>
+            Each daily puzzle can be played once.
+          </p>
+        </div>
+        {past && !readLocal<DailyLog>(logKey(game), {})[today] ? (
+          <Link to={puzzleHref(meta.slug)} className="btn btn--primary btn--block">
+            Play today’s puzzle {puzzleLabel(puzzleNumber(today))}
+          </Link>
+        ) : null}
+        <MissedPuzzles game={game} />
+      </section>
+    );
+  }
+  return <div className="page center muted">Loading {past ? `puzzle ${puzzleLabel(puzzleNumber(day))}` : 'today’s puzzle'}…</div>;
 }
 
 function DailyStat({ label, value }: { label: string; value: string | number }) {
@@ -151,6 +201,7 @@ function DailyStat({ label, value }: { label: string; value: string | number }) 
 /** The other dailies, ticked when done today — the way on to the next one. */
 function MoreDailies({ current, day }: { current: DailyGame; day: string }) {
   const others = LIVE_DAILY.filter((game) => game !== current && !getGame(game)?.hidden);
+  if (others.length === 0) return null;
   return (
     <div className="stack-sm">
       <div className="tiny faint center">More daily puzzles</div>

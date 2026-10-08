@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useOpen } from '@/analytics/client';
 import { ModePicker } from '@/components/EventMode';
+import { PastPuzzlesButton } from '@/components/PastPuzzles';
 import { loadDailySet } from '@/daily/client';
 import { DAILY_START, puzzleLabel, puzzleNumber } from '@/daily/day';
 import { gameStats, useDailyLogs } from '@/daily/progress';
@@ -115,6 +116,7 @@ export function Home() {
             </div>
           </div>
           <div className="home-today__side">
+            <PastPuzzlesButton games={dailies.map((game) => game.id as DailyGame)} />
             <span className="home-today__next">
               Next in <strong>{countdown}</strong>
             </span>

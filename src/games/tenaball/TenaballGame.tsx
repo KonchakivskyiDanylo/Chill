@@ -248,7 +248,7 @@ function Game({
   if (!game && dailyOn) {
     return (
       <GameShell {...shell}>
-        <DailyPending status={daily.status} error={daily.error} />
+        <DailyPending status={daily.status} error={daily.error} game="tenaball" played={daily.played} />
       </GameShell>
     );
   }

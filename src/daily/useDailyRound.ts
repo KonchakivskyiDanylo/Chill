@@ -3,9 +3,9 @@ import { sendStart } from '@/analytics/client';
 import { useLocalState } from '@/lib/storage';
 import { useDailySet } from './client';
 import { DAILY_START, puzzleNumber } from './day';
-import { logResult, savedRound, saveRound } from './progress';
+import { logResult, readLog, savedRound, saveRound } from './progress';
 import { isLiveDaily, type DailyGame, type DailyPuzzles, type DailyResult } from './types';
-import { useToday } from './useDay';
+import { usePuzzleDay, useToday } from './useDay';
 
 /**
  * Daily or practice.
@@ -31,19 +31,26 @@ export function usePlayMode(game?: DailyGame): [daily: boolean, setDaily: (daily
   return [on && (game === undefined || isLiveDaily(game)), set];
 }
 
+export type DailyStatus = 'off' | 'loading' | 'ready' | 'missing' | 'error' | 'played';
+
 export interface DailyRound<S> {
   /** The round, once the day's puzzle and the game's data are both in. */
   state: S | null;
   setState: (next: S) => void;
   /**
-   * `loading` until the round exists; `missing` when today has no puzzle for
+   * `loading` until the round exists; `missing` when the day has no puzzle for
    * this game or the data can no longer rebuild it; `error` when the puzzles
-   * did not load.
+   * did not load; `played` when this browser finished the day already and its
+   * board is no longer kept — the result is in `played`, and no new round.
    */
-  status: 'off' | 'loading' | 'ready' | 'missing' | 'error';
+  status: DailyStatus;
   error: string | null;
+  /** The day being played: today, or an earlier one from the archive (`usePuzzleDay`). */
   day: string;
   number: number;
+  /** True for an earlier day's puzzle. */
+  past: boolean;
+  played: DailyResult | null;
   /**
    * True once the round has ended while this page was open. A round that was
    * already over when the page loaded was recorded the first time, so the
@@ -70,9 +77,9 @@ export function useDailyRound<G extends DailyGame, S, Snap>(
     result: (state: S) => DailyResult;
   },
 ): DailyRound<S> {
-  const day = useToday();
+  const { day, past } = usePuzzleDay();
   const { set, error } = useDailySet(options.on ? day : null);
-  const [round, setRound] = useState<{ day: string; state: S | null } | null>(null);
+  const [round, setRound] = useState<{ day: string; state: S | null; played: DailyResult | null } | null>(null);
   const [endedHere, setEndedHere] = useState(false);
   const latest = useRef(options);
   latest.current = options;
@@ -80,8 +87,11 @@ export function useDailyRound<G extends DailyGame, S, Snap>(
   const puzzle = set?.puzzles[game] as DailyPuzzles[G] | undefined;
   useEffect(() => {
     if (!options.on || !options.ready || !set) return;
-    const restored = puzzle ? latest.current.restore(puzzle, savedRound<Snap>(game, day, puzzle)) : null;
-    setRound({ day, state: restored });
+    const saved = puzzle ? savedRound<Snap>(game, day, puzzle) : null;
+    // Finished here before, its board since let go: the result, never a fresh start.
+    const played = saved === null ? (readLog(game)[day] ?? null) : null;
+    const restored = puzzle && !played ? latest.current.restore(puzzle, saved) : null;
+    setRound({ day, state: restored, played });
     setEndedHere(false);
   }, [options.on, options.ready, set, puzzle, game, day]);
 
@@ -94,17 +104,17 @@ export function useDailyRound<G extends DailyGame, S, Snap>(
       const { snapshot, finished, result } = latest.current;
       const was = shown.current;
       if (was && !finished(was) && finished(next)) setEndedHere(true);
-      // Nothing saved yet today: this is the first move, the daily's "started".
+      // Nothing saved yet for the day: this is the first move, the daily's "started".
       if (savedRound(game, day, puzzle) === null) sendStart(game, true);
       shown.current = next;
-      setRound({ day, state: next });
+      setRound({ day, state: next, played: null });
       saveRound(game, day, puzzle, snapshot(next));
-      if (finished(next)) logResult(game, day, result(next));
+      if (finished(next)) logResult(game, day, result(next), past);
     },
-    [game, day, puzzle],
+    [game, day, puzzle, past],
   );
 
-  const status: DailyRound<S>['status'] = !options.on
+  const status: DailyStatus = !options.on
     ? 'off'
     : error
       ? 'error'
@@ -112,6 +122,18 @@ export function useDailyRound<G extends DailyGame, S, Snap>(
         ? 'loading'
         : current.state
           ? 'ready'
-          : 'missing';
-  return { state: current?.state ?? null, setState, status, error, day, number: puzzleNumber(day), endedHere };
+          : current.played
+            ? 'played'
+            : 'missing';
+  return {
+    state: current?.state ?? null,
+    setState,
+    status,
+    error,
+    day,
+    number: puzzleNumber(day),
+    past,
+    played: current?.played ?? null,
+    endedHere,
+  };
 }

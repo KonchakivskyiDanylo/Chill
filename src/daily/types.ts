@@ -79,4 +79,6 @@ export interface DailyResult {
   outcome: 'won' | 'lost' | 'gave-up' | 'cleared';
   /** The headline, e.g. "4/6", "7/10", "23 names". */
   score: string;
+  /** Played from the archive, after its own day: counts as played, not towards a streak. */
+  late?: boolean;
 }

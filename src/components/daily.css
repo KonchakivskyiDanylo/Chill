@@ -221,3 +221,76 @@
   background: var(--primary-soft);
   border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
 }
+
+/* The archive: earlier puzzles, newest first, each played once. */
+.past-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: min(60vh, 440px);
+  overflow-y: auto;
+}
+
+.past-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.past-row:hover {
+  border-color: var(--border-strong);
+}
+
+.past-row--current {
+  border-color: var(--primary);
+}
+
+.past-row__date {
+  margin-left: 8px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.past-row__state {
+  flex: none;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-soft);
+  white-space: nowrap;
+}
+
+.past-row__state--won {
+  color: var(--success);
+  background: var(--success-soft);
+}
+
+.past-row__state--lost {
+  color: var(--text-muted);
+  background: var(--surface-3);
+}
+
+button.daily-more__item {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* Under a game's title while an earlier day's puzzle is open. */
+.daily-past-note {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  background: var(--primary-soft);
+  border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent);
+}

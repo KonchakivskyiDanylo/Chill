@@ -232,18 +232,11 @@ Wordle on a player's handle: six guesses, and every tile turns green (right plac
 
 **Who can be the answer:** 5,585 handles. After normalising, a handle must be 3–12 characters and use at least two different characters. Anything with a parenthesis is out, because "Nate (NA player)" would become the twelve-tile NATENAPLAYER.
 
-**Digits are handed out, because nobody can reason their way to one.** A letter tile tells you something every round; a digit tells you nothing until you happen to try it. 328 answers contain a digit.
+**The game says when a name has a digit, because nobody can reason their way to one.** A letter tile tells you something every round; a digit tells you nothing until you happen to try it. 328 answers contain a digit.
 
-They come out from guess 3, one per guess, all of them by guess 5. How much each one gives away depends on the round's difficulty:
+From guess 3, every round — every difficulty, Random, event mode and the daily — says the name has at least one digit, and nothing more: not how many, which or where (the user, 8 Oct 2026: "just tell that there is a number but don't tell which one and where"). The keyboard is not coloured for it.
 
-| Difficulty | A digit's turn shows |
-| --- | --- |
-| Easy | the digit, in place under the grid, and its key turns green |
-| Medium | a # where it sits, not which digit; the keyboard stays as it was |
-| Random | that the name has at least one digit, after guess 3 — not how many, which or where |
-| Hard | nothing |
-
-It follows the difficulty chosen on Choose. Random, Choose → Any and event mode have no chosen difficulty, so they get the Random line (2 Oct 2026: before it they gave nothing, like Hard, and a digit nobody thought to try made the round impossible). Before the first digit lands the strip is not shown at all, because a row of blanks would give away that the name has a digit.
+Until 8 Oct 2026 it went by difficulty: Easy showed the digit and greened its key, Medium (and the daily) a # where it sat, Hard nothing, and only Random said there was one. That code is kept; `DIGIT_HELP` in `wordle/engine.ts` sets each difficulty's help, so one line brings a level's back.
 
 **The secret is dealt** from the no-repeat bag with the Random mix, or region by region in event mode.
 
@@ -773,12 +766,12 @@ It plays every game with a perfect player, generating the random games many time
   - Every six deals of the secret-player games cover all six regions.
   - Higher or Lower's region lean shows more regions than without it.
 - **Definitions:** the matcher explains the right terms for tricky titles, and the LAN list names every LAN.
-- **Fortnitedle:** three guesses into a digit answer, Easy has handed the digit over, Medium a # with no key coloured, Hard nothing.
+- **Fortnitedle:** three guesses into a digit answer, every difficulty, Random and the daily say there is a digit, with no digit or # shown and no key coloured; two guesses in, nothing.
 - **Career Path:** a two-clue round lasts exactly five wrong guesses, a ten-clue round ten, and giving up is never recorded as running out.
 - **Who Are Ya:** the number one teammate is last in the ramped orders and never in Random's first four; a two-clue hand lasts five wrong guesses.
 - **Whole field:** every secret-player game deals all of an event field that its data allows, and Griefer, Connections and Tic Tac Toe build boards from the whole field.
 - **Analytics:** one real round per game, recorded and aggregated the way the dashboard reads it; the filters narrow every table, and the player view finds its player.
-- **Daily puzzles:** midnight in Berlin on both sides of a clock change; 30 days in a row each with all six built dailies (served or not), no secret player, board or list twice, no kind of board or list on days 2 apart or board family 7 apart, no board on active status, three different secrets a day, all well known; every puzzle rebuilds, a saved round comes back, and the answer wins. `check:server` asks the endpoint for today twice and gets the same set.
+- **Daily puzzles:** midnight in Berlin on both sides of a clock change; 30 days in a row each with all six built dailies (served or not), no secret player, board or list twice, no kind of board or list on days 2 apart or board family 7 apart, no board on active status, three different secrets a day, all well known; every puzzle rebuilds, a saved round comes back, and the answer wins. The archive: a day's round survives the next day starting, a late day is saved beside it, and a late day counts as played but not towards the streak. `check:server` asks the endpoint for today twice and gets the same set.
 
 A generated data file that is missing makes its games report SKIPPED and the suite still passes, so a fresh clone is testable before the notebook runs.
 
@@ -793,14 +786,14 @@ From **5 October 2026** (`DAILY_START`) the live site is **daily puzzles only** 
 | The day | `src/daily/day.ts` | A day is its date in `Europe/Berlin`, so the reset is midnight Central European time through summer time too. `DAILY_START` (5 Oct 2026) is puzzle #1; a day before it shows as "preview". `?day=YYYY-MM-DD` pretends it is another day, on a dev server only |
 | The puzzles | `src/daily/generate.ts`, `src/games/<game>/daily.ts` | A day's set is one small descriptor per game: a secret player and the clues in order, a Tenaball board id, a List id, Tic Tac Toe's six rule ids. Each game's `daily.ts` picks one (`pickDaily`) and rebuilds a round from one (`restoreDaily`) |
 | Kept once made | `server/index.ts` `GET /api/daily/<day>`, table `daily_puzzles` | The first request for a day makes its set and the store keeps it; every later request reads the kept one. A deploy or a data update mid-day cannot change a puzzle people have played. Never a day after today on the live site |
-| Your progress | `src/daily/progress.ts`, `useDailyRound.ts` | The round in progress is saved on every move (`daily:<game>`), so a reload carries on; every finished day goes in `daily-log:<game>`. Browser only — no accounts yet |
+| Your progress | `src/daily/progress.ts`, `useDailyRound.ts` | The round in progress is saved on every move (`daily:<game>`, earlier days in `daily-past:<game>`), so a reload carries on; every finished day goes in `daily-log:<game>`. Browser only — no accounts yet |
 | The end | `src/components/DailyEnd.tsx` | Score, a Wordle-style emoji grid, **Share** (the phone's share sheet, or the clipboard), played / won / streak / best, and the countdown |
 
 **Each game's daily:**
 
 | Game | The daily is | Score and grid |
 | --- | --- | --- |
-| Fortnitedle | a well-known name; Medium's digit help (a # where a digit sits, from guess 3) | `4/6`, Wordle's rows |
+| Fortnitedle | a well-known name; from guess 3, told the name has a digit, as in every round | `4/6`, Wordle's rows |
 | Career Path | a well-known player, clues oldest first | `3/10`, one square per clue: 🟥 guessed wrong, ⬛ skipped, 🟩 named, ⬜ not needed |
 | Who Are Ya | a well-known player, counts shown, weakest teammate first | the same as Career Path |
 | Tenaball | a board of a known kind (players, seasons, FNCS, places, teammates, events, orgs and countries, Div Cups all time), six of its ten rows well known; 3 lives | `7/10`, the ten slots and the hearts left |
@@ -811,9 +804,17 @@ From **5 October 2026** (`DAILY_START`) the live site is **daily puzzles only** 
 
 **Boards and lists come back only when they change** (`src/daily/reuse.ts`). Each Tenaball and List daily keeps a fingerprint of who its answers are (`sig`). A board is never a daily again while its top 10 is the same people; once a big event changes it ("Top 10 by career earnings" after a World Cup), it is a new puzzle and may come back, but not within 30 days (`CHANGED_REST`). Neighbouring days are kept apart too: no kind of board or list twice within 2 days (`KIND_GAP`), and no family — one board split by region or year, like "average FNCS finish — NA East" and "— NA West" — within 7 (`FAMILY_GAP`). Boards that count only players Liquipedia lists as active are never a daily, since its retired status is rarely updated.
 
-**A streak** is days in a row with that game's daily played, win or lose — a hard day does not break a month. Every streak is per game, on the home page too: each daily's card shows its own 🔥 (4 Oct 2026, the user: "if player played fortnitedle today, it will show on fortnitedle 1 day streak but not for other games").
+**A streak** is days in a row with that game's daily played, win or lose — a hard day does not break a month. Every streak is per game, on the home page too: each daily's card shows its own 🔥 (4 Oct 2026, the user: "if player played fortnitedle today, it will show on fortnitedle 1 day streak but not for other games"). A day caught up from the archive counts as played and in Won, but not towards a streak or best run (`late` in the log).
 
-**Analytics:** a daily round's setup is `{ daily: '<day>' }`, which the dashboard counts as its own source, Daily.
+**Earlier puzzles** (the archive, 8 Oct 2026 — the user: "play previous days games, only if from this website nobody played before"). Every daily from #1 to yesterday can be played, **once per browser**:
+
+- **Where.** `/game/<slug>?puzzle=N` (`usePuzzleDay` in `src/daily/useDay.ts`; anything outside #1 to yesterday is today's). Reached from **📅 Earlier puzzles** on the home page, **📅 Earlier** beside a daily game's title, and the missed days under a finished puzzle (`src/components/PastPuzzles.tsx`). The page says which day it is, that it will not count towards the streak, and links back to today's.
+- **Once.** A finished day opens to its board and result, never a new round. A day begun and left carries on where it was. A day finished before its board was kept (anything played before 8 Oct 2026) shows "You have played puzzle #N already" and its score (`played` in `useDailyRound`).
+- **Kept.** `daily:<game>` holds the latest day's round; when a later day starts, the earlier one moves to `daily-past:<game>`, where archive rounds are saved too. The newest 60 finished ones are kept for their boards; unfinished ones always stay. Browser only, like the rest.
+- **The server** already hands out any day up to today, so nothing changed there. The day's set is the one kept, so an archive puzzle is the one everybody had that day.
+- **List** runs its own daily loop (not `useDailyRound`) and has no archive yet; give it one before List is a daily again.
+
+**Analytics:** a daily round's setup is `{ daily: '<day>' }`, which the dashboard counts as its own source, Daily. An archive round carries its own day, so it is told apart by being recorded after that day.
 
 **The schedule editor** (`/analytics/daily`, `src/daily/admin.ts`): the next 30 days (more on request) made ahead and kept, one game at a time. ↑ and ↓ swap a puzzle with the day before or after; **Choose** sets a board, a list or a secret player by hand (Tic Tac Toe has no list — its six rules are drawn together); **↻ New** draws another, clear of every other scheduled day. In Choose, a board or list already played with the same answers is greyed out with the day it ran; one on a coming day says so, and choosing it swaps the two days; one whose answers changed since says that and can be chosen. A secret player within 30 days, a board or list on another day with the same answers, or a secret player who is the answer in two games on one day, is flagged. Days before today cannot change; today can, after a warning, since people may have played it. A new day steers clear of the days after it too, so a schedule made ahead never repeats itself.
 

@@ -5,8 +5,8 @@ import { eligible, gameFor, MAX_GUESSES, scoreGuess, type GameState } from './en
 
 /**
  * Fortnitedle's daily puzzle: one name for everyone, from the famous names and
- * the regulars, with Medium's digit help — a # where a digit sits, from guess
- * three.
+ * the regulars, with the digit help every round has — from guess three, that
+ * the name has a digit, not which or where.
  */
 export const DAILY_LEVEL = 'medium' as const;
 

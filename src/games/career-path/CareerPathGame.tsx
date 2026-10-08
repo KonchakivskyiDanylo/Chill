@@ -132,7 +132,7 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
   if (!game && dailyOn) {
     return (
       <GameShell {...shell}>
-        <DailyPending status={daily.status} error={daily.error} />
+        <DailyPending status={daily.status} error={daily.error} game="career-path" played={daily.played} />
       </GameShell>
     );
   }

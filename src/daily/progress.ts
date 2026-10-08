@@ -7,10 +7,18 @@ import { DAILY_GAMES, type DailyGame, type DailyResult } from './types';
  * (the user, 3 Oct 2026: "streaks live only in the browser until accounts
  * exist").
  *
- *   daily:<game>       the round in progress or just finished: which day, and
- *                      the game's own snapshot of it, so a reload carries on
+ *   daily:<game>       the round of the latest day played, in progress or
+ *                      finished: which day, and the game's own snapshot of it,
+ *                      so a reload carries on
+ *   daily-past:<game>  the rounds of earlier days, day -> round: an earlier
+ *                      day's round moves here when a later one starts, and a
+ *                      puzzle played from the archive is kept here
  *   daily-log:<game>   every finished day, day -> how it went; streaks and the
  *                      home page read it
+ *
+ * Each day's round lives in exactly one of the first two, so an unfinished
+ * puzzle picks up where it was left, from the archive too, and a finished one
+ * shows its board again instead of starting over: a puzzle is played once.
  */
 
 export interface SavedRound<Snap> {
@@ -28,24 +36,75 @@ export type DailyLog = Record<string, DailyResult>;
 
 const EMPTY_LOG: DailyLog = {};
 
+type PastRounds = Record<string, SavedRound<unknown>>;
+
 export const roundKey = (game: DailyGame) => `daily:${game}`;
+export const pastKey = (game: DailyGame) => `daily-past:${game}`;
 export const logKey = (game: DailyGame) => `daily-log:${game}`;
 
-/** The saved round for `day` and `puzzle`, or null — yesterday's unfinished round is simply dropped. */
+/**
+ * Finished earlier rounds kept, newest first, so their boards still show. Past
+ * that, a finished day shows only its result from the log; an unfinished one
+ * is always kept, or it could be started again from scratch.
+ */
+const KEEP_FINISHED = 60;
+
+function roundFor<Snap>(game: DailyGame, day: string): SavedRound<Snap> | null {
+  const latest = readLocal<SavedRound<Snap> | null>(roundKey(game), null);
+  if (latest?.day === day) return latest;
+  return (readLocal<PastRounds>(pastKey(game), {})[day] as SavedRound<Snap> | undefined) ?? null;
+}
+
+/** The saved round for `day` and `puzzle`, or null. */
 export function savedRound<Snap>(game: DailyGame, day: string, puzzle: unknown): Snap | null {
-  const saved = readLocal<SavedRound<Snap> | null>(roundKey(game), null);
-  return saved && saved.day === day && saved.puzzle === JSON.stringify(puzzle) ? saved.snap : null;
+  const saved = roundFor<Snap>(game, day);
+  return saved && saved.puzzle === JSON.stringify(puzzle) ? saved.snap : null;
 }
 
 export function saveRound<Snap>(game: DailyGame, day: string, puzzle: unknown, snap: Snap): void {
-  writeLocal<SavedRound<Snap>>(roundKey(game), { day, puzzle: JSON.stringify(puzzle), snap });
+  const round: SavedRound<Snap> = { day, puzzle: JSON.stringify(puzzle), snap };
+  const latest = readLocal<SavedRound<unknown> | null>(roundKey(game), null);
+  if (!latest || latest.day === day) {
+    writeLocal(roundKey(game), round);
+    return;
+  }
+  const past = { ...readLocal<PastRounds>(pastKey(game), {}) };
+  if (day > latest.day) {
+    // A later day starts: the one it replaces joins the earlier ones.
+    past[latest.day] ??= latest;
+    writeLocal(roundKey(game), round);
+  } else {
+    past[day] = round;
+  }
+  const log = readLog(game);
+  const finished = Object.keys(past)
+    .filter((key) => log[key])
+    .sort()
+    .reverse();
+  for (const key of finished.slice(KEEP_FINISHED)) delete past[key];
+  writeLocal(pastKey(game), past);
 }
 
-/** Writes a finished day once; finishing it again (a reload) changes nothing. */
-export function logResult(game: DailyGame, day: string, result: DailyResult): void {
-  const log = readLocal<DailyLog>(logKey(game), EMPTY_LOG);
+/** The days with a round saved, finished or not — an archive puzzle begun, as against one never opened. */
+export function savedDays(game: DailyGame): Set<string> {
+  const latest = readLocal<SavedRound<unknown> | null>(roundKey(game), null);
+  const days = new Set(Object.keys(readLocal<PastRounds>(pastKey(game), {})));
+  if (latest) days.add(latest.day);
+  return days;
+}
+
+export function readLog(game: DailyGame): DailyLog {
+  return readLocal<DailyLog>(logKey(game), EMPTY_LOG);
+}
+
+/**
+ * Writes a finished day once; finishing it again (a reload) changes nothing.
+ * `late` marks a puzzle played from the archive, after its own day.
+ */
+export function logResult(game: DailyGame, day: string, result: DailyResult, late = false): void {
+  const log = readLog(game);
   if (log[day]) return;
-  writeLocal(logKey(game), { ...log, [day]: result });
+  writeLocal(logKey(game), { ...log, [day]: late ? { ...result, late: true } : result });
 }
 
 export function useDailyLog(game: DailyGame): DailyLog {
@@ -70,7 +129,8 @@ export interface DailyStats {
    * Days in a row with the daily played, win or lose, up to today — or up to
    * yesterday while today is still to play, so a streak does not read 0 all
    * morning. A streak counts playing, not winning: a hard day should not undo
-   * a month of turning up.
+   * a month of turning up. Only on the day itself: a missed day caught up
+   * from the archive counts as played, but does not mend a streak.
    */
   streak: number;
   best: number;
@@ -95,9 +155,8 @@ export function statsOf(days: Iterable<string>, today: string, won = 0): DailySt
 }
 
 export function gameStats(log: DailyLog, today: string): DailyStats {
-  return statsOf(
-    Object.keys(log),
-    today,
-    Object.values(log).filter((entry) => entry.outcome === 'won' || entry.outcome === 'cleared').length,
-  );
+  const entries = Object.entries(log);
+  const won = entries.filter(([, entry]) => entry.outcome === 'won' || entry.outcome === 'cleared').length;
+  const onTime = entries.filter(([, entry]) => !entry.late).map(([day]) => day);
+  return { ...statsOf(onTime, today, won), played: entries.length };
 }

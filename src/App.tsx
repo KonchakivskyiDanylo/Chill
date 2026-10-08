@@ -1,9 +1,10 @@
 import { lazy, Suspense } from 'react';
-import { Link, Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom';
 import { useOpen } from '@/analytics/client';
 import type { GameId } from '@/analytics/types';
 import { Layout } from '@/components/Layout';
 import { isLiveDaily } from '@/daily/types';
+import { PUZZLE_PARAM } from '@/daily/useDay';
 import { usePlayMode } from '@/daily/useDailyRound';
 import { getGame, OPEN_HIDDEN } from '@/games/registry';
 import { gameMeta, HOME_META, NOT_FOUND_META, usePageMeta } from '@/lib/seo';
@@ -34,13 +35,15 @@ function GamePage() {
   // loads is still an open.
   const [siteDaily] = usePlayMode();
   useOpen(game ? (game.id as GameId) : null, siteDaily && isLiveDaily(game?.id ?? ''));
+  // Another day from the archive is a fresh game: nothing typed or picked on one day carries to the next.
+  const [params] = useSearchParams();
 
   if (!game) return <Navigate to="/" replace />;
 
   const { Component } = game;
   return (
     <Suspense fallback={<div className="page center muted">Loading game…</div>}>
-      <Component />
+      <Component key={params.get(PUZZLE_PARAM) ?? ''} />
     </Suspense>
   );
 }

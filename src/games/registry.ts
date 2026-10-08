@@ -154,6 +154,7 @@ export const GAMES: GameMeta[] = [
       'Spaces and punctuation are removed, capitalisation does not matter.',
       'Digits 0–9 count as characters and are on the keyboard.',
       'Any combination of letters and digits is allowed — it does not have to be a real player.',
+      'From your third guess, you are told if the name has a digit — not which one or where.',
       'Every player in the pool comes up once before any of them comes round again.',
     ],
     daily: {
@@ -161,20 +162,10 @@ export const GAMES: GameMeta[] = [
         'Spaces and punctuation are removed, capitalisation does not matter.',
         'Digits 0–9 count as characters and are on the keyboard.',
         'Any combination of letters and digits is allowed — it does not have to be a real player.',
-        'From your third guess, a # marks where the name has a digit. Which digit is up to you.',
+        'From your third guess, you are told if the name has a digit — not which one or where.',
       ],
     },
-    sections: [
-      {
-        title: 'Names with numbers in them',
-        practiceOnly: true,
-        items: [
-          'Digits are given away, never before your third guess and all of them by guess 5.',
-          'Easy 🟢 shows the digit itself, Medium 🟡 a # where it sits, Random 🎲 only that the name has one. Hard 🔴 shows nothing at all.',
-        ],
-      },
-      POOL_SECTION,
-    ],
+    sections: [POOL_SECTION],
     terms: ['region'],
     Component: lazy(() => import('./wordle/WordleGame')),
   },

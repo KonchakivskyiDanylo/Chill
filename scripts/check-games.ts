@@ -377,9 +377,9 @@ for (const category of hlCategories) checkHigherLower(contenders, category);
   const solved = wordle.submitGuess(game, pool[0].name);
   check(solved.ok && solved.state.status === 'won', 'fortnitedle: the exact answer did not win');
 
-  // The digit help per difficulty, three guesses into a round on a digit
-  // answer: Easy hands over the digit and greens its key, Medium a # and no
-  // key, Random (no level) only that there is a digit, Hard nothing at all.
+  // The digit help, three guesses into a round on a digit answer: every level,
+  // Random (no level) and the daily say only that there is a digit — no digit
+  // shown, no # and no key coloured (the user, 8 Oct 2026).
   const digital = pool.find((p) => wordle.revealSchedule(wordle.gameFor(p).answer).size > 0);
   if (digital) {
     const help = (level: 'easy' | 'medium' | 'hard' | null, guesses = 3) => {
@@ -393,16 +393,14 @@ for (const category of hlCategories) checkHigherLower(contenders, category);
       const keyed = [...wordle.keyboardState(state)].filter(([key, s]) => /\d/.test(key) && s === 'correct');
       return { shown, keyed: keyed.length, announced: wordle.digitAnnounced(state) };
     };
-    const easy = help('easy');
-    const medium = help('medium');
-    const hard = help('hard');
-    const random = help(null);
-    check(
-      random.shown.length === 0 && random.keyed === 0 && random.announced,
-      `fortnitedle random: ${digital.name} — digit announced ${random.announced}, ${random.shown.length} shown, ${random.keyed} keys`,
-    );
-    check(!help(null, 2).announced, `fortnitedle random: ${digital.name}'s digit was announced before guess 3`);
-    check(!easy.announced && !medium.announced && !hard.announced, 'fortnitedle: a chosen level got the Random digit line');
+    for (const level of ['easy', 'medium', 'hard', null, wordleDaily.DAILY_LEVEL] as const) {
+      const got = help(level);
+      check(
+        got.shown.length === 0 && got.keyed === 0 && got.announced,
+        `fortnitedle ${level ?? 'random'}: ${digital.name} — digit announced ${got.announced}, ${got.shown.length} shown, ${got.keyed} keys`,
+      );
+      check(!help(level, 2).announced, `fortnitedle ${level ?? 'random'}: ${digital.name}'s digit was announced before guess 3`);
+    }
     const letters = pool.find((p) => wordle.revealSchedule(wordle.gameFor(p).answer).size === 0)!;
     let plain = wordle.gameFor(letters, null);
     for (const guess of ['Q', 'X', 'Z'].map((c) => c.repeat(plain.answer.length))) {
@@ -410,9 +408,6 @@ for (const category of hlCategories) checkHigherLower(contenders, category);
       if (next.ok) plain = next.state;
     }
     check(!wordle.digitAnnounced(plain), `fortnitedle random: ${letters.name}, all letters, was said to have a digit`);
-    check(easy.shown.length === 1 && /\d/.test(easy.shown[0]) && easy.keyed === 1, `fortnitedle easy: ${digital.name} digit not handed over`);
-    check(medium.shown.join() === wordle.HIDDEN_DIGIT && medium.keyed === 0, `fortnitedle medium: ${digital.name} showed ${medium.shown.join()} with ${medium.keyed} keys`);
-    check(hard.shown.length === 0 && hard.keyed === 0, `fortnitedle hard: ${digital.name} gave a digit away`);
   }
 }
 
@@ -2379,6 +2374,44 @@ if (socials.platforms.length > 0) {
   const streak = (today: string) => dailyProgress.statsOf(days, today);
   check(streak('2026-10-05').streak === 1 && streak('2026-10-06').streak === 1 && streak('2026-10-07').streak === 0, 'daily: the streak does not count up to today or yesterday');
   check(streak('2026-10-04').streak === 3 && streak('2026-10-05').best === 3, 'daily: the streak or best run is miscounted');
+
+  // The archive: a day's round survives the next day starting, an earlier day
+  // played late is kept beside it, and a late day counts as played but never
+  // mends a streak. Run against a stand-in localStorage.
+  {
+    const store = new Map<string, string>();
+    const g = globalThis as { window?: unknown };
+    g.window = {
+      localStorage: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => void store.set(key, String(value)),
+        removeItem: (key: string) => void store.delete(key),
+      },
+    };
+    try {
+      const [d5, d6, d7] = ['2026-10-05', '2026-10-06', '2026-10-07'];
+      const at = (day: string, board: string) => dailyProgress.savedRound<{ n: number }>('tenaball', day, { board })?.n;
+      dailyProgress.saveRound('tenaball', d6, { board: 'six' }, { n: 6 });
+      dailyProgress.saveRound('tenaball', d7, { board: 'seven' }, { n: 7 });
+      check(at(d6, 'six') === 6 && at(d7, 'seven') === 7, `daily archive: a round was lost when the next day began (${at(d6, 'six')}, ${at(d7, 'seven')})`);
+      dailyProgress.saveRound('tenaball', d5, { board: 'five' }, { n: 5 });
+      dailyProgress.saveRound('tenaball', d5, { board: 'five' }, { n: 55 });
+      check(at(d5, 'five') === 55 && at(d6, 'six') === 6 && at(d7, 'seven') === 7, 'daily archive: an earlier day played late overwrote another');
+      check(at(d5, 'other') === undefined, 'daily archive: a round came back onto a different puzzle');
+      check([d5, d6, d7].every((day) => dailyProgress.savedDays('tenaball').has(day)), 'daily archive: savedDays misses a day');
+
+      dailyProgress.logResult('tenaball', d6, { outcome: 'won', score: '10/10' });
+      dailyProgress.logResult('tenaball', d7, { outcome: 'lost', score: '4/10' });
+      dailyProgress.logResult('tenaball', d5, { outcome: 'won', score: '9/10' }, true);
+      dailyProgress.logResult('tenaball', d5, { outcome: 'lost', score: '0/10' });
+      const log = dailyProgress.readLog('tenaball');
+      check(log[d5]?.late === true && log[d5].score === '9/10' && !log[d6]?.late, 'daily archive: a late day is not marked late, or was logged twice');
+      const stats = dailyProgress.gameStats(log, d7);
+      check(stats.played === 3 && stats.won === 2 && stats.streak === 2 && stats.best === 2, `daily archive: late day miscounted — ${JSON.stringify(stats)}`);
+    } finally {
+      delete g.window;
+    }
+  }
 
   if (facts && orgs && rankings && majors && teammates) {
     const data = { roster, majors, teammates, facts, orgs, rankings, socials };
